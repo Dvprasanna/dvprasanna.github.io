@@ -1,3 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login Page</title>
+  <style>
+    body { font-family: sans-serif; background: #f5f5f5; text-align: center; padding-top: 80px; }
+    input { display: block; margin: 10px auto; padding: 8px; width: 220px; }
+    button { padding: 8px 16px; }
+    #welcome { display: none; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <h2>Login</h2>
+  <input id="username" placeholder="Username">
+  <input id="password" type="password" placeholder="Password">
+  <button onclick="login()">Login</button>
 
-hii
-its me
+  <div id="welcome">
+    <h3>Welcome!</h3>
+    <p>You are now logged in.</p>
+  </div>
+
+  <script>
+    // Simple username-password pairs
+    const users = {
+      "admin": "1234",
+      "linkin": "mypass",
+      "guest": "guest123"
+    };
+
+    function login() {
+      const u = document.getElementById("username").value;
+      const p = document.getElementById("password").value;
+
+      if (users[u] && users[u] === p) {
+        document.body.innerHTML = `<h2>Welcome, ${u}!</h2><p>Access granted.</p>`;
+      } else {
+        alert("Invalid username or password");
+      }
+    }
+  </script>
+</body>
+</html>
