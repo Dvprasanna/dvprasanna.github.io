@@ -1,2 +1,626 @@
-hii
-bye
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Table Maker — Full (Undo, Split 3, Menus)</title>
+<style>
+  :root{--accent:#0366d6}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:18px;color:#111;background:#fff}
+  h1{font-size:18px;margin:0 0 10px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+  button, .dropbtn {padding:8px 12px;border-radius:6px;border:1px solid #bbb;background:#f7f8fa;cursor:pointer}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .menu {position:relative; display:inline-block;}
+  .dropdown {display:none; position:absolute; background:#fff; min-width:160px; box-shadow:0 6px 18px rgba(0,0,0,.12); border-radius:6px; border:1px solid #eee; z-index:1000; padding:6px;}
+  .dropdown button {display:block; width:100%; text-align:left; margin:4px 0; background:transparent; border:none; padding:8px 10px}
+  .dropdown button:hover {background:#f3f6fb; border-radius:6px}
+  #editor{min-height:300px;border:1px dashed #ccc;padding:12px;border-radius:8px;white-space:pre-wrap;overflow:auto}
+  #output{width:100%;height:140px;margin-top:10px;padding:8px;box-sizing:border-box;font-family:monospace}
+  table.generated{border-collapse:collapse;margin-top:8px}
+  table.generated td{border:1px solid #999;padding:6px 8px;min-width:40px}
+  /* border width levels */
+  table.border-light td{border-width:1px}
+  table.border-medium td{border-width:3px}
+  table.border-high td{border-width:6px}
+  .hint{color:#666;font-size:13px;margin-top:8px}
+  .small{font-size:13px;color:#444}
+  .toolbar-sep{width:1px;height:28px;background:#e6e6e6;margin:0 6px;border-radius:2px}
+  /* disabled look */
+  button[disabled], .dropbtn[disabled]{opacity:0.6; cursor:not-allowed}
+</style>
+</head>
+<body>
+
+<h1>Table Maker — Full</h1>
+
+<div class="controls">
+  <button id="btn-make-table" class="primary" title="Select plain text; each newline becomes a row">Make Table (lines → rows)</button>
+
+  <button id="btn-make-columns" title="Split selection into 2 columns (selected -> first, remaining -> second)">Make Columns (split)</button>
+  <button id="btn-split-3" title="Split selection into 3 columns (selected -> first, after -> second, before -> third)">Split 3</button>
+
+  <div class="menu" id="menu-table">
+    <button class="dropbtn" id="btn-table-menu">Table ▾</button>
+    <div class="dropdown" id="dropdown-table" role="menu" aria-hidden="true">
+      <div style="font-weight:600;padding:6px 8px">Line width</div>
+      <button data-action="border-light">Light</button>
+      <button data-action="border-medium">Medium</button>
+      <button data-action="border-high">High</button>
+      <hr style="margin:6px 0;border:none;border-top:1px solid #eee">
+      <button data-action="merge-cells">Merge cells (selected adjacent cells in same row)</button>
+    </div>
+  </div>
+
+  <div class="menu" id="menu-text">
+    <button class="dropbtn" id="btn-text-menu">Text ▾</button>
+    <div class="dropdown" id="dropdown-text" role="menu" aria-hidden="true">
+      <button data-action="center-text">Center Text</button>
+      <button data-action="bold-text">Bold</button>
+    </div>
+  </div>
+
+  <div class="toolbar-sep" aria-hidden="true"></div>
+
+  <button id="btn-select-all" title="Select everything inside the editor">Select All</button>
+
+  <div class="toolbar-sep" aria-hidden="true"></div>
+
+  <button id="btn-undo" title="Undo (Ctrl+Z)">Undo</button>
+  <button id="btn-redo" title="Redo (Ctrl+Y)">Redo</button>
+
+  <div class="toolbar-sep" aria-hidden="true"></div>
+
+  <button id="btn-export" title="Export generated tables as CSV">Export CSV</button>
+  <button id="btn-copy" title="Copy CSV to clipboard">Copy CSV</button>
+  <button id="btn-clear" title="Clear editor & output">Clear</button>
+</div>
+
+<div id="editor" contenteditable="true" spellcheck="false" aria-label="Editor">
+Paste plain text here then select lines and click Make Table.
+
+Example:
+first
+second
+third
+
+1) Select those lines and click Make Table → three rows.
+2) Deselect.
+3) In first cell type: abcDEFghi
+   Select "DEF" only and click "Split 3" to see selected->first, after->second, before->third.
+</div>
+
+<textarea id="output" placeholder="CSV output will appear here" aria-label="CSV output"></textarea>
+<div class="hint">Workflow: select lines → Make Table. Then select part of a cell (or caret) → use Make Columns or Split 3. Use Table menu for borders & merge. Text menu for centering and bold.</div>
+
+<script>
+/* ---------- State & Simple History (Undo/Redo) ---------- */
+const editor = document.getElementById('editor');
+const output = document.getElementById('output');
+
+let history = [];
+let historyIndex = -1;
+const MAX_HISTORY = 60;
+let historyBlocked = false; // to prevent recursive pushes
+
+function pushHistory() {
+  if (historyBlocked) return;
+  const snapshot = editor.innerHTML;
+  // If current snapshot same as last, don't push
+  if (historyIndex >= 0 && history[historyIndex] === snapshot) return;
+  // Trim forward history if we had undone
+  history = history.slice(0, historyIndex + 1);
+  history.push(snapshot);
+  if (history.length > MAX_HISTORY) history.shift();
+  historyIndex = history.length - 1;
+  updateUndoButtons();
+}
+
+function undo() {
+  if (historyIndex <= 0) {
+    if (historyIndex === 0) {
+      editor.innerHTML = history[0] || '';
+      historyIndex = 0;
+    }
+    updateUndoButtons();
+    return;
+  }
+  historyBlocked = true;
+  historyIndex -= 1;
+  editor.innerHTML = history[historyIndex];
+  restoreFocusAfterUndo();
+  historyBlocked = false;
+  updateUndoButtons();
+}
+
+function redo() {
+  if (historyIndex >= history.length - 1) return;
+  historyBlocked = true;
+  historyIndex += 1;
+  editor.innerHTML = history[historyIndex];
+  restoreFocusAfterUndo();
+  historyBlocked = false;
+  updateUndoButtons();
+}
+
+function restoreFocusAfterUndo(){
+  // try to put caret at end of editor
+  editor.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function updateUndoButtons(){
+  document.getElementById('btn-undo').disabled = historyIndex <= 0;
+  document.getElementById('btn-redo').disabled = historyIndex >= history.length - 1;
+}
+
+/* push initial state */
+pushHistory();
+
+/* push history on user input (debounced to avoid too many pushes) */
+let inputTimer = null;
+editor.addEventListener('input', () => {
+  clearTimeout(inputTimer);
+  inputTimer = setTimeout(() => { pushHistory(); }, 400);
+});
+
+/* keyboard shortcuts: Ctrl+Z and Ctrl+Y (also Cmd for Mac) */
+document.addEventListener('keydown', (e) => {
+  const isMac = navigator.platform.toUpperCase().includes('MAC');
+  const ctrl = isMac ? e.metaKey : e.ctrlKey;
+  if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    undo();
+  } else if ((ctrl && e.shiftKey && e.key.toLowerCase() === 'z') || (ctrl && e.key.toLowerCase() === 'y')) {
+    e.preventDefault();
+    redo();
+  } else if (ctrl && e.key.toLowerCase() === 'a') {
+    // ctrl/cmd+A should select only editor when editor focused; otherwise let browser handle
+    if (document.activeElement === editor) {
+      e.preventDefault();
+      selectAllInEditor();
+    }
+  }
+});
+
+/* ---------- Basic helpers ---------- */
+function getSel(){ return window.getSelection(); }
+function getSelText(){ const s = getSel(); return s ? s.toString() : ''; }
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function csvEscape(v){ if (v==null) return ''; const s=String(v); if (s.includes('"')||s.includes(',')||s.includes('\n')) return `"${s.replace(/"/g,'""')}"`; return s; }
+
+/* Utility: find closest table cell (td) from current selection's anchor */
+function getAnchorTdFromSelection() {
+  const sel = getSel();
+  if (!sel.rangeCount) return null;
+  let node = sel.anchorNode;
+  if (!node) return null;
+  if (node.nodeType === 3) node = node.parentElement;
+  if (!node) return null;
+  return node.closest ? node.closest('td') : null;
+}
+
+/* ---------- Core features (Make Table, Make Columns, Split 3) ---------- */
+
+/* Make Table: selected lines -> rows (one td per row) */
+function makeTableFromSelectionAsRows(){
+  const selText = getSelText();
+  if (!selText || !selText.trim()){ alert('Select some text first. Each newline becomes a ROW.'); return; }
+  const lines = selText.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
+    .split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0){ alert('No non-empty lines found in selection.'); return; }
+
+  // push history before DOM change
+  pushHistory();
+
+  const table = document.createElement('table');
+  table.className = 'generated border-light';
+  const tbody = document.createElement('tbody');
+  for (const line of lines){
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.innerHTML = escapeHtml(line);
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+
+  const sel = getSel();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  range.insertNode(table);
+
+  // move caret after table
+  range.setStartAfter(table);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  pushHistory(); // snapshot after
+  editor.focus();
+}
+
+/* Make Columns: selection inside a td -> selected becomes first col, remaining (before+after) becomes next col
+   If selection empty (caret) -> left=before, right=after
+*/
+function makeColumnsFromSelection(){
+  const sel = getSel();
+  if (!sel.rangeCount) return alert('Place caret or select text inside a table cell (td).');
+  const range = sel.getRangeAt(0);
+
+  let anchorNode = sel.anchorNode;
+  if (!anchorNode) return alert('No selection anchor found.');
+  if (anchorNode.nodeType === 3) anchorNode = anchorNode.parentElement;
+  const anchorTd = anchorNode.closest ? anchorNode.closest('td') : null;
+  if (!anchorTd) return alert('Make Columns must be used inside a table cell (td). Select inside a td and try again.');
+
+  // push history before change
+  pushHistory();
+
+  const selTextRaw = sel.toString().replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+
+  // Build range before selection within td
+  const rangeBefore = document.createRange();
+  try {
+    rangeBefore.setStart(anchorTd, 0);
+    rangeBefore.setEnd(range.startContainer, range.startOffset);
+  } catch(e){
+    rangeBefore.selectNodeContents(anchorTd);
+    rangeBefore.collapse(true);
+  }
+  const beforeText = rangeBefore.toString();
+
+  // Build range after selection within td
+  const rangeAfter = document.createRange();
+  try {
+    rangeAfter.setStart(range.endContainer, range.endOffset);
+    rangeAfter.setEnd(anchorTd, anchorTd.childNodes.length);
+  } catch(e){
+    rangeAfter.selectNodeContents(anchorTd);
+    rangeAfter.collapse(false);
+  }
+  const afterText = rangeAfter.toString();
+
+  const selectedText = selTextRaw;
+  const remainingText = (beforeText + afterText).trim();
+
+  if (!selectedText && !remainingText) { alert('Cell is empty; nothing to split.'); return; }
+
+  if (!selectedText) {
+    // caret mode: left=before, right=after
+    const first = beforeText.trim();
+    const second = afterText.trim();
+    anchorTd.innerHTML = escapeHtml(first);
+    const newTd = document.createElement('td');
+    newTd.innerHTML = escapeHtml(second);
+    anchorTd.parentNode.insertBefore(newTd, anchorTd.nextSibling);
+    pushHistory();
+    // place caret after newTd
+    const rng = document.createRange();
+    rng.setStartAfter(newTd);
+    rng.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(rng);
+    editor.focus();
+    return;
+  }
+
+  // selection non-empty
+  const firstCol = selectedText.trim();
+  const secondCol = remainingText;
+
+  anchorTd.innerHTML = escapeHtml(firstCol);
+  const newTd2 = document.createElement('td');
+  newTd2.innerHTML = escapeHtml(secondCol);
+  anchorTd.parentNode.insertBefore(newTd2, anchorTd.nextSibling);
+
+  pushHistory();
+  const rng2 = document.createRange();
+  rng2.setStartAfter(newTd2);
+  rng2.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(rng2);
+  editor.focus();
+}
+
+/* Split 3: selected -> first, after -> second, before -> third
+   Must have a non-empty selection inside a td
+*/
+function splitIntoThree(){
+  const sel = getSel();
+  if (!sel.rangeCount) return alert('Select text inside a table cell to split into 3 columns.');
+  const range = sel.getRangeAt(0);
+
+  let anchorNode = sel.anchorNode;
+  if (!anchorNode) return alert('No selection anchor found.');
+  if (anchorNode.nodeType === 3) anchorNode = anchorNode.parentElement;
+  const anchorTd = anchorNode.closest ? anchorNode.closest('td') : null;
+  if (!anchorTd) return alert('Split 3 must be used inside a table cell (td). Select inside a td and try again.');
+
+  const selTextRaw = sel.toString().replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  if (!selTextRaw.trim()) return alert('Select non-empty text inside a cell to Split 3.');
+
+  // push history
+  pushHistory();
+
+  // compute before and after texts
+  const rangeBefore = document.createRange();
+  try {
+    rangeBefore.setStart(anchorTd, 0);
+    rangeBefore.setEnd(range.startContainer, range.startOffset);
+  } catch(e) {
+    rangeBefore.selectNodeContents(anchorTd);
+    rangeBefore.collapse(true);
+  }
+  const beforeText = rangeBefore.toString().trim();
+
+  const rangeAfter = document.createRange();
+  try {
+    rangeAfter.setStart(range.endContainer, range.endOffset);
+    rangeAfter.setEnd(anchorTd, anchorTd.childNodes.length);
+  } catch(e) {
+    rangeAfter.selectNodeContents(anchorTd);
+    rangeAfter.collapse(false);
+  }
+  const afterText = rangeAfter.toString().trim();
+
+  const selectedText = selTextRaw.trim();
+
+  // Replace anchorTd with selectedText
+  anchorTd.innerHTML = escapeHtml(selectedText);
+
+  // Insert second col = afterText
+  const tdAfter = document.createElement('td');
+  tdAfter.innerHTML = escapeHtml(afterText);
+  anchorTd.parentNode.insertBefore(tdAfter, anchorTd.nextSibling);
+
+  // Insert third col = beforeText (as next after the second)
+  const tdBefore = document.createElement('td');
+  tdBefore.innerHTML = escapeHtml(beforeText);
+  tdAfter.parentNode.insertBefore(tdBefore, tdAfter.nextSibling);
+
+  pushHistory();
+
+  // place caret after inserted area
+  const rng2 = document.createRange();
+  rng2.setStartAfter(tdBefore);
+  rng2.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(rng2);
+  editor.focus();
+}
+
+/* ---------- Select All ---------- */
+function selectAllInEditor(){
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  const sel = getSel();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  editor.focus();
+}
+
+/* ---------- Export CSV ---------- */
+function exportCSV(){
+  const tables = editor.querySelectorAll('table.generated');
+  if (tables.length === 0){
+    const txt = editor.innerText || editor.textContent || '';
+    if (!txt.trim()){ output.value = ''; return; }
+    const lines = txt.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    output.value = lines.map(l => csvEscape(l)).join('\n');
+    return;
+  }
+  const outLines = [];
+  tables.forEach((t, ti) => {
+    const trs = t.querySelectorAll('tr');
+    trs.forEach(tr => {
+      const cells = Array.from(tr.children).map(td => td.textContent || td.innerText || '');
+      outLines.push(cells.map(c => csvEscape(c)).join(','));
+    });
+    if (ti < tables.length - 1) outLines.push('');
+  });
+  output.value = outLines.join('\n');
+}
+
+/* ---------- Copy CSV ---------- */
+async function copyCsvToClipboard(){
+  try {
+    await navigator.clipboard.writeText(output.value);
+    alert('CSV copied to clipboard');
+  } catch(e) {
+    alert('Copy failed: ' + e);
+  }
+}
+
+/* ---------- Clear ---------- */
+function clearAll(){
+  pushHistory();
+  editor.innerHTML = '';
+  output.value = '';
+  pushHistory();
+  editor.focus();
+}
+
+/* ---------- Table Menu: border width & merge cells ---------- */
+
+function setTableBorderWidth(level) {
+  // apply to closest table of selection (anchor) or to all tables if none selected
+  const sel = getSel();
+  let node = sel && sel.anchorNode ? sel.anchorNode : null;
+  if (node && node.nodeType === 3) node = node.parentElement;
+  const table = node && node.closest ? node.closest('table') : null;
+  const tables = table ? [table] : Array.from(editor.querySelectorAll('table.generated'));
+  if (tables.length === 0) return alert('No table found to set border width on.');
+
+  pushHistory();
+  tables.forEach(t => {
+    t.classList.remove('border-light','border-medium','border-high');
+    if (level === 'light') t.classList.add('border-light');
+    if (level === 'medium') t.classList.add('border-medium');
+    if (level === 'high') t.classList.add('border-high');
+  });
+  pushHistory();
+}
+
+function mergeSelectedCells() {
+  // merge adjacent selected cells in the same row.
+  // Determine which TD elements intersect current selection.
+  const sel = getSel();
+  if (!sel.rangeCount) return alert('Select cells (by dragging over them) in the same row to merge.');
+  const range = sel.getRangeAt(0);
+
+  // find all tds inside the row that intersect the range
+  const anchorNode = sel.anchorNode && (sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode);
+  if (!anchorNode) return alert('Selection anchor not found.');
+  const row = anchorNode.closest ? anchorNode.closest('tr') : null;
+  if (!row) return alert('Put the caret or select inside the row that contains the cells you want to merge.');
+
+  const tds = Array.from(row.querySelectorAll('td'));
+  // which are intersecting range?
+  const intersecting = tds.filter(td => {
+    try {
+      return range.intersectsNode(td);
+    } catch(e) {
+      // some browsers might throw if node disconnected; fallback to bounding rect overlap
+      const r = td.getBoundingClientRect();
+      const sr = range.getBoundingClientRect ? range.getBoundingClientRect() : null;
+      return !!sr && !(r.right < sr.left || r.left > sr.right || r.bottom < sr.top || r.top > sr.bottom);
+    }
+  });
+
+  if (intersecting.length < 2) return alert('Select at least two adjacent cells in the same row to merge.');
+
+  // ensure they are adjacent in the row order
+  const firstIndex = tds.indexOf(intersecting[0]);
+  const lastIndex = tds.indexOf(intersecting[intersecting.length - 1]);
+  if (lastIndex - firstIndex + 1 !== intersecting.length) return alert('Cells must be adjacent to merge.');
+
+  // merge: combine innerText joined by single space
+  pushHistory();
+  const combined = intersecting.map(td => (td.textContent || td.innerText || '').trim()).filter(Boolean).join(' ');
+  const firstTd = intersecting[0];
+  firstTd.innerHTML = escapeHtml(combined);
+  // set colspan to number merged
+  firstTd.colSpan = intersecting.length;
+  // remove other tds
+  for (let i = intersecting.length - 1; i >= 1; i--) {
+    intersecting[i].parentNode.removeChild(intersecting[i]);
+  }
+  pushHistory();
+}
+
+/* ---------- Text Menu: center and bold ---------- */
+function centerText() {
+  // center selected cells or selected text
+  const sel = getSel();
+  if (!sel.rangeCount) return;
+  // If selection inside a td, apply to that td(s)
+  let node = sel.anchorNode;
+  if (node && node.nodeType === 3) node = node.parentElement;
+  const td = node && node.closest ? node.closest('td') : null;
+  if (td) {
+    // center the whole cell(s) that the selection touches
+    // find all tds in the same row that intersect selection
+    const row = td.closest('tr');
+    if (!row) return;
+    const tds = Array.from(row.querySelectorAll('td'));
+    const range = sel.getRangeAt(0);
+    const touched = tds.filter(tdEl => {
+      try { return range.intersectsNode(tdEl); }
+      catch(e){ return false; }
+    });
+    const targetTds = touched.length > 0 ? touched : [td];
+    pushHistory();
+    targetTds.forEach(tdEl => tdEl.style.textAlign = 'center');
+    pushHistory();
+    return;
+  }
+  // fallback: center the selection using execCommand
+  pushHistory();
+  document.execCommand('justifyCenter', false, null);
+  pushHistory();
+}
+
+function boldText() {
+  // toggle bold for selection
+  // Using execCommand for selection-level bold is simplest and works in contenteditable
+  pushHistory();
+  document.execCommand('bold', false, null);
+  pushHistory();
+}
+
+/* ---------- Menu UI toggles ---------- */
+function toggleDropdown(dropId) {
+  const dd = document.getElementById(dropId);
+  if (!dd) return;
+  const visible = dd.style.display === 'block';
+  // hide all first
+  document.querySelectorAll('.dropdown').forEach(d=>d.style.display='none');
+  if (!visible) dd.style.display = 'block';
+  dd.setAttribute('aria-hidden', visible ? 'true' : 'false');
+}
+document.getElementById('btn-table-menu').addEventListener('click', ()=> toggleDropdown('dropdown-table'));
+document.getElementById('btn-text-menu').addEventListener('click', ()=> toggleDropdown('dropdown-text'));
+
+// hide dropdowns when clicking outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.menu')) {
+    document.querySelectorAll('.dropdown').forEach(d=>{ d.style.display='none'; d.setAttribute('aria-hidden','true'); });
+  }
+});
+
+/* Hook up dropdown actions */
+document.getElementById('dropdown-table').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const a = btn.getAttribute('data-action');
+  if (a === 'border-light') setTableBorderWidth('light');
+  if (a === 'border-medium') setTableBorderWidth('medium');
+  if (a === 'border-high') setTableBorderWidth('high');
+  if (a === 'merge-cells') mergeSelectedCells();
+});
+document.getElementById('dropdown-text').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const a = btn.getAttribute('data-action');
+  if (a === 'center-text') centerText();
+  if (a === 'bold-text') boldText();
+});
+
+/* ---------- Wire up top-level buttons ---------- */
+document.getElementById('btn-make-table').addEventListener('click', makeTableFromSelectionAsRows);
+document.getElementById('btn-make-columns').addEventListener('click', () => { makeColumnsFromSelection(); });
+document.getElementById('btn-split-3').addEventListener('click', splitIntoThree);
+document.getElementById('btn-select-all').addEventListener('click', selectAllInEditor);
+document.getElementById('btn-export').addEventListener('click', exportCSV);
+document.getElementById('btn-copy').addEventListener('click', copyCsvToClipboard);
+document.getElementById('btn-clear').addEventListener('click', clearAll);
+document.getElementById('btn-undo').addEventListener('click', undo);
+document.getElementById('btn-redo').addEventListener('click', redo);
+
+/* small UX: keep editor focused after button click */
+document.querySelectorAll('button').forEach(b => {
+  b.addEventListener('mouseup', () => setTimeout(()=> editor.focus(), 0));
+});
+
+/* ensure history updated after programmatic actions too */
+function safeAction(fn) {
+  pushHistory();
+  fn();
+  pushHistory();
+}
+
+/* Expose some functions to console for debugging (optional) */
+window._tm = {
+  pushHistory, undo, redo, makeTableFromSelectionAsRows, makeColumnsFromSelection, splitIntoThree,
+  setTableBorderWidth, mergeSelectedCells, centerText, boldText
+};
+</script>
+</body>
+</html>
