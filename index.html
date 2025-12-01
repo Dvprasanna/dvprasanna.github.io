@@ -28,6 +28,21 @@
   <button id="btn-clear" title="Clear editor & output">Clear</button>
 </div>
 <button id="btn-select-all" title="Select everything inside the editor">Select All</button>
+
+function selectAllInEditor(){
+  const editor = document.getElementById("editor");
+  const range = document.createRange();
+  const sel = window.getSelection();
+
+  range.selectNodeContents(editor);
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  editor.focus();
+}
+
+document.getElementById("btn-select-all")
+  .addEventListener("click", selectAllInEditor);
 <div id="editor" contenteditable="true" spellcheck="false">
 Paste sample text and try:
 
