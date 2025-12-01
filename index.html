@@ -33,18 +33,23 @@
 </div>
 
 <div id="editor" contenteditable="true" spellcheck="false" aria-label="Editor">
+
 Paste plain text here then select lines and click Make Table.
 
+
 Example:
-first
-second
-third
+
+first text
+second text
+third text
 
 1) Select those lines and click Make Table → three rows.
 2) Deselect.
 3) Inside the first cell type: abcDEFghi
-   Select "DEF" (only that part) and click Make Columns.
-   Result: that row becomes two cells: <td>DEF</td> and <td>abcghi</td> (selected first, remaining next).
+
+   
+Select "DEF" (only that part) and click Make Columns.
+Result: that row becomes two cells: DEF and abcghi (selected first, remaining next).
 </div>
 
 <textarea id="output" placeholder="CSV output will appear here" aria-label="CSV output"></textarea>
