@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Drawing Canvas — Auto-fill + Trim Fixed</title>
+<title>Drawing Canvas — Trim Arcs Fixed</title>
 <style>
   :root{
     --bg:#f4f6fb; --panel:#fff; --accent:#0b5cff; --muted:#666;
@@ -89,7 +89,7 @@
   // state
   let mode = 'draw';
   let lineWidth = 4;
-  let shapes = [];
+  let shapes = [];   // shapes entries: {type, el, ...} For segments we may store groupId
   let history = [];
   let ghost = null;
   let pointerInfo = null;
@@ -192,16 +192,17 @@
   // trim helpers
   function distPointToSegment(px, py, x1, y1, x2, y2){
     const vx = x2-x1, vy = y2-y1; const wx = px-x1, wy = py-y1;
-    const c1 = vx*wx + vy*wy;
-    if(c1 <= 0) return Math.hypot(px-x1, py-y1);
-    const c2 = vx*vx + vy*vy;
-    if(c2 <= c1) return Math.hypot(px-x2, py-y2);
+    const c1 = vx*wx + vy*wy; if(c1 <= 0) return Math.hypot(px-x1, py-y1);
+    const c2 = vx*vx + vy*vy; if(c2 <= c1) return Math.hypot(px-x2, py-y2);
     const t = c1 / c2; const projx = x1 + t*vx; const projy = y1 + t*vy;
     return Math.hypot(px-projx, py-projy);
   }
   function distPointToPolyline(px,py,pts){ let best = Infinity; for(let i=0;i<pts.length-1;i++){ const d = distPointToSegment(px,py, pts[i].x,pts[i].y, pts[i+1].x,pts[i+1].y); if(d < best) best = d; } return best; }
   function distPointToCircle(px,py,cx,cy,r){ return Math.abs(Math.hypot(px-cx,py-cy) - r); }
 
+  // Trim behavior updated:
+  // - If the closest shape has a `groupId`, remove all shapes with that same groupId.
+  // - Otherwise remove only the single segment.
   function trimAtPoint(p){
     if(shapes.length === 0) return;
     let closest = null; let best = Infinity;
@@ -212,11 +213,20 @@
       else if(s.type === 'circle') d = distPointToCircle(p.x,p.y, s.cx,s.cy,s.r);
       if(d < best){ best = d; closest = s; }
     }
-    if(closest && best <= TRIM_RANGE){
-      closest.el.remove();
-      shapes = shapes.filter(s => s !== closest);
-      history.push({op:'del', shape:closest});
+    if(!closest || best > TRIM_RANGE) return;
+
+    // If the shape has a groupId (arc group), remove all shapes with same groupId
+    if(closest.groupId){
+      const gid = closest.groupId;
+      const toRemove = shapes.filter(s => s.groupId === gid);
+      toRemove.forEach(s => { s.el.remove(); shapes = shapes.filter(x => x !== s); history.push({op:'del', shape:s}); });
+      return;
     }
+
+    // else remove single segment
+    closest.el.remove();
+    shapes = shapes.filter(s => s !== closest);
+    history.push({op:'del', shape:closest});
   }
 
   // intersection helpers
@@ -254,29 +264,26 @@
     return [p1,p2];
   }
 
-  // ---- FIXED splitAtIntersectionsInternal (always converts circles into line-segments) ----
+  // ---- splitAtIntersectionsInternal with arc-grouping for circles ----
+  // converts lines to segments as before, and converts each circle into segments grouped by arcs between intersection points.
   function splitAtIntersectionsInternal(){
     const lines = shapes.filter(s => s.type === 'line');
     const circles = shapes.filter(s => s.type === 'circle');
     const intersections = [];
 
-    // line-line
+    // gather intersections
     for(let i=0;i<lines.length;i++){
       for(let j=i+1;j<lines.length;j++){
         const p = lineLineInter(lines[i], lines[j]);
         if(p){ intersections.push({p, with:[lines[i], lines[j]]}); markIntersection(p); }
       }
     }
-
-    // line-circle
     for(let i=0;i<lines.length;i++){
       for(let j=0;j<circles.length;j++){
         const pts = lineCircleInter(lines[i], circles[j]);
         pts.forEach(p => { intersections.push({p, with:[lines[i], circles[j]]}); markIntersection(p); });
       }
     }
-
-    // circle-circle
     for(let i=0;i<circles.length;i++){
       for(let j=i+1;j<circles.length;j++){
         const pts = circleCircleInter(circles[i], circles[j]);
@@ -285,8 +292,9 @@
     }
 
     const newShapes = [];
+    let circleIndex = 0;
 
-    // split lines into segments at intersection points
+    // split straight lines into segments at intersections (unchanged)
     lines.forEach(l => {
       const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
       ptsOnLine.push({x: l.x1, y: l.y1}, {x: l.x2, y: l.y2});
@@ -312,27 +320,85 @@
       l.el.remove();
     });
 
-    // convert circles into many small straight segments (always)
-    const N = 72;
+    // convert circles into small straight segments and group them into arcs between intersections
+    const N = 72; // number of sample points around circumference
     circles.forEach(c => {
+      const cid = 'c' + (circleIndex++); // parent circle id
+      // sample N points with their angles
       const pts = [];
       for(let k=0;k<N;k++){
         const a = (k / N) * Math.PI * 2;
-        pts.push({ x: c.cx + c.r * Math.cos(a), y: c.cy + c.r * Math.sin(a) });
+        pts.push({ x: c.cx + c.r * Math.cos(a), y: c.cy + c.r * Math.sin(a), angle: a, idx: k });
       }
-      for(let k=0;k<pts.length;k++){
-        const a = pts[k];
-        const b = pts[(k+1) % pts.length];
-        if(Math.hypot(b.x - a.x, b.y - a.y) > 0.5){
-          const seg = document.createElementNS('http://www.w3.org/2000/svg','line');
-          seg.classList.add('shape');
-          seg.setAttribute('x1', a.x); seg.setAttribute('y1', a.y);
-          seg.setAttribute('x2', b.x); seg.setAttribute('y2', b.y);
-          seg.setAttribute('stroke-width', c.w);
-          svg.appendChild(seg);
-          newShapes.push({type:'line', el:seg, x1:a.x, y1:a.y, x2:b.x, y2:b.y, w:c.w});
+
+      // find indices on the sampled ring closest to intersection points that involve this circle
+      const intsOnC = intersections.filter(it => it.with.includes(c)).map(it => it.p);
+      const intIdxs = [];
+      intsOnC.forEach(ip => {
+        // compute angle for intersection relative to circle center
+        const ang = Math.atan2(ip.y - c.cy, ip.x - c.cx);
+        // normalize angle to [0, 2PI)
+        const angNorm = (ang + Math.PI*2) % (Math.PI*2);
+        // find nearest sample index
+        let bestIdx = 0; let bestD = Infinity;
+        for(let s=0;s<pts.length;s++){
+          let da = Math.abs(pts[s].angle - angNorm);
+          // handle wrap-around
+          da = Math.min(da, Math.PI*2 - da);
+          if(da < bestD){ bestD = da; bestIdx = s; }
+        }
+        intIdxs.push(bestIdx);
+      });
+
+      // produce unique sorted intersection indices (if none, the circle becomes a single group)
+      const uniqIdxs = Array.from(new Set(intIdxs)).sort((a,b) => a - b);
+
+      if(uniqIdxs.length === 0){
+        // whole circle = one group. Create all segments and assign same groupId
+        const groupId = cid + '-g0';
+        for(let k=0;k<pts.length;k++){
+          const a = pts[k];
+          const b = pts[(k+1) % pts.length];
+          if(Math.hypot(b.x - a.x, b.y - a.y) > 0.5){
+            const seg = document.createElementNS('http://www.w3.org/2000/svg','line');
+            seg.classList.add('shape');
+            seg.setAttribute('x1', a.x); seg.setAttribute('y1', a.y);
+            seg.setAttribute('x2', b.x); seg.setAttribute('y2', b.y);
+            seg.setAttribute('stroke-width', c.w);
+            svg.appendChild(seg);
+            newShapes.push({type:'line', el:seg, x1:a.x, y1:a.y, x2:b.x, y2:b.y, w:c.w, parentCircleId:cid, groupId:groupId});
+          }
+        }
+      } else {
+        // there are intersection points: build arc groups between sorted intersection indices
+        // ensure indices are in ascending order on circle; we'll iterate pairs (i -> next)
+        const sorted = uniqIdxs.slice().sort((a,b)=>a-b);
+        for(let s=0;s<sorted.length;s++){
+          const i1 = sorted[s];
+          const i2 = sorted[(s+1) % sorted.length]; // wraps around for last -> first
+          // build group id
+          const groupId = cid + '-g' + s;
+          // iterate from i1 to i2 (inclusive of i1->i2 arc). handle wrap if i2 <= i1
+          let k = i1;
+          while(true){
+            const a = pts[k];
+            const b = pts[(k+1) % pts.length];
+            if(Math.hypot(b.x - a.x, b.y - a.y) > 0.5){
+              const seg = document.createElementNS('http://www.w3.org/2000/svg','line');
+              seg.classList.add('shape');
+              seg.setAttribute('x1', a.x); seg.setAttribute('y1', a.y);
+              seg.setAttribute('x2', b.x); seg.setAttribute('y2', b.y);
+              seg.setAttribute('stroke-width', c.w);
+              svg.appendChild(seg);
+              newShapes.push({type:'line', el:seg, x1:a.x, y1:a.y, x2:b.x, y2:b.y, w:c.w, parentCircleId:cid, groupId:groupId});
+            }
+            if(k === i2) break;
+            k = (k+1) % pts.length;
+          }
         }
       }
+
+      // remove original circle element
       c.el.remove();
     });
 
@@ -401,10 +467,8 @@
     img.src = url;
   });
 
-  // mark intersection visual
   function markIntersection(pt){ const dot = document.createElementNS('http://www.w3.org/2000/svg','circle'); dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3); dot.setAttribute('class','intersection-dot'); svg.appendChild(dot); setTimeout(()=>dot.remove(),700); }
 
-  // prevent scroll on touch
   svg.addEventListener('touchstart', (e)=>{ e.preventDefault(); }, {passive:false});
 
 })();
