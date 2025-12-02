@@ -3,255 +3,211 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Edge/Corner Draw — Trim Tool</title>
+<title>Drawing Canvas — Bottom Toolbar + Fixed Trim Range</title>
 <style>
-  :root{--bg:#f6f7fb; --panel:#fff; --accent:#0b5cff; --muted:#666}
-  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue";background:var(--bg);color:#111}
-  .app{display:flex;min-height:100vh}
-  .toolbar{
-    width:320px;background:var(--panel);padding:12px;border-right:1px solid #e6e8ef;box-sizing:border-box;
+  :root{
+    --bg:#f4f6fb; --panel:#fff; --accent:#0b5cff; --muted:#666; --shadow: 0 10px 30px rgba(0,0,0,0.06);
   }
-  @media(max-width:700px){ .toolbar{position:fixed;left:0;right:0;top:0;display:flex;gap:8px;height:56px;width:auto;z-index:10} .app{padding-top:56px} }
-  .canvas-wrap{
-    flex:1;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;
-    overscroll-behavior: none;
+  html,body{height:100%;margin:0;background:var(--bg);font-family:system-ui,Segoe UI,Roboto}
+  .wrap{height:calc(100% - 64px);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;overscroll-behavior:none}
+  .svg-frame{display:inline-block;max-width:100%;max-height:100%}
+  svg{background:#fff;display:block;touch-action:none; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; box-shadow:var(--shadow)}
+  .shape{stroke:#111; fill:none; stroke-linecap:round; stroke-linejoin:round; cursor:pointer}
+  .ghost{stroke:rgba(11,92,255,0.45); stroke-dasharray:6 6; fill:none; pointer-events:none}
+  /* bottom toolbar */
+  .toolbar {
+    height:64px; box-sizing:border-box; padding:8px 12px; background:var(--panel);
+    border-top:1px solid #e6e8ef; display:flex; align-items:center; gap:8px; justify-content:space-between;
+    position:fixed; left:0; right:0; bottom:0;
   }
-  .controls{display:flex;flex-direction:column;gap:10px}
+  .left, .center, .right { display:flex; gap:8px; align-items:center; }
+  button{padding:8px 10px;border-radius:8px;border:1px solid #d9dbe7;background:white;cursor:pointer;font-size:14px}
+  button.active{outline:2px solid rgba(11,92,255,0.14);border-color:var(--accent)}
   .seg{display:flex;gap:6px}
-  button,select{padding:8px 10px;border-radius:8px;border:1px solid #d9dbe7;background:white;cursor:pointer}
-  button.active{outline:2px solid rgba(11,92,255,0.18);border-color:var(--accent)}
-  .svg-frame { display:inline-block; max-width:100%; max-height:calc(100vh - 120px); }
-  svg { background: white; box-shadow: 0 6px 18px rgba(0,0,0,0.06); touch-action: none; display:block; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color: transparent; }
-  .hint{font-size:12px;color:var(--muted)}
-  .small{font-size:13px;padding:6px 8px}
-  .toolbar-row{display:flex;gap:8px;align-items:center}
-  .status{position:fixed;right:12px;bottom:12px;background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #eee;font-size:13px;box-shadow:0 6px 16px rgba(0,0,0,0.06)}
-  .shape{stroke:#111; fill:none; stroke-linecap:round; stroke-linejoin:round; cursor:pointer }
-  .shape:hover{stroke:rgba(11,92,255,0.9)}
-  .ghost{stroke:rgba(11,92,255,0.4);stroke-dasharray:6 6;fill:none;pointer-events:none}
-  .intersection-dot{fill:var(--accent);stroke:#fff;stroke-width:1px; pointer-events:none}
+  .label{font-size:13px;color:var(--muted)}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+  @media(max-width:700px){
+    .label{display:none}
+    button{padding:8px 6px;font-size:13px}
+  }
 </style>
 </head>
 <body>
-<div class="app">
-  <div class="toolbar" role="region" aria-label="Drawing controls">
-    <div class="controls">
-      <div class="toolbar-row">
-        <label for="size">Canvas</label>
-        <select id="size" class="small" aria-label="Canvas size">
-          <option value="600x800">600 × 800</option>
-          <option value="800x600">800 × 600</option>
-        </select>
-      </div>
-
-      <div class="toolbar-row">
-        <div>Line width</div>
-        <div class="seg">
-          <button id="lw-s" class="small">S</button>
-          <button id="lw-m" class="small active">M</button>
-          <button id="lw-l" class="small">L</button>
-        </div>
-      </div>
-
-      <div class="toolbar-row">
-        <button id="mode-draw" class="small active">Draw</button>
-        <button id="mode-select" class="small">Select</button>
-        <button id="mode-trim" class="small">Trim</button>
-      </div>
-
-      <div class="toolbar-row">
-        <button id="split" class="small">Split at intersections</button>
-        <button id="undo" class="small">Undo</button>
-        <button id="clear" class="small">Clear</button>
-      </div>
-
-      <div class="toolbar-row hint">
-        <div>Hints:</div>
-        <div style="margin-left:8px">Drag from edges (50px hot-zone) to draw full perpendicular lines. Drag from corners to draw circle (center fixed). Use Trim to remove segments post-split.</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="canvas-wrap">
-    <div class="svg-frame">
-      <svg id="svg" width="600" height="800" viewBox="0 0 600 800" tabindex="0" aria-label="Drawing canvas"></svg>
-    </div>
+<div class="wrap">
+  <div class="svg-frame" id="frame">
+    <svg id="svg" width="600" height="800" viewBox="0 0 600 800" role="application" aria-label="Drawing canvas"></svg>
   </div>
 </div>
 
-<div class="status" id="status">Mode: Draw — Width: M</div>
+<!-- Bottom toolbar (fixed) -->
+<div class="toolbar" role="toolbar" aria-label="Drawing controls">
+  <div class="left">
+    <button id="btn-draw" class="active" title="Draw mode (drag edges/corners)">Draw</button>
+    <button id="btn-trim" title="Trim mode (click near a segment to remove)">Trim</button>
+    <div class="label" id="modeLabel">Mode: Draw</div>
+  </div>
+
+  <div class="center">
+    <div class="seg">
+      <button id="lw-s" title="Line width small">S</button>
+      <button id="lw-m" class="active" title="Line width medium">M</button>
+      <button id="lw-l" title="Line width large">L</button>
+    </div>
+    <button id="btn-split" title="Split at intersections (prepare segments)">Split</button>
+    <button id="btn-undo" title="Undo">Undo</button>
+    <button id="btn-clear" title="Clear">Clear</button>
+  </div>
+
+  <div class="right">
+    <div class="label">Edge hot-zone: <strong>50px</strong></div>
+    <div class="label">Trim range (fixed): <strong id="trimLabel">8px</strong></div>
+  </div>
+</div>
+
+<div class="sr-only" id="sr">Use bottom toolbar to choose Draw or Trim. Drag from edges (50px) or corners; trim-click range fixed at 8px.</div>
 
 <script>
 (() => {
+  // CONFIG (fixed)
+  const HOTZONE = 50;       // edge/corner hot-zone (px)
+  const TRIM_RANGE = 8;     // fixed trim detection range (SVG units) — not adjustable via UI
+  const VIEW_W = 600, VIEW_H = 800;
+
+  // UI refs
   const svg = document.getElementById('svg');
-  const sizeSel = document.getElementById('size');
+  const frame = document.getElementById('frame');
+  const btnDraw = document.getElementById('btn-draw');
+  const btnTrim = document.getElementById('btn-trim');
+  const modeLabel = document.getElementById('modeLabel');
   const lwS = document.getElementById('lw-s'), lwM = document.getElementById('lw-m'), lwL = document.getElementById('lw-l');
-  const modeDraw = document.getElementById('mode-draw'), modeSelect = document.getElementById('mode-select'), modeTrim = document.getElementById('mode-trim');
-  const status = document.getElementById('status');
-  const splitBtn = document.getElementById('split');
-  const undoBtn = document.getElementById('undo'), clearBtn = document.getElementById('clear');
+  const btnSplit = document.getElementById('btn-split'), btnUndo = document.getElementById('btn-undo'), btnClear = document.getElementById('btn-clear');
+  const trimLabel = document.getElementById('trimLabel');
 
-  let width = 3;
-  let currentMode = 'draw';
+  trimLabel.textContent = TRIM_RANGE + 'px';
+
+  // State
+  let mode = 'draw'; // 'draw' | 'trim'
+  let lineWidth = 4; // default M
+  let shapes = [];   // {type, el, ...}
   let history = [];
-  let shapes = []; // {type:'line'|'circle'|'polyline', el:SVGElement, data:...}
-  let pointerDownInfo = null;
   let ghost = null;
-  const HOTZONE = 50;
-  let trimActive = false;
+  let pointerInfo = null;
 
-  function setCanvasSize(val){
-    const [w,h] = val.split('x').map(Number);
-    svg.setAttribute('width', w);
-    svg.setAttribute('height', h);
-    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    svg.parentElement.style.width = w + 'px';
-    svg.parentElement.style.height = h + 'px';
+  // setup svg sizing (fixed canvas visible)
+  svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${VIEW_H}`);
+  svg.setAttribute('width', VIEW_W);
+  svg.setAttribute('height', VIEW_H);
+  frame.style.width = VIEW_W + 'px';
+  frame.style.height = VIEW_H + 'px';
+
+  // helpers to create shapes
+  function addShape(obj){
+    shapes.push(obj);
+    history.push({op:'add', shape: obj});
   }
-  setCanvasSize(sizeSel.value);
-  sizeSel.addEventListener('change', e => setCanvasSize(e.target.value));
-
-  function setWidth(wName){
-    lwS.classList.remove('active'); lwM.classList.remove('active'); lwL.classList.remove('active');
-    if(wName==='S'){ lwS.classList.add('active'); width=2; }
-    if(wName==='M'){ lwM.classList.add('active'); width=4; }
-    if(wName==='L'){ lwL.classList.add('active'); width=7; }
-    status.textContent = `Mode: ${currentMode === 'draw' ? 'Draw' : currentMode === 'select' ? 'Select' : 'Trim'} — Width: ${wName}`;
+  function makeFullVerticalLine(x){
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.classList.add('shape');
+    line.setAttribute('x1', x); line.setAttribute('y1', 0); line.setAttribute('x2', x); line.setAttribute('y2', VIEW_H);
+    line.setAttribute('stroke-width', lineWidth);
+    svg.appendChild(line);
+    addShape({type:'line', el:line, x1:x,y1:0,x2:x,y2:VIEW_H, w:lineWidth});
   }
-  lwS.addEventListener('click', ()=>setWidth('S'));
-  lwM.addEventListener('click', ()=>setWidth('M'));
-  lwL.addEventListener('click', ()=>setWidth('L'));
-  setWidth('M');
-
-  function setMode(m){
-    currentMode = m;
-    modeDraw.classList.toggle('active', m==='draw');
-    modeSelect.classList.toggle('active', m==='select');
-    modeTrim.classList.toggle('active', m==='trim');
-    trimActive = (m === 'trim');
-    status.textContent = `Mode: ${m.charAt(0).toUpperCase()+m.slice(1)} — Width: ${document.querySelector('.toolbar .active')?.textContent || 'M'}`;
-    if(trimActive){
-      // prepare shapes by splitting at intersections (so segments exist)
-      splitAtIntersections();
-    }
+  function makeFullHorizontalLine(y){
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.classList.add('shape');
+    line.setAttribute('x1', 0); line.setAttribute('y1', y); line.setAttribute('x2', VIEW_W); line.setAttribute('y2', y);
+    line.setAttribute('stroke-width', lineWidth);
+    svg.appendChild(line);
+    addShape({type:'line', el:line, x1:0,y1:y,x2:VIEW_W,y2:y, w:lineWidth});
+  }
+  function makeCircle(cx,cy,r){
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.classList.add('shape');
+    c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r);
+    c.setAttribute('stroke-width', lineWidth);
+    svg.appendChild(c);
+    addShape({type:'circle', el:c, cx,cy,r, w:lineWidth});
   }
 
-  modeDraw.addEventListener('click', ()=>setMode('draw'));
-  modeSelect.addEventListener('click', ()=>setMode('select'));
-  modeTrim.addEventListener('click', ()=>setMode(trimActive ? 'draw' : 'trim')); // toggle
-
+  // ghost helpers
+  function removeGhost(){ if(ghost){ ghost.remove(); ghost=null; } }
   function createGhostFullLineVertical(x){
     removeGhost();
     ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ghost.setAttribute('x1', x); ghost.setAttribute('y1', 0); ghost.setAttribute('x2', x); ghost.setAttribute('y2', svg.viewBox.baseVal.height);
-    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
+    ghost.setAttribute('x1', x); ghost.setAttribute('y1', 0); ghost.setAttribute('x2', x); ghost.setAttribute('y2', VIEW_H);
+    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', lineWidth);
     svg.appendChild(ghost);
   }
   function createGhostFullLineHorizontal(y){
     removeGhost();
     ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ghost.setAttribute('x1', 0); ghost.setAttribute('y1', y); ghost.setAttribute('x2', svg.viewBox.baseVal.width); ghost.setAttribute('y2', y);
-    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
+    ghost.setAttribute('x1', 0); ghost.setAttribute('y1', y); ghost.setAttribute('x2', VIEW_W); ghost.setAttribute('y2', y);
+    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', lineWidth);
     svg.appendChild(ghost);
   }
   function createGhostCircle(cx,cy,r){
     removeGhost();
     ghost = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    ghost.setAttribute('cx',cx); ghost.setAttribute('cy',cy); ghost.setAttribute('r',r);
-    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
+    ghost.setAttribute('cx', cx); ghost.setAttribute('cy', cy); ghost.setAttribute('r', r);
+    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', lineWidth);
     svg.appendChild(ghost);
   }
-  function removeGhost(){ if(ghost){ghost.remove(); ghost=null;} }
 
-  function addShape(obj){
-    shapes.push(obj);
-    history.push({op:'add', shape:obj});
-  }
-
-  function makeFullVerticalLine(x){
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-    line.classList.add('shape');
-    line.setAttribute('x1',x); line.setAttribute('y1',0); line.setAttribute('x2',x); line.setAttribute('y2',svg.viewBox.baseVal.height);
-    line.setAttribute('stroke-width', width);
-    svg.appendChild(line);
-    addShape({type:'line', el:line, x1:x,y1:0,x2:x,y2:svg.viewBox.baseVal.height, w:width});
-  }
-
-  function makeFullHorizontalLine(y){
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-    line.classList.add('shape');
-    line.setAttribute('x1',0); line.setAttribute('y1',y); line.setAttribute('x2',svg.viewBox.baseVal.width); line.setAttribute('y2',y);
-    line.setAttribute('stroke-width', width);
-    svg.appendChild(line);
-    addShape({type:'line', el:line, x1:0,y1:y,x2:svg.viewBox.baseVal.width,y2:y, w:width});
-  }
-
-  function makeCircle(cx,cy,r){
-    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    c.classList.add('shape');
-    c.setAttribute('cx',cx); c.setAttribute('cy',cy); c.setAttribute('r',r);
-    c.setAttribute('stroke-width', width);
-    svg.appendChild(c);
-    addShape({type:'circle', el:c, cx,cy,r, w:width});
-  }
-
-  // helper: pointer coords relative to svg
-  function svgPoint(evt){
+  // pointer -> svg point
+  function svgPointFromEvent(evt){
     const pt = svg.createSVGPoint();
     pt.x = evt.clientX; pt.y = evt.clientY;
-    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
-    return {x:loc.x, y:loc.y};
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
   }
 
-  // prevent default touch scrolling when interacting with SVG
+  // interactions: draw from edges/corners
   svg.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     svg.setPointerCapture(e.pointerId);
-    if(currentMode !== 'draw'){ return; }
-    const p = svgPoint(e);
-    const vb = svg.viewBox.baseVal;
-    const margin = HOTZONE;
-    const nearLeft = p.x <= margin;
-    const nearRight = p.x >= vb.width - margin;
-    const nearTop = p.y <= margin;
-    const nearBottom = p.y >= vb.height - margin;
+    if(mode !== 'draw') return;
+    const p = svgPointFromEvent(e);
+    const vbW = VIEW_W, vbH = VIEW_H;
+    const nearLeft = p.x <= HOTZONE;
+    const nearRight = p.x >= vbW - HOTZONE;
+    const nearTop = p.y <= HOTZONE;
+    const nearBottom = p.y >= vbH - HOTZONE;
     const nearCorner = (nearLeft||nearRight) && (nearTop||nearBottom);
     const nearEdge = nearLeft || nearRight || nearTop || nearBottom;
-    pointerDownInfo = {start:p, corner:nearCorner, edge:nearEdge, nearLeft, nearRight, nearTop, nearBottom};
+    pointerInfo = {start:p, corner:nearCorner, edge:nearEdge, nearLeft, nearRight, nearTop, nearBottom};
     if(nearCorner){
-      const cx = nearLeft ? 0 : vb.width;
-      const cy = nearTop ? 0 : vb.height;
+      const cx = nearLeft ? 0 : vbW;
+      const cy = nearTop ? 0 : vbH;
       createGhostCircle(cx, cy, Math.hypot(p.x-cx, p.y-cy));
     } else if(nearEdge){
       if(nearLeft || nearRight){
         createGhostFullLineVertical(p.x);
-        pointerDownInfo.axis = 'vertical';
+        pointerInfo.axis = 'vertical';
       } else {
         createGhostFullLineHorizontal(p.y);
-        pointerDownInfo.axis = 'horizontal';
+        pointerInfo.axis = 'horizontal';
       }
     } else {
-      pointerDownInfo = null;
+      pointerInfo = null;
     }
   }, {passive:false});
 
   svg.addEventListener('pointermove', (e) => {
-    if(pointerDownInfo) e.preventDefault();
-    const p = svgPoint(e);
-    if(pointerDownInfo && ghost){
-      if(pointerDownInfo.corner){
-        const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
-        const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
-        const r = Math.hypot(p.x-cx, p.y-cy);
-        ghost.setAttribute('r', r);
-      } else if(pointerDownInfo.edge){
-        if(pointerDownInfo.axis === 'vertical'){
-          let x = Math.max(0, Math.min(svg.viewBox.baseVal.width, p.x));
-          ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
-        } else {
-          let y = Math.max(0, Math.min(svg.viewBox.baseVal.height, p.y));
-          ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
-        }
+    if(pointerInfo) e.preventDefault();
+    if(!pointerInfo || !ghost) return;
+    const p = svgPointFromEvent(e);
+    if(pointerInfo.corner){
+      const cx = pointerInfo.nearLeft ? 0 : VIEW_W;
+      const cy = pointerInfo.nearTop ? 0 : VIEW_H;
+      const r = Math.hypot(p.x-cx, p.y-cy);
+      ghost.setAttribute('r', r);
+    } else if(pointerInfo.edge){
+      if(pointerInfo.axis === 'vertical'){
+        let x = Math.max(0, Math.min(VIEW_W, p.x));
+        ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
+      } else {
+        let y = Math.max(0, Math.min(VIEW_H, p.y));
+        ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
       }
     }
   }, {passive:false});
@@ -259,14 +215,14 @@
   svg.addEventListener('pointerup', (e) => {
     e.preventDefault();
     svg.releasePointerCapture(e.pointerId);
-    if(!pointerDownInfo || !ghost){ pointerDownInfo=null; removeGhost(); return; }
-    if(pointerDownInfo.corner){
-      const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
-      const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
+    if(!pointerInfo || !ghost){ pointerInfo = null; removeGhost(); return; }
+    if(pointerInfo.corner){
+      const cx = pointerInfo.nearLeft ? 0 : VIEW_W;
+      const cy = pointerInfo.nearTop ? 0 : VIEW_H;
       const r = parseFloat(ghost.getAttribute('r'));
       makeCircle(cx,cy,r);
-    } else if(pointerDownInfo.edge){
-      if(pointerDownInfo.axis === 'vertical'){
+    } else if(pointerInfo.edge){
+      if(pointerInfo.axis === 'vertical'){
         const x = parseFloat(ghost.getAttribute('x1'));
         makeFullVerticalLine(x);
       } else {
@@ -274,30 +230,61 @@
         makeFullHorizontalLine(y);
       }
     }
-    pointerDownInfo=null;
+    pointerInfo = null;
     removeGhost();
   }, {passive:false});
 
-  // --- click-to-trim behavior: when trimActive, clicking a segment deletes it ---
+  // TRIM: fixed-range detection (click near a segment deletes it)
+  function distPointToSegment(px, py, x1, y1, x2, y2){
+    const vx = x2 - x1, vy = y2 - y1;
+    const wx = px - x1, wy = py - y1;
+    const c1 = vx*wx + vy*wy;
+    if (c1 <= 0) return Math.hypot(px - x1, py - y1);
+    const c2 = vx*vx + vy*vy;
+    if (c2 <= c1) return Math.hypot(px - x2, py - y2);
+    const t = c1 / c2;
+    const projx = x1 + t * vx;
+    const projy = y1 + t * vy;
+    return Math.hypot(px - projx, py - projy);
+  }
+  function distPointToPolyline(px,py,pts){
+    let best = Infinity;
+    for(let i=0;i<pts.length-1;i++){
+      const d = distPointToSegment(px,py, pts[i].x,pts[i].y, pts[i+1].x,pts[i+1].y);
+      if(d < best) best = d;
+    }
+    return best;
+  }
+  function distPointToCircle(px,py,cx,cy,r){
+    const d = Math.hypot(px-cx, py-cy);
+    return Math.abs(d - r);
+  }
+
   svg.addEventListener('click', (e) => {
-    if(!trimActive) return;
-    // find clicked element that is a shape
-    const target = e.target;
-    if(!target || !target.classList || !target.classList.contains('shape')) return;
-    // remove element and remove from shapes array, add to history for undo
-    const shapeObj = shapes.find(s => s.el === target);
-    if(shapeObj){
-      target.remove();
-      shapes = shapes.filter(s => s !== shapeObj);
-      history.push({op:'del', shape: shapeObj});
+    if(mode !== 'trim') return;
+    const p = svgPointFromEvent(e);
+    let closest = null;
+    let bestDist = Infinity;
+    for(const s of shapes){
+      let d = Infinity;
+      if(s.type === 'line'){
+        d = distPointToSegment(p.x,p.y, s.x1,s.y1, s.x2,s.y2);
+      } else if(s.type === 'polyline'){
+        d = distPointToPolyline(p.x,p.y, s.pts || []);
+      } else if(s.type === 'circle'){
+        d = distPointToCircle(p.x,p.y, s.cx,s.cy,s.r);
+      }
+      if(d < bestDist){ bestDist = d; closest = s; }
+    }
+    if(closest && bestDist <= TRIM_RANGE){
+      // delete the closest segment
+      closest.el.remove();
+      shapes = shapes.filter(s => s !== closest);
+      history.push({op:'del', shape: closest});
     }
   });
 
-  clearBtn.addEventListener('click', ()=>{ shapes.forEach(s=>s.el.remove()); shapes=[]; history.push({op:'clear'}); });
-
-  undoBtn.addEventListener('click', ()=>{ const h = history.pop(); if(!h) return; if(h.op==='add'){ h.shape.el.remove(); shapes = shapes.filter(s=>s!==h.shape);} else if(h.op==='del'){ svg.appendChild(h.shape.el); shapes.push(h.shape); } else if(h.op==='clear'){ /* can't undo clear in prototype */ } });
-
-  // intersection math helpers
+  // Split at intersections and replace circles by polylines so segments are available for trimming
   function lineLineInter(l1, l2){
     const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
     const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
@@ -353,138 +340,11 @@
   function markIntersection(pt){
     const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
     dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3);
-    dot.setAttribute('class','intersection-dot');
-    svg.appendChild(dot);
-    setTimeout(()=>dot.remove(), 2000);
+    dot.setAttribute('fill', '--accent'); dot.setAttribute('class','intersection-dot');
+    // transient visual cue not necessary — omitted for minimal UI
+    setTimeout(()=>dot.remove(), 600);
   }
 
-  // Split at intersections: converts circles into polylines when intersections exist,
-  // and splits lines into smaller line segments between intersection points.
-  function splitAtIntersections(){
-    const lines = shapes.filter(s=>s.type==='line').map(s=>s);
-    const circles = shapes.filter(s=>s.type==='circle').map(s=>s);
-    const intersections = [];
-
-    // compute intersections
-    for(let i=0;i<lines.length;i++){
-      for(let j=i+1;j<lines.length;j++){
-        const p = lineLineInter(lines[i], lines[j]);
-        if(p){ intersections.push({p, with:[lines[i],lines[j]]}); markIntersection(p); }
-      }
-    }
-    for(let i=0;i<lines.length;i++){
-      for(let j=0;j<circles.length;j++){
-        const pts = lineCircleInter(lines[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[lines[i],circles[j]]}); markIntersection(p); });
-      }
-    }
-    for(let i=0;i<circles.length;i++){
-      for(let j=i+1;j<circles.length;j++){
-        const pts = circleCircleInter(circles[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[circles[i],circles[j]]}); markIntersection(p); });
-      }
-    }
-
-    const newShapes = [];
-    // split lines into segments
-    lines.forEach(l => {
-      const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
-      ptsOnLine.push({x:l.x1,y:l.y1}); ptsOnLine.push({x:l.x2,y:l.y2});
-      const dx = l.x2 - l.x1, dy = l.y2 - l.y1;
-      const params = ptsOnLine.map(p => {
-        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - l.x1) / (dx || 1e-6)) : ((p.y - l.y1)/(dy || 1e-6));
-        return Math.max(0, Math.min(1, t));
-      });
-      const uniq = Array.from(new Set(params.map(t=>t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
-      for(let i=0;i<uniq.length-1;i++){
-        const ta=uniq[i], tb=uniq[i+1];
-        const ax = l.x1 + dx * ta, ay = l.y1 + dy * ta;
-        const bx = l.x1 + dx * tb, by = l.y1 + dy * tb;
-        if(Math.hypot(bx-ax,by-ay) > 2){
-          const seg = document.createElementNS('http://www.w3.org/2000/svg','line');
-          seg.classList.add('shape');
-          seg.setAttribute('x1',ax); seg.setAttribute('y1',ay); seg.setAttribute('x2',bx); seg.setAttribute('y2',by);
-          seg.setAttribute('stroke-width', l.w);
-          svg.appendChild(seg);
-          newShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by, w:l.w});
-        }
-      }
-      l.el.remove();
-    });
-
-    // approximate circles as polylines and split into arcs between intersections
-    circles.forEach(c => {
-      const N = 120;
-      const pts = [];
-      for(let i=0;i<N;i++){
-        const a = (i/N)*Math.PI*2;
-        pts.push({x: c.cx + c.r*Math.cos(a), y: c.cy + c.r*Math.sin(a), a});
-      }
-      const intsOnC = intersections.filter(it => it.with.includes(c)).map(it => it.p);
-      const idxSet = new Set();
-      pts.forEach((pt, idx) => {
-        intsOnC.forEach(ip => {
-          if(Math.hypot(pt.x-ip.x, pt.y-ip.y) < 6){ idxSet.add(idx); }
-        });
-      });
-      const idxs = Array.from(idxSet).sort((a,b)=>a-b);
-      if(idxs.length === 0){
-        // no intersections -> keep circle as-is
-        const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
-        circ.classList.add('shape');
-        circ.setAttribute('cx', c.cx); circ.setAttribute('cy', c.cy); circ.setAttribute('r', c.r);
-        circ.setAttribute('stroke-width', c.w);
-        svg.appendChild(circ);
-        newShapes.push({type:'circle', el:circ, cx:c.cx,cy:c.cy,r:c.r, w:c.w});
-        c.el.remove();
-        return;
-      }
-      // create polyline segments between intersection indices
-      const sorted = idxs;
-      for(let s=0;s<sorted.length;s++){
-        const i1 = sorted[s], i2 = sorted[(s+1)%sorted.length];
-        let segPts = [];
-        let i = i1;
-        while(true){
-          segPts.push(pts[i]);
-          if(i === i2) break;
-          i = (i+1)%pts.length;
-        }
-        if(segPts.length > 1){
-          const path = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-          path.classList.add('shape');
-          path.setAttribute('points', segPts.map(p=>`${p.x},${p.y}`).join(' '));
-          path.setAttribute('fill','none');
-          path.setAttribute('stroke-width', c.w);
-          svg.appendChild(path);
-          newShapes.push({type:'polyline', el:path, pts:segPts, w:c.w});
-        }
-      }
-      c.el.remove();
-    });
-
-    // replace the old lines/circles in shapes with newSegments
-    shapes = shapes.filter(s => !(s.type==='line' || s.type==='circle'));
-    newShapes.forEach(ns => shapes.push(ns));
-  }
-
-  splitBtn.addEventListener('click', () => {
-    splitAtIntersections();
-  });
-
-  function splitAtIntersections(){
-    // wrapper so we can call from toolbar or trim activation
-    splitAtIntersectionsCore();
-  }
-
-  // Because we used a nested function name above, rename core implementation:
-  function splitAtIntersectionsCore(){
-    // implementation moved up earlier: call same logic by reusing function body
-    // To keep code compact here, call splitAtIntersectionsInternal which is defined below
-    splitAtIntersectionsInternal();
-  }
-
-  // To avoid duplication, define the internal actual splitter function (copy of function body above)
   function splitAtIntersectionsInternal(){
     const lines = shapes.filter(s=>s.type==='line').map(s=>s);
     const circles = shapes.filter(s=>s.type==='circle').map(s=>s);
@@ -510,6 +370,7 @@
     }
 
     const newShapes = [];
+    // split lines
     lines.forEach(l => {
       const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
       ptsOnLine.push({x:l.x1,y:l.y1}); ptsOnLine.push({x:l.x2,y:l.y2});
@@ -535,6 +396,7 @@
       l.el.remove();
     });
 
+    // split circles into polylines between intersection points
     circles.forEach(c => {
       const N = 120;
       const pts = [];
@@ -583,14 +445,60 @@
       c.el.remove();
     });
 
+    // replace old shapes
     shapes = shapes.filter(s => !(s.type==='line' || s.type==='circle'));
     newShapes.forEach(ns => shapes.push(ns));
   }
 
-  // toolbar split button directly exposes the splitter
-  splitBtn.addEventListener('click', () => {
-    splitAtIntersectionsInternal();
+  // toolbar actions
+  btnDraw.addEventListener('click', () => {
+    mode = 'draw';
+    btnDraw.classList.add('active'); btnTrim.classList.remove('active');
+    modeLabel.textContent = 'Mode: Draw';
   });
+  btnTrim.addEventListener('click', () => {
+    // toggle trim
+    if(mode === 'trim'){
+      mode = 'draw';
+      btnTrim.classList.remove('active'); btnDraw.classList.add('active');
+      modeLabel.textContent = 'Mode: Draw';
+    } else {
+      mode = 'trim';
+      btnTrim.classList.add('active'); btnDraw.classList.remove('active');
+      modeLabel.textContent = 'Mode: Trim';
+      // prepare segments by splitting intersections
+      splitAtIntersectionsInternal();
+    }
+  });
+
+  lwS.addEventListener('click', ()=>{ lineWidth = 2; lwS.classList.add('active'); lwM.classList.remove('active'); lwL.classList.remove('active'); });
+  lwM.addEventListener('click', ()=>{ lineWidth = 4; lwM.classList.add('active'); lwS.classList.remove('active'); lwL.classList.remove('active'); });
+  lwL.addEventListener('click', ()=>{ lineWidth = 7; lwL.classList.add('active'); lwM.classList.remove('active'); lwS.classList.remove('active'); });
+
+  btnSplit.addEventListener('click', () => splitAtIntersectionsInternal());
+  btnUndo.addEventListener('click', () => {
+    const h = history.pop(); if(!h) return;
+    if(h.op === 'add'){ h.shape.el.remove(); shapes = shapes.filter(s=>s!==h.shape); }
+    else if(h.op === 'del'){ svg.appendChild(h.shape.el); shapes.push(h.shape); }
+  });
+  btnClear.addEventListener('click', () => {
+    shapes.forEach(s => s.el.remove()); shapes = []; history.push({op:'clear'});
+  });
+
+  // keyboard shortcuts for power users
+  window.addEventListener('keydown', (e) => {
+    if(e.key === 't'){ btnTrim.click(); }
+    if(e.key === 'd'){ btnDraw.click(); }
+    if(e.key === '1'){ lwS.click(); }
+    if(e.key === '2'){ lwM.click(); }
+    if(e.key === '3'){ lwL.click(); }
+    if(e.key === 'i'){ btnSplit.click(); }
+    if(e.key === 'u'){ btnUndo.click(); }
+    if(e.key === 'c'){ btnClear.click(); }
+  });
+
+  // keep pointer interactions from scrolling the page on mobile
+  svg.addEventListener('touchstart', (e) => { e.preventDefault(); }, {passive:false});
 
 })();
 </script>
