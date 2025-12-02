@@ -3,27 +3,49 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Drawing Canvas — Bottom Toolbar + Trim</title>
+<title>Drawing Canvas — Fill Device + Export (Pro)</title>
 <style>
   :root{
     --bg:#f4f6fb; --panel:#fff; --accent:#0b5cff; --muted:#666;
-    --shadow: 0 10px 30px rgba(0,0,0,0.06);
+    --shadow:0 10px 30px rgba(0,0,0,0.06);
   }
   html,body{height:100%;margin:0;background:var(--bg);font-family:system-ui,Segoe UI,Roboto}
-  .wrap{height:calc(100% - 64px);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;overscroll-behavior:none}
-  .svg-frame{display:inline-block;max-width:100%;max-height:100%}
-  svg{background:#fff;display:block;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;box-shadow:var(--shadow)}
+  /* available area is full height minus toolbar at bottom */
+  .wrap{
+    height:calc(100% - 64px);display:flex;align-items:center;justify-content:center;
+    padding:8px;box-sizing:border-box;overscroll-behavior:none;
+  }
+  .svg-frame{
+    display:block; /* acts as the container that gets resized to fill area */
+    max-width:100%;
+    max-height:100%;
+  }
+  svg{
+    display:block;
+    width:100%;
+    height:100%;
+    background:#fff;
+    touch-action:none;
+    -webkit-user-select:none;
+    user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    box-shadow:var(--shadow);
+  }
   .shape{stroke:#111;fill:none;stroke-linecap:round;stroke-linejoin:round;cursor:pointer}
-  .shape.trim-hover{stroke:#0b5cff;}
   .ghost{stroke:rgba(11,92,255,0.45);stroke-dasharray:6 6;fill:none;pointer-events:none}
+  .intersection-dot{fill:var(--accent);stroke:#fff;stroke-width:1px;pointer-events:none}
+
   .toolbar{
     height:64px;box-sizing:border-box;padding:8px 12px;background:var(--panel);
-    border-top:1px solid #e6e8ef;display:flex;align-items:center;gap:8px;justify-content:space-between;
-    position:fixed;left:0;right:0;bottom:0;
+    border-top:1px solid #e6e8ef;display:flex;align-items:center;gap:8px;
+    justify-content:space-between;position:fixed;left:0;right:0;bottom:0;z-index:20;
   }
   .left,.center,.right{display:flex;gap:8px;align-items:center}
-  button{padding:8px 10px;border-radius:8px;border:1px solid #d9dbe7;background:#fff;cursor:pointer;font-size:14px}
-  button.active{outline:2px solid rgba(11,92,255,0.18);border-color:var(--accent)}
+  button{
+    padding:8px 10px;border-radius:8px;border:1px solid #d9dbe7;
+    background:white;cursor:pointer;font-size:14px;
+  }
+  button.active{outline:2px solid rgba(11,92,255,0.14);border-color:var(--accent)}
   .seg{display:flex;gap:6px}
   .label{font-size:13px;color:var(--muted)}
   @media(max-width:700px){
@@ -34,123 +56,135 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="svg-frame" id="frame">
-    <svg id="svg" width="600" height="800" viewBox="0 0 600 800" role="application" aria-label="Drawing canvas"></svg>
+  <!-- svg-frame will be resized by JS to exactly fill available area (width & height) -->
+  <div class="svg-frame" id="frame" role="presentation" aria-hidden="false">
+    <!-- preserveAspectRatio='none' so svg stretches to fill both width and height -->
+    <svg id="svg" viewBox="0 0 600 800" preserveAspectRatio="none" role="application" aria-label="Drawing canvas"></svg>
   </div>
 </div>
 
 <div class="toolbar" role="toolbar" aria-label="Drawing controls">
   <div class="left">
-    <button id="btn-draw" class="active">Draw</button>
-    <button id="btn-trim">Trim</button>
+    <button id="btn-draw" class="active" title="Draw mode (drag edges/corners)">Draw</button>
+    <button id="btn-trim" title="Trim mode (tap to remove segments)">Trim</button>
     <div class="label" id="modeLabel">Mode: Draw</div>
   </div>
+
   <div class="center">
     <div class="seg">
-      <button id="lw-s">S</button>
-      <button id="lw-m" class="active">M</button>
-      <button id="lw-l">L</button>
+      <button id="lw-s" title="Line width small">S</button>
+      <button id="lw-m" class="active" title="Line width medium">M</button>
+      <button id="lw-l" title="Line width large">L</button>
     </div>
-    <button id="btn-split">Split</button>
-    <button id="btn-undo">Undo</button>
-    <button id="btn-clear">Clear</button>
+    <button id="btn-split" title="Split at intersections (prepare segments)">Split</button>
+    <button id="btn-undo" title="Undo">Undo</button>
+    <button id="btn-clear" title="Clear">Clear</button>
   </div>
+
   <div class="right">
     <div class="label">Edge hot-zone: <strong>50px</strong></div>
-    <div class="label">Trim range: <strong>12px</strong></div>
+    <div class="label">Trim range: <strong id="trimLabel">8px</strong></div>
+    <div style="width:8px"></div>
+    <button id="btn-autozoom" title="Auto-zoom to device width & height">Auto-Zoom</button>
+    <button id="btn-save-svg" title="Save as SVG">Save SVG</button>
+    <button id="btn-save-jpeg" title="Save as JPEG">Save JPEG</button>
   </div>
 </div>
 
 <script>
 (() => {
-  // ---------- CONFIG ----------
-  const HOTZONE   = 50;   // drag start zone at edges/corners
-  const TRIM_RANGE = 12;  // fixed trim detection radius (canvas units)
-  const VIEW_W = 600, VIEW_H = 800;
+  // CONFIG - unchanged behavior
+  const HOTZONE    = 50;   // px near edges/corners for draw start
+  const TRIM_RANGE = 8;    // px fixed trim detection range
+  const VIEW_W     = 600;  // SVG internal coordinate width
+  const VIEW_H     = 800;  // SVG internal coordinate height
+  const PRO_CODE   = 'qazwsx1';
+  const PRO_MAIL   = 'dvprasanna1979@gmail.com';
 
-  // ---------- DOM ----------
-  const svg = document.getElementById('svg');
-  const frame = document.getElementById('frame');
-  const btnDraw = document.getElementById('btn-draw');
-  const btnTrim = document.getElementById('btn-trim');
-  const modeLabel = document.getElementById('modeLabel');
-  const lwS = document.getElementById('lw-s');
-  const lwM = document.getElementById('lw-m');
-  const lwL = document.getElementById('lw-l');
-  const btnSplit = document.getElementById('btn-split');
-  const btnUndo = document.getElementById('btn-undo');
-  const btnClear = document.getElementById('btn-clear');
+  // DOM refs
+  const svg          = document.getElementById('svg');
+  const frame        = document.getElementById('frame');
+  const btnDraw      = document.getElementById('btn-draw');
+  const btnTrim      = document.getElementById('btn-trim');
+  const modeLabel    = document.getElementById('modeLabel');
+  const lwS          = document.getElementById('lw-s'), lwM = document.getElementById('lw-m'), lwL = document.getElementById('lw-l');
+  const btnSplit     = document.getElementById('btn-split');
+  const btnUndo      = document.getElementById('btn-undo');
+  const btnClear     = document.getElementById('btn-clear');
+  const btnAutoZoom  = document.getElementById('btn-autozoom');
+  const btnSaveSvg   = document.getElementById('btn-save-svg');
+  const btnSaveJpeg  = document.getElementById('btn-save-jpeg');
+  document.getElementById('trimLabel').textContent = TRIM_RANGE + 'px';
 
-  // ---------- STATE ----------
-  let mode = 'draw';       // 'draw' or 'trim'
-  let lineWidth = 4;       // 2, 4, 7
-  let shapes = [];         // {type:'line'|'circle'|'polyline', el, ...}
-  let history = [];        // undo stack
+  // Initialize svg viewBox to internal units
+  svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${VIEW_H}`);
+  // preserveAspectRatio already set to 'none' in HTML so it stretches to frame size
+
+  // State
+  let mode = 'draw';
+  let lineWidth = 4;
+  let shapes = []; // {type, el, ...}
+  let history = [];
   let ghost = null;
   let pointerInfo = null;
 
-  // ---------- INIT CANVAS ----------
-  svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${VIEW_H}`);
-  svg.setAttribute('width', VIEW_W);
-  svg.setAttribute('height', VIEW_H);
-  frame.style.width = VIEW_W + 'px';
-  frame.style.height = VIEW_H + 'px';
-
-  // ---------- HELPERS ----------
-  function svgPoint(evt){
+  // Helper - map event client coords to svg coords (handles stretched svg because of getScreenCTM)
+  function svgPointFromEvent(evt){
     const pt = svg.createSVGPoint();
-    pt.x = evt.clientX; pt.y = evt.clientY;
+    pt.x = evt.clientX;
+    pt.y = evt.clientY;
+    // getScreenCTM handles css scaling/stretching so inverse maps correctly
     return pt.matrixTransform(svg.getScreenCTM().inverse());
   }
 
+  // Helpers to add shapes and history
   function addShape(obj){
     shapes.push(obj);
     history.push({op:'add', shape: obj});
   }
 
-  // Line / circle creation
   function makeFullVerticalLine(x){
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-    line.classList.add('shape');
-    line.setAttribute('x1',x); line.setAttribute('y1',0);
-    line.setAttribute('x2',x); line.setAttribute('y2',VIEW_H);
-    line.setAttribute('stroke-width', lineWidth);
-    svg.appendChild(line);
-    addShape({type:'line', el:line, x1:x,y1:0,x2:x,y2:VIEW_H, w:lineWidth});
+    const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.classList.add('shape');
+    l.setAttribute('x1', x); l.setAttribute('y1', 0);
+    l.setAttribute('x2', x); l.setAttribute('y2', VIEW_H);
+    l.setAttribute('stroke-width', lineWidth);
+    svg.appendChild(l);
+    addShape({type:'line', el:l, x1:x,y1:0,x2:x,y2:VIEW_H, w:lineWidth});
   }
+
   function makeFullHorizontalLine(y){
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-    line.classList.add('shape');
-    line.setAttribute('x1',0); line.setAttribute('y1',y);
-    line.setAttribute('x2',VIEW_W); line.setAttribute('y2',y);
-    line.setAttribute('stroke-width', lineWidth);
-    svg.appendChild(line);
-    addShape({type:'line', el:line, x1:0,y1:y,x2:VIEW_W,y2:y, w:lineWidth});
+    const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.classList.add('shape');
+    l.setAttribute('x1', 0); l.setAttribute('y1', y);
+    l.setAttribute('x2', VIEW_W); l.setAttribute('y2', y);
+    l.setAttribute('stroke-width', lineWidth);
+    svg.appendChild(l);
+    addShape({type:'line', el:l, x1:0,y1:y,x2:VIEW_W,y2:y, w:lineWidth});
   }
+
   function makeCircle(cx,cy,r){
     const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
     c.classList.add('shape');
-    c.setAttribute('cx',cx); c.setAttribute('cy',cy); c.setAttribute('r',r);
+    c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r);
     c.setAttribute('stroke-width', lineWidth);
     svg.appendChild(c);
     addShape({type:'circle', el:c, cx,cy,r, w:lineWidth});
   }
 
-  // Ghost
+  // Ghost helpers
   function removeGhost(){ if(ghost){ ghost.remove(); ghost=null; } }
   function ghostVertical(x){
     removeGhost();
     ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ghost.setAttribute('x1',x); ghost.setAttribute('y1',0);
-    ghost.setAttribute('x2',x); ghost.setAttribute('y2',VIEW_H);
+    ghost.setAttribute('x1',x); ghost.setAttribute('y1',0); ghost.setAttribute('x2',x); ghost.setAttribute('y2',VIEW_H);
     ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', lineWidth);
     svg.appendChild(ghost);
   }
   function ghostHorizontal(y){
     removeGhost();
     ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ghost.setAttribute('x1',0); ghost.setAttribute('y1',y);
-    ghost.setAttribute('x2',VIEW_W); ghost.setAttribute('y2',y);
+    ghost.setAttribute('x1',0); ghost.setAttribute('y1',y); ghost.setAttribute('x2',VIEW_W); ghost.setAttribute('y2',y);
     ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', lineWidth);
     svg.appendChild(ghost);
   }
@@ -162,24 +196,26 @@
     svg.appendChild(ghost);
   }
 
-  // ---------- DRAWING (edges / corners) ----------
+  // === DRAW interactions ===
   svg.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     svg.setPointerCapture(e.pointerId);
     if(mode !== 'draw') return;
-    const p = svgPoint(e);
-    const nearLeft = p.x <= HOTZONE;
-    const nearRight = p.x >= VIEW_W - HOTZONE;
-    const nearTop = p.y <= HOTZONE;
+
+    const p = svgPointFromEvent(e);
+    const nearLeft   = p.x <= HOTZONE;
+    const nearRight  = p.x >= VIEW_W - HOTZONE;
+    const nearTop    = p.y <= HOTZONE;
     const nearBottom = p.y >= VIEW_H - HOTZONE;
-    const nearCorner = (nearLeft || nearRight) && (nearTop || nearBottom);
-    const nearEdge = nearLeft || nearRight || nearTop || nearBottom;
-    pointerInfo = {corner:nearCorner, edge:nearEdge, nearLeft,nearRight,nearTop,nearBottom};
+    const nearCorner = (nearLeft||nearRight) && (nearTop||nearBottom);
+    const nearEdge   = nearLeft || nearRight || nearTop || nearBottom;
+
+    pointerInfo = {start:p, corner:nearCorner, edge:nearEdge, nearLeft,nearRight,nearTop,nearBottom};
 
     if(nearCorner){
       const cx = nearLeft ? 0 : VIEW_W;
-      const cy = nearTop ? 0 : VIEW_H;
-      ghostCircle(cx,cy, Math.hypot(p.x-cx,p.y-cy));
+      const cy = nearTop  ? 0 : VIEW_H;
+      ghostCircle(cx, cy, Math.hypot(p.x-cx, p.y-cy));
     } else if(nearEdge){
       if(nearLeft || nearRight){
         ghostVertical(p.x);
@@ -195,20 +231,21 @@
 
   svg.addEventListener('pointermove', (e) => {
     if(pointerInfo) e.preventDefault();
-    if(!pointerInfo || !ghost) return;
-    const p = svgPoint(e);
+    if(!pointerInfo || !ghost || mode!=='draw') return;
+    const p = svgPointFromEvent(e);
+
     if(pointerInfo.corner){
       const cx = pointerInfo.nearLeft ? 0 : VIEW_W;
-      const cy = pointerInfo.nearTop ? 0 : VIEW_H;
-      const r = Math.hypot(p.x-cx,p.y-cy);
+      const cy = pointerInfo.nearTop  ? 0 : VIEW_H;
+      const r  = Math.hypot(p.x-cx, p.y-cy);
       ghost.setAttribute('r', r);
     } else if(pointerInfo.edge){
       if(pointerInfo.axis === 'vertical'){
         let x = Math.max(0, Math.min(VIEW_W, p.x));
-        ghost.setAttribute('x1',x); ghost.setAttribute('x2',x);
+        ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
       } else {
         let y = Math.max(0, Math.min(VIEW_H, p.y));
-        ghost.setAttribute('y1',y); ghost.setAttribute('y2',y);
+        ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
       }
     }
   }, {passive:false});
@@ -216,13 +253,21 @@
   svg.addEventListener('pointerup', (e) => {
     e.preventDefault();
     svg.releasePointerCapture(e.pointerId);
-    if(!pointerInfo || !ghost){ pointerInfo=null; removeGhost(); return; }
+    const p = svgPointFromEvent(e);
 
+    if(mode === 'trim'){
+      trimAtPoint(p);
+      removeGhost();
+      pointerInfo = null;
+      return;
+    }
+
+    if(!pointerInfo || !ghost){ pointerInfo=null; removeGhost(); return; }
     if(pointerInfo.corner){
       const cx = pointerInfo.nearLeft ? 0 : VIEW_W;
-      const cy = pointerInfo.nearTop ? 0 : VIEW_H;
-      const r = parseFloat(ghost.getAttribute('r'));
-      if(r > 2) makeCircle(cx,cy,r);
+      const cy = pointerInfo.nearTop  ? 0 : VIEW_H;
+      const r  = parseFloat(ghost.getAttribute('r'));
+      makeCircle(cx,cy,r);
     } else if(pointerInfo.edge){
       if(pointerInfo.axis === 'vertical'){
         const x = parseFloat(ghost.getAttribute('x1'));
@@ -236,18 +281,18 @@
     removeGhost();
   }, {passive:false});
 
-  // ---------- TRIM: click near segment ----------
-  function distPointToSegment(px,py,x1,y1,x2,y2){
-    const vx=x2-x1, vy=y2-y1;
-    const wx=px-x1, wy=py-y1;
+  // === TRIM helpers ===
+  function distPointToSegment(px, py, x1, y1, x2, y2){
+    const vx = x2-x1, vy = y2-y1;
+    const wx = px-x1, wy = py-y1;
     const c1 = vx*wx + vy*wy;
-    if(c1 <= 0) return Math.hypot(px-x1,py-y1);
+    if(c1 <= 0) return Math.hypot(px-x1, py-y1);
     const c2 = vx*vx + vy*vy;
-    if(c2 <= c1) return Math.hypot(px-x2,py-y2);
+    if(c2 <= c1) return Math.hypot(px-x2, py-y2);
     const t = c1 / c2;
     const projx = x1 + t*vx;
     const projy = y1 + t*vy;
-    return Math.hypot(px-projx,py-projy);
+    return Math.hypot(px-projx, py-projy);
   }
   function distPointToPolyline(px,py,pts){
     let best = Infinity;
@@ -258,27 +303,13 @@
     return best;
   }
   function distPointToCircle(px,py,cx,cy,r){
-    const d = Math.hypot(px-cx,py-cy);
-    return Math.abs(d-r);
+    return Math.abs(Math.hypot(px-cx,py-cy) - r);
   }
 
-  svg.addEventListener('click', (e) => {
-    if(mode !== 'trim') return;
-
-    const p = svgPoint(e);
-
-    // 1) direct hit (SVG target is a shape)
-    const direct = shapes.find(s => s.el === e.target);
-    if(direct){
-      direct.el.remove();
-      shapes = shapes.filter(s => s !== direct);
-      history.push({op:'del', shape: direct});
-      return;
-    }
-
-    // 2) nearest shape within TRIM_RANGE
+  function trimAtPoint(p){
+    if(shapes.length === 0) return;
     let closest = null;
-    let bestDist = Infinity;
+    let best = Infinity;
     for(const s of shapes){
       let d = Infinity;
       if(s.type === 'line'){
@@ -288,24 +319,21 @@
       } else if(s.type === 'circle'){
         d = distPointToCircle(p.x,p.y, s.cx,s.cy,s.r);
       }
-      if(d < bestDist){
-        bestDist = d;
-        closest = s;
-      }
+      if(d < best){ best = d; closest = s; }
     }
-    if(closest && bestDist <= TRIM_RANGE){
+    if(closest && best <= TRIM_RANGE){
       closest.el.remove();
       shapes = shapes.filter(s => s !== closest);
-      history.push({op:'del', shape: closest});
+      history.push({op:'del', shape:closest});
     }
-  });
+  }
 
-  // ---------- SPLIT AT INTERSECTIONS ----------
+  // === Intersection / Split ===
   function lineLineInter(l1,l2){
-    const {x1,y1,x2,y2} = l1;
+    const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
     const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
     const denom = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
-    if(Math.abs(denom) < 1e-6) return null;
+    if(Math.abs(denom)<1e-6) return null;
     const xi = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4))/denom;
     const yi = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4))/denom;
     function between(a,b,c){ return Math.min(a,b)-1e-6 <= c && c <= Math.max(a,b)+1e-6; }
@@ -313,214 +341,347 @@
     return null;
   }
   function lineCircleInter(line,circle){
-    const {x1,y1,x2,y2} = line;
-    const {cx,cy,r} = circle;
-    const dx=x2-x1, dy=y2-y1;
-    const fx=x1-cx, fy=y1-cy;
+    const x1=line.x1,y1=line.y1,x2=line.x2,y2=line.y2;
+    const cx=circle.cx,cy=circle.cy,r=circle.r;
+    const dx=x2-x1,dy=y2-y1;
+    const fx=x1-cx,fy=y1-cy;
     const a=dx*dx+dy*dy;
     const b=2*(fx*dx+fy*dy);
     const c=fx*fx+fy*fy-r*r;
     let disc=b*b-4*a*c;
-    if(disc < -1e-6) return [];
-    disc = Math.max(0,disc);
-    const t1 = (-b + Math.sqrt(disc))/(2*a);
-    const t2 = (-b - Math.sqrt(disc))/(2*a);
+    if(disc<-1e-6) return [];
+    disc=Math.max(0,disc);
+    const t1=(-b+Math.sqrt(disc))/(2*a);
+    const t2=(-b-Math.sqrt(disc))/(2*a);
     const pts=[];
     [t1,t2].forEach(t=>{
-      if(t>=-1e-6 && t<=1+1e-6){
-        pts.push({x:x1+dx*t, y:y1+dy*t});
-      }
+      if(t>=-1e-6 && t<=1+1e-6) pts.push({x:x1+dx*t,y:y1+dy*t});
     });
     return pts;
   }
   function circleCircleInter(c1,c2){
-    const {cx:x0,cy:y0,r:r0}=c1;
-    const {cx:x1,cy:y1,r:r1}=c2;
-    const dx=x1-x0, dy=y1-y0;
+    const x0=c1.cx,y0=c1.cy,r0=c1.r;
+    const x1=c2.cx,y1=c2.cy,r1=c2.r;
+    const dx=x1-x0,dy=y1-y0;
     const d=Math.hypot(dx,dy);
     if(d>r0+r1+1e-6) return [];
     if(d<Math.abs(r0-r1)-1e-6) return [];
     if(d<1e-9 && Math.abs(r0-r1)<1e-9) return [];
     const a=(r0*r0-r1*r1+d*d)/(2*d);
     const h=Math.sqrt(Math.max(0,r0*r0-a*a));
-    const xm=x0+a*dx/d, ym=y0+a*dy/d;
-    const rx=-dy*(h/d), ry=dx*(h/d);
-    const p1={x:xm+rx,y:ym+ry};
-    const p2={x:xm-rx,y:ym-ry};
+    const xm=x0+a*dx/d;
+    const ym=y0+a*dy/d;
+    const rx=-dy*(h/d);
+    const ry=dx*(h/d);
+    const p1={x:xm+rx,y:ym+ry}; const p2={x:xm-rx,y:ym-ry};
     if(Math.hypot(p1.x-p2.x,p1.y-p2.y) < 1e-6) return [p1];
     return [p1,p2];
   }
 
-  function splitAtIntersections(){
-    const lines = shapes.filter(s=>s.type==='line');
+  function splitAtIntersectionsInternal(){
+    const lines   = shapes.filter(s=>s.type==='line');
     const circles = shapes.filter(s=>s.type==='circle');
     const intersections = [];
 
-    // collect intersections
     for(let i=0;i<lines.length;i++){
       for(let j=i+1;j<lines.length;j++){
-        const p = lineLineInter(lines[i],lines[j]);
-        if(p) intersections.push({p, with:[lines[i],lines[j]]});
+        const p=lineLineInter(lines[i],lines[j]);
+        if(p){ intersections.push({p,with:[lines[i],lines[j]]}); markIntersection(p); }
       }
     }
     for(let i=0;i<lines.length;i++){
       for(let j=0;j<circles.length;j++){
         const pts=lineCircleInter(lines[i],circles[j]);
-        pts.forEach(p=>intersections.push({p,with:[lines[i],circles[j]]}));
+        pts.forEach(p=>{ intersections.push({p,with:[lines[i],circles[j]]}); markIntersection(p); });
       }
     }
     for(let i=0;i<circles.length;i++){
       for(let j=i+1;j<circles.length;j++){
         const pts=circleCircleInter(circles[i],circles[j]);
-        pts.forEach(p=>intersections.push({p,with:[circles[i],circles[j]]}));
+        pts.forEach(p=>{ intersections.push({p,with:[circles[i],circles[j]]}); markIntersection(p); });
       }
     }
 
-    const newShapes=[];
+    const newShapes = [];
+
     // split lines
     lines.forEach(l=>{
-      const ptsOn = intersections.filter(it=>it.with.includes(l)).map(it=>it.p);
-      ptsOn.push({x:l.x1,y:l.y1},{x:l.x2,y:l.y2});
-      const dx=l.x2-l.x1, dy=l.y2-l.y1;
-      const params = ptsOn.map(p=>{
-        const t = (Math.abs(dx)>Math.abs(dy))
-          ? (p.x-l.x1)/(dx||1e-6)
-          : (p.y-l.y1)/(dy||1e-6);
-        return Math.max(0,Math.min(1,t));
+      const ptsOnLine = intersections.filter(it=>it.with.includes(l)).map(it=>it.p);
+      ptsOnLine.push({x:l.x1,y:l.y1},{x:l.x2,y:l.y2});
+      const dx = l.x2-l.x1, dy = l.y2-l.y1;
+      const params = ptsOnLine.map(p=>{
+        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x-l.x1)/(dx||1e-6)) : ((p.y-l.y1)/(dy||1e-6));
+        return Math.max(0, Math.min(1, t));
       });
-      const uniq=Array.from(new Set(params.map(t=>t.toFixed(6)))).map(Number).sort((a,b)=>a-b);
+      const uniq = Array.from(new Set(params.map(t=>t.toFixed(6)))).map(Number).sort((a,b)=>a-b);
       for(let i=0;i<uniq.length-1;i++){
         const ta=uniq[i], tb=uniq[i+1];
-        const ax=l.x1+dx*ta, ay=l.y1+dy*ta;
-        const bx=l.x1+dx*tb, by=l.y1+dy*tb;
+        const ax = l.x1 + dx*ta, ay = l.y1 + dy*ta;
+        const bx = l.x1 + dx*tb, by = l.y1 + dy*tb;
         if(Math.hypot(bx-ax,by-ay) > 2){
-          const seg=document.createElementNS('http://www.w3.org/2000/svg','line');
+          const seg = document.createElementNS('http://www.w3.org/2000/svg','line');
           seg.classList.add('shape');
-          seg.setAttribute('x1',ax); seg.setAttribute('y1',ay);
-          seg.setAttribute('x2',bx); seg.setAttribute('y2',by);
-          seg.setAttribute('stroke-width',l.w);
+          seg.setAttribute('x1',ax); seg.setAttribute('y1',ay); seg.setAttribute('x2',bx); seg.setAttribute('y2',by);
+          seg.setAttribute('stroke-width', l.w);
           svg.appendChild(seg);
-          newShapes.push({type:'line',el:seg,x1:ax,y1:ay,x2:bx,y2:by,w:l.w});
+          newShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by, w:l.w});
         }
       }
       l.el.remove();
     });
 
-    // split circles into polyline arcs
+    // split circles into polylines
     circles.forEach(c=>{
-      const N=120;
-      const pts=[];
+      const N = 120, pts = [];
       for(let i=0;i<N;i++){
-        const a=(i/N)*Math.PI*2;
-        pts.push({x:c.cx+c.r*Math.cos(a), y:c.cy+c.r*Math.sin(a)});
+        const a = (i/N)*Math.PI*2;
+        pts.push({x:c.cx + c.r*Math.cos(a), y: c.cy + c.r*Math.sin(a)});
       }
-      const ints = intersections.filter(it=>it.with.includes(c)).map(it=>it.p);
-      const idxSet=new Set();
-      pts.forEach((pt,idx)=>{
-        ints.forEach(ip=>{
-          if(Math.hypot(pt.x-ip.x,pt.y-ip.y) < 6) idxSet.add(idx);
-        });
+      const intsOnC = intersections.filter(it=>it.with.includes(c)).map(it=>it.p);
+      const idxSet = new Set();
+      pts.forEach((pt, idx)=>{
+        intsOnC.forEach(ip => { if(Math.hypot(pt.x-ip.x, pt.y-ip.y) < 6) idxSet.add(idx); });
       });
-      const idxs=Array.from(idxSet).sort((a,b)=>a-b);
-      if(idxs.length===0){
-        // keep as circle
-        const circ=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      const idxs = Array.from(idxSet).sort((a,b)=>a-b);
+      if(idxs.length === 0){
+        const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
         circ.classList.add('shape');
-        circ.setAttribute('cx',c.cx); circ.setAttribute('cy',c.cy);
-        circ.setAttribute('r',c.r);
-        circ.setAttribute('stroke-width',c.w);
+        circ.setAttribute('cx', c.cx); circ.setAttribute('cy', c.cy); circ.setAttribute('r', c.r);
+        circ.setAttribute('stroke-width', c.w);
         svg.appendChild(circ);
-        newShapes.push({type:'circle',el:circ,cx:c.cx,cy:c.cy,r:c.r,w:c.w});
+        newShapes.push({type:'circle', el:circ, cx:c.cx,cy:c.cy,r:c.r, w:c.w});
         c.el.remove();
         return;
       }
-      const sorted=idxs;
-      for(let sIdx=0;sIdx<sorted.length;sIdx++){
-        const i1=sorted[sIdx], i2=sorted[(sIdx+1)%sorted.length];
-        let segPts=[];
-        let i=i1;
+      const sorted = idxs;
+      for(let s=0;s<sorted.length;s++){
+        const i1 = sorted[s], i2 = sorted[(s+1)%sorted.length];
+        let segPts = [], i = i1;
         while(true){
           segPts.push(pts[i]);
-          if(i===i2) break;
-          i=(i+1)%pts.length;
+          if(i === i2) break;
+          i = (i+1)%pts.length;
         }
-        if(segPts.length>1){
-          const pl=document.createElementNS('http://www.w3.org/2000/svg','polyline');
-          pl.classList.add('shape');
-          pl.setAttribute('points', segPts.map(p=>`${p.x},${p.y}`).join(' '));
-          pl.setAttribute('fill','none');
-          pl.setAttribute('stroke-width',c.w);
-          svg.appendChild(pl);
-          newShapes.push({type:'polyline',el:pl,pts:segPts,w:c.w});
+        if(segPts.length > 1){
+          const path = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+          path.classList.add('shape');
+          path.setAttribute('points', segPts.map(p => `${p.x},${p.y}`).join(' '));
+          path.setAttribute('fill','none');
+          path.setAttribute('stroke-width', c.w);
+          svg.appendChild(path);
+          newShapes.push({type:'polyline', el:path, pts:segPts, w:c.w});
         }
       }
       c.el.remove();
     });
 
-    // replace in shapes
-    shapes = shapes.filter(s=>!(s.type==='line' || s.type==='circle'));
-    newShapes.forEach(ns=>shapes.push(ns));
+    shapes = shapes.filter(s => !(s.type==='line' || s.type==='circle'));
+    newShapes.forEach(ns => shapes.push(ns));
   }
 
-  // ---------- TOOLBAR ----------
+  function markIntersection(pt){
+    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3);
+    dot.setAttribute('class','intersection-dot');
+    svg.appendChild(dot);
+    setTimeout(()=>dot.remove(), 700);
+  }
+
+  // Toolbar handlers
   btnDraw.addEventListener('click', () => {
-    mode='draw';
+    mode = 'draw';
     btnDraw.classList.add('active');
     btnTrim.classList.remove('active');
-    modeLabel.textContent='Mode: Draw';
+    modeLabel.textContent = 'Mode: Draw';
   });
 
   btnTrim.addEventListener('click', () => {
-    if(mode==='trim'){
-      mode='draw';
+    if(mode === 'trim'){
+      mode = 'draw';
       btnTrim.classList.remove('active');
       btnDraw.classList.add('active');
-      modeLabel.textContent='Mode: Draw';
+      modeLabel.textContent = 'Mode: Draw';
     } else {
-      // enter trim: ensure segments exist
-      splitAtIntersections();
-      mode='trim';
+      splitAtIntersectionsInternal();
+      mode = 'trim';
       btnTrim.classList.add('active');
       btnDraw.classList.remove('active');
-      modeLabel.textContent='Mode: Trim';
+      modeLabel.textContent = 'Mode: Trim';
     }
   });
 
-  lwS.addEventListener('click',()=>{ lineWidth=2; lwS.classList.add('active'); lwM.classList.remove('active'); lwL.classList.remove('active'); });
-  lwM.addEventListener('click',()=>{ lineWidth=4; lwM.classList.add('active'); lwS.classList.remove('active'); lwL.classList.remove('active'); });
-  lwL.addEventListener('click',()=>{ lineWidth=7; lwL.classList.add('active'); lwM.classList.remove('active'); lwS.classList.remove('active'); });
+  lwS.addEventListener('click', ()=>{ lineWidth = 2; lwS.classList.add('active'); lwM.classList.remove('active'); lwL.classList.remove('active'); });
+  lwM.addEventListener('click', ()=>{ lineWidth = 4; lwM.classList.add('active'); lwS.classList.remove('active'); lwL.classList.remove('active'); });
+  lwL.addEventListener('click', ()=>{ lineWidth = 7; lwL.classList.add('active'); lwM.classList.remove('active'); lwS.classList.remove('active'); });
 
-  btnSplit.addEventListener('click',()=>splitAtIntersections());
+  btnSplit.addEventListener('click', () => splitAtIntersectionsInternal());
 
-  btnUndo.addEventListener('click',()=>{
+  btnUndo.addEventListener('click', () => {
     const h = history.pop(); if(!h) return;
-    if(h.op==='add'){
-      h.shape.el.remove();
-      shapes = shapes.filter(s=>s!==h.shape);
-    } else if(h.op==='del'){
-      svg.appendChild(h.shape.el);
-      shapes.push(h.shape);
-    }
+    if(h.op === 'add'){ h.shape.el.remove(); shapes = shapes.filter(s => s !== h.shape); }
+    else if(h.op === 'del'){ svg.appendChild(h.shape.el); shapes.push(h.shape); }
   });
 
-  btnClear.addEventListener('click',()=>{
-    shapes.forEach(s=>s.el.remove());
-    shapes=[];
-    history.push({op:'clear'});
+  btnClear.addEventListener('click', () => { shapes.forEach(s => s.el.remove()); shapes = []; history.push({op:'clear'}); });
+
+  // === Auto-zoom: fill device width & height available for drawing ===
+  function autoZoomToDeviceFill(){
+    // calculate available area (window minus toolbar and outer padding)
+    const toolbar = document.querySelector('.toolbar');
+    const toolbarHeight = toolbar ? toolbar.getBoundingClientRect().height : 64;
+    // small horizontal/vertical padding used by .wrap (8px each side)
+    const pad = 16; // left+right total padding accounted
+    const availW = Math.max(100, window.innerWidth - pad);
+    const availH = Math.max(100, window.innerHeight - toolbarHeight - pad);
+    // Set frame to exactly available area to make svg fill both width & height (stretched)
+    frame.style.width = availW + 'px';
+    frame.style.height = availH + 'px';
+    // ensure svg will stretch to fill (preserveAspectRatio="none" already set)
+  }
+
+  // Wire auto-zoom button and lifecycle events
+  btnAutoZoom.addEventListener('click', autoZoomToDeviceFill);
+  // initial auto-zoom and on resize/orientation change (debounced)
+  setTimeout(autoZoomToDeviceFill, 80);
+  let rzTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(rzTimer);
+    rzTimer = setTimeout(() => autoZoomToDeviceFill(), 120);
+  });
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => autoZoomToDeviceFill(), 120);
   });
 
-  // keyboard shortcuts optional
-  window.addEventListener('keydown',(e)=>{
-    if(e.key==='t') btnTrim.click();
-    if(e.key==='d') btnDraw.click();
-    if(e.key==='1') lwS.click();
-    if(e.key==='2') lwM.click();
-    if(e.key==='3') lwL.click();
-    if(e.key==='i') btnSplit.click();
-    if(e.key==='u') btnUndo.click();
-    if(e.key==='c') btnClear.click();
+  // === Export helpers (with pro-code prompt) ===
+  function downloadBlob(blob, filename){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+  }
+
+  // SVG export with pro-code prompt
+  btnSaveSvg.addEventListener('click', () => {
+    const entered = prompt("Enter pro export code (email " + PRO_MAIL + " to purchase):");
+    if(!entered){ alert("Export cancelled. This is a pro feature — to get a code mail " + PRO_MAIL + "."); return; }
+    if(entered !== PRO_CODE){ alert("Invalid code. This is a pro feature — to get a code mail " + PRO_MAIL + "."); return; }
+
+    // Serialize live SVG — ensure correct internal coordinate size
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('width', VIEW_W);
+    clone.setAttribute('height', VIEW_H);
+    clone.setAttribute('preserveAspectRatio', 'xMinYMin meet'); // for exported svg use natural aspect
+    // add white background rectangle
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width', VIEW_W); rect.setAttribute('height', VIEW_H); rect.setAttribute('fill','#fff');
+    clone.insertBefore(rect, clone.firstChild);
+    const serializer = new XMLSerializer();
+    const svgString = '<?xml version="1.0" encoding="utf-8"?>\n' + serializer.serializeToString(clone);
+    const blob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+    downloadBlob(blob, `drawing-${Date.now()}.svg`);
   });
 
+  // JPEG export with pro-code prompt
+  btnSaveJpeg.addEventListener('click', async () => {
+    const entered = prompt("Enter pro export code (email " + PRO_MAIL + " to purchase):");
+    if(!entered){ alert("Export cancelled. This is a pro feature — to get a code mail " + PRO_MAIL + "."); return; }
+    if(entered !== PRO_CODE){ alert("Invalid code. This is a pro feature — to get a code mail " + PRO_MAIL + "."); return; }
+
+    // Render current SVG into canvas sized from displayed frame for W x H and DPR for crispness
+    const displayW = frame.clientWidth || VIEW_W;
+    const displayH = frame.clientHeight || VIEW_H;
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const canvasW = Math.round(displayW * dpr);
+    const canvasH = Math.round(displayH * dpr);
+
+    // Clone the SVG, add white background rect, serialize and render as image
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('width', VIEW_W);
+    clone.setAttribute('height', VIEW_H);
+    // ensure white background in clone
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width', VIEW_W); rect.setAttribute('height', VIEW_H); rect.setAttribute('fill','#fff');
+    clone.insertBefore(rect, clone.firstChild);
+    const serializer = new XMLSerializer();
+    const svgString = '<?xml version="1.0" encoding="utf-8"?>\n' + serializer.serializeToString(clone);
+    const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.onload = () => {
+      try{
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasW;
+        canvas.height = canvasH;
+        const ctx = canvas.getContext('2d');
+        // scale to device pixels then draw scaled image
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        // draw the SVG image scaled to displayed size (the clone is in VIEW_W x VIEW_H internal units)
+        ctx.drawImage(img, 0, 0, VIEW_W, VIEW_H, 0, 0, displayW, displayH);
+        canvas.toBlob((blob) => {
+          if(blob) downloadBlob(blob, `drawing-${Date.now()}.jpg`);
+          URL.revokeObjectURL(url);
+        }, 'image/jpeg', 0.92);
+      }catch(err){
+        console.error('JPEG export error', err);
+        URL.revokeObjectURL(url);
+      }
+    };
+    img.onerror = (err) => {
+      console.error('image load error', err);
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+
+  // helper for showing transient intersection marks
+  function markIntersection(pt){
+    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3);
+    dot.setAttribute('class','intersection-dot');
+    svg.appendChild(dot);
+    setTimeout(()=>dot.remove(), 700);
+  }
+
+  // initial auto-zoom (fill viewport)
+  setTimeout(autoZoomToDeviceFill, 80);
+
+  // small debounce for resize/orientation
+  let rzTimer = null;
+  window.addEventListener('resize', () => { clearTimeout(rzTimer); rzTimer = setTimeout(() => autoZoomToDeviceFill(), 120); });
+  window.addEventListener('orientationchange', () => { setTimeout(() => autoZoomToDeviceFill(), 120); });
+
+  // expose auto-fit function used above
+  function autoZoomToDeviceFill(){
+    const toolbar = document.querySelector('.toolbar');
+    const toolbarHeight = toolbar ? toolbar.getBoundingClientRect().height : 64;
+    const padHorizontal = 16; // total horizontal padding (wrap left/right)
+    const padVertical = 16;   // total vertical padding (top + small margin)
+    const availW = Math.max(100, window.innerWidth - padHorizontal);
+    const availH = Math.max(100, window.innerHeight - toolbarHeight - padVertical);
+    frame.style.width = availW + 'px';
+    frame.style.height = availH + 'px';
+    // note: svg has preserveAspectRatio='none', so it will stretch to fill frame
+  }
+
+  // keyboard shortcuts (optional)
+  window.addEventListener('keydown', (e) => {
+    if(e.key === 't') btnTrim.click();
+    if(e.key === 'd') btnDraw.click();
+    if(e.key === '1') lwS.click();
+    if(e.key === '2') lwM.click();
+    if(e.key === '3') lwL.click();
+    if(e.key === 'i') btnSplit.click();
+    if(e.key === 'u') btnUndo.click();
+    if(e.key === 'c') btnClear.click();
+    if(e.key === 'z') btnAutoZoom.click();
+    if(e.key === 's') btnSaveJpeg.click();
+  });
+
+  // prevent default touch scrolling on svg frame
+  svg.addEventListener('touchstart', (e) => { e.preventDefault(); }, {passive:false});
 })();
 </script>
 </body>
