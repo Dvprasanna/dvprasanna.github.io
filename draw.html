@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Edge/Corner Draw — Updated</title>
+<title>Edge/Corner Draw — Fixed (no pan, 50px hotzone)</title>
 <style>
   :root{--bg:#f6f7fb; --panel:#fff; --accent:#0b5cff; --muted:#666}
   body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue";background:var(--bg);color:#111}
@@ -12,14 +12,17 @@
     width:300px;background:var(--panel);padding:12px;border-right:1px solid #e6e8ef;box-sizing:border-box;
   }
   @media(max-width:700px){ .toolbar{position:fixed;left:0;right:0;top:0;display:flex;gap:8px;height:56px;width:auto;z-index:10} .app{padding-top:56px} }
-  .canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box; overflow:auto}
+  .canvas-wrap{
+    flex:1;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;
+    /* prevent touch-driven scrolling / overscroll when interacting with canvas */
+    overscroll-behavior: none;
+  }
   .controls{display:flex;flex-direction:column;gap:10px}
   .seg{display:flex;gap:6px}
   button,select{padding:8px 10px;border-radius:8px;border:1px solid #d9dbe7;background:white;cursor:pointer}
   button.active{outline:2px solid rgba(11,92,255,0.18);border-color:var(--accent)}
-  svg { background: white; box-shadow: 0 6px 18px rgba(0,0,0,0.06); touch-action: none; display:block; }
-  /* ensure full canvas is visible (scale down if needed) without cropping */
-  .svg-frame { display:inline-block; max-width:100%; max-height:calc(100vh - 120px); }
+  .svg-frame { display:inline-block; max-width:100%; max-height:calc(100vh - 120px); /* ensure full canvas visibility */ }
+  svg { background: white; box-shadow: 0 6px 18px rgba(0,0,0,0.06); touch-action: none; display:block; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color: transparent; }
   .hint{font-size:12px;color:var(--muted)}
   .small{font-size:13px;padding:6px 8px}
   .toolbar-row{display:flex;gap:8px;align-items:center}
@@ -67,13 +70,12 @@
 
       <div class="toolbar-row hint">
         <div>Hints:</div>
-        <div style="margin-left:8px">Drag from edges to draw full horizontal/vertical lines (perpendicular to drag axis). Drag from corners to draw circle (center fixed).</div>
+        <div style="margin-left:8px">Drag from edges (50px hot-zone) to draw full perpendicular lines. Drag from corners to draw circle (center fixed).</div>
       </div>
     </div>
   </div>
 
   <div class="canvas-wrap">
-    <!-- wrapper ensures the entire SVG fits inside the area; it scales down if viewport is small -->
     <div class="svg-frame">
       <svg id="svg" width="600" height="800" viewBox="0 0 600 800" tabindex="0" aria-label="Drawing canvas"></svg>
     </div>
@@ -99,12 +101,14 @@
   let pointerDownInfo = null;
   let ghost = null;
 
+  // HOTZONE updated to 50px as requested
+  const HOTZONE = 50;
+
   function setCanvasSize(val){
     const [w,h] = val.split('x').map(Number);
     svg.setAttribute('width', w);
     svg.setAttribute('height', h);
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    // keep svg wrapper sized to permit scaling down while showing full canvas
     svg.parentElement.style.width = w + 'px';
     svg.parentElement.style.height = h + 'px';
   }
@@ -189,12 +193,15 @@
     return {x:loc.x, y:loc.y};
   }
 
+  // prevent default touch scrolling when interacting with SVG
   svg.addEventListener('pointerdown', (e) => {
+    // stop browser scroll / drag start
+    e.preventDefault();
     svg.setPointerCapture(e.pointerId);
     if(currentMode !== 'draw'){ return; }
     const p = svgPoint(e);
     const vb = svg.viewBox.baseVal;
-    const margin = 20;
+    const margin = HOTZONE;
     const nearLeft = p.x <= margin;
     const nearRight = p.x >= vb.width - margin;
     const nearTop = p.y <= margin;
@@ -203,27 +210,25 @@
     const nearEdge = nearLeft || nearRight || nearTop || nearBottom;
     pointerDownInfo = {start:p, corner:nearCorner, edge:nearEdge, nearLeft, nearRight, nearTop, nearBottom};
     if(nearCorner){
-      // circle center locked to corner
       const cx = nearLeft ? 0 : vb.width;
       const cy = nearTop ? 0 : vb.height;
       createGhostCircle(cx, cy, Math.hypot(p.x-cx, p.y-cy));
     } else if(nearEdge){
-      // NEW behavior: draw full line spanning the opposite axis (perpendicular)
       if(nearLeft || nearRight){
-        // vertical full-line at pointer.x
         createGhostFullLineVertical(p.x);
         pointerDownInfo.axis = 'vertical';
       } else {
-        // horizontal full-line at pointer.y
         createGhostFullLineHorizontal(p.y);
         pointerDownInfo.axis = 'horizontal';
       }
     } else {
       pointerDownInfo = null;
     }
-  });
+  }, {passive:false});
 
   svg.addEventListener('pointermove', (e) => {
+    // if drawing, prevent default to stop page from moving
+    if(pointerDownInfo) e.preventDefault();
     const p = svgPoint(e);
     if(pointerDownInfo && ghost){
       if(pointerDownInfo.corner){
@@ -232,7 +237,6 @@
         const r = Math.hypot(p.x-cx, p.y-cy);
         ghost.setAttribute('r', r);
       } else if(pointerDownInfo.edge){
-        // update full-line position (perpendicular)
         if(pointerDownInfo.axis === 'vertical'){
           let x = Math.max(0, Math.min(svg.viewBox.baseVal.width, p.x));
           ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
@@ -242,12 +246,12 @@
         }
       }
     }
-  });
+  }, {passive:false});
 
   svg.addEventListener('pointerup', (e) => {
+    e.preventDefault();
     svg.releasePointerCapture(e.pointerId);
     if(!pointerDownInfo || !ghost){ pointerDownInfo=null; removeGhost(); return; }
-    // create final shape
     if(pointerDownInfo.corner){
       const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
       const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
@@ -264,12 +268,13 @@
     }
     pointerDownInfo=null;
     removeGhost();
-  });
+  }, {passive:false});
 
+  // simple undo/clear
   clearBtn.addEventListener('click', ()=>{ shapes.forEach(s=>s.el.remove()); shapes=[]; history.push({op:'clear'}); });
   undoBtn.addEventListener('click', ()=>{ const h = history.pop(); if(!h) return; if(h.op==='add'){ h.shape.el.remove(); shapes = shapes.filter(s=>s!==h.shape);} if(h.op==='clear'){ /* can't undo clear in prototype */ } });
 
-  // (Intersection + split code unchanged from previous prototype - omitted for brevity in comments)
+  // intersection math & split (unchanged)
   function lineLineInter(l1, l2){
     const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
     const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
