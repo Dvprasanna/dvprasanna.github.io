@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Edge/Corner Draw Prototype</title>
+<title>Edge/Corner Draw — Updated</title>
 <style>
   :root{--bg:#f6f7fb; --panel:#fff; --accent:#0b5cff; --muted:#666}
   body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue";background:var(--bg);color:#111}
@@ -12,12 +12,14 @@
     width:300px;background:var(--panel);padding:12px;border-right:1px solid #e6e8ef;box-sizing:border-box;
   }
   @media(max-width:700px){ .toolbar{position:fixed;left:0;right:0;top:0;display:flex;gap:8px;height:56px;width:auto;z-index:10} .app{padding-top:56px} }
-  .canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
+  .canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box; overflow:auto}
   .controls{display:flex;flex-direction:column;gap:10px}
   .seg{display:flex;gap:6px}
   button,select{padding:8px 10px;border-radius:8px;border:1px solid #d9dbe7;background:white;cursor:pointer}
   button.active{outline:2px solid rgba(11,92,255,0.18);border-color:var(--accent)}
-  svg { background: white; box-shadow: 0 6px 18px rgba(0,0,0,0.06); touch-action: none; }
+  svg { background: white; box-shadow: 0 6px 18px rgba(0,0,0,0.06); touch-action: none; display:block; }
+  /* ensure full canvas is visible (scale down if needed) without cropping */
+  .svg-frame { display:inline-block; max-width:100%; max-height:calc(100vh - 120px); }
   .hint{font-size:12px;color:var(--muted)}
   .small{font-size:13px;padding:6px 8px}
   .toolbar-row{display:flex;gap:8px;align-items:center}
@@ -65,13 +67,16 @@
 
       <div class="toolbar-row hint">
         <div>Hints:</div>
-        <div style="margin-left:8px">Drag from edges to draw H/V lines. Drag from corners to draw circle (center fixed).</div>
+        <div style="margin-left:8px">Drag from edges to draw full horizontal/vertical lines (perpendicular to drag axis). Drag from corners to draw circle (center fixed).</div>
       </div>
     </div>
   </div>
 
   <div class="canvas-wrap">
-    <svg id="svg" width="600" height="800" viewBox="0 0 600 800" tabindex="0" aria-label="Drawing canvas"></svg>
+    <!-- wrapper ensures the entire SVG fits inside the area; it scales down if viewport is small -->
+    <div class="svg-frame">
+      <svg id="svg" width="600" height="800" viewBox="0 0 600 800" tabindex="0" aria-label="Drawing canvas"></svg>
+    </div>
   </div>
 </div>
 
@@ -93,16 +98,17 @@
   let shapes = []; // {type:'line'|'circle'|'polyline', el:SVGElement, data:...}
   let pointerDownInfo = null;
   let ghost = null;
-  let showAutoTrim = false;
 
   function setCanvasSize(val){
     const [w,h] = val.split('x').map(Number);
     svg.setAttribute('width', w);
     svg.setAttribute('height', h);
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    // keep svg wrapper sized to permit scaling down while showing full canvas
+    svg.parentElement.style.width = w + 'px';
+    svg.parentElement.style.height = h + 'px';
   }
   setCanvasSize(sizeSel.value);
-
   sizeSel.addEventListener('change', e => setCanvasSize(e.target.value));
 
   function setWidth(wName){
@@ -120,10 +126,17 @@
   modeDraw.addEventListener('click', ()=>{ currentMode='draw'; modeDraw.classList.add('active'); modeSelect.classList.remove('active'); status.textContent = `Mode: Draw — Width: ${document.querySelector('.toolbar .active')?.textContent || 'M'}`});
   modeSelect.addEventListener('click', ()=>{ currentMode='select'; modeDraw.classList.remove('active'); modeSelect.classList.add('active'); status.textContent = `Mode: Select — Width: ${document.querySelector('.toolbar .active')?.textContent || 'M'}`});
 
-  function createGhostLine(x1,y1,x2,y2){
+  function createGhostFullLineVertical(x){
     removeGhost();
     ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ghost.setAttribute('x1',x1); ghost.setAttribute('y1',y1); ghost.setAttribute('x2',x2); ghost.setAttribute('y2',y2);
+    ghost.setAttribute('x1', x); ghost.setAttribute('y1', 0); ghost.setAttribute('x2', x); ghost.setAttribute('y2', svg.viewBox.baseVal.height);
+    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
+    svg.appendChild(ghost);
+  }
+  function createGhostFullLineHorizontal(y){
+    removeGhost();
+    ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
+    ghost.setAttribute('x1', 0); ghost.setAttribute('y1', y); ghost.setAttribute('x2', svg.viewBox.baseVal.width); ghost.setAttribute('y2', y);
     ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
     svg.appendChild(ghost);
   }
@@ -141,13 +154,22 @@
     history.push({op:'add', shape:obj});
   }
 
-  function makeLine(x1,y1,x2,y2){
+  function makeFullVerticalLine(x){
     const line = document.createElementNS('http://www.w3.org/2000/svg','line');
     line.classList.add('shape');
-    line.setAttribute('x1',x1); line.setAttribute('y1',y1); line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+    line.setAttribute('x1',x); line.setAttribute('y1',0); line.setAttribute('x2',x); line.setAttribute('y2',svg.viewBox.baseVal.height);
     line.setAttribute('stroke-width', width);
     svg.appendChild(line);
-    addShape({type:'line', el:line, x1,y1,x2,y2, w:width});
+    addShape({type:'line', el:line, x1:x,y1:0,x2:x,y2:svg.viewBox.baseVal.height, w:width});
+  }
+
+  function makeFullHorizontalLine(y){
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.classList.add('shape');
+    line.setAttribute('x1',0); line.setAttribute('y1',y); line.setAttribute('x2',svg.viewBox.baseVal.width); line.setAttribute('y2',y);
+    line.setAttribute('stroke-width', width);
+    svg.appendChild(line);
+    addShape({type:'line', el:line, x1:0,y1:y,x2:svg.viewBox.baseVal.width,y2:y, w:width});
   }
 
   function makeCircle(cx,cy,r){
@@ -186,16 +208,17 @@
       const cy = nearTop ? 0 : vb.height;
       createGhostCircle(cx, cy, Math.hypot(p.x-cx, p.y-cy));
     } else if(nearEdge){
-      // if horizontal edge -> horizontal line; vertical edge -> vertical line
+      // NEW behavior: draw full line spanning the opposite axis (perpendicular)
       if(nearLeft || nearRight){
-        const x = nearLeft ? 0 : vb.width;
-        createGhostLine(x, p.y, p.x, p.y);
+        // vertical full-line at pointer.x
+        createGhostFullLineVertical(p.x);
+        pointerDownInfo.axis = 'vertical';
       } else {
-        const y = nearTop ? 0 : vb.height;
-        createGhostLine(p.x, y, p.x, p.y);
+        // horizontal full-line at pointer.y
+        createGhostFullLineHorizontal(p.y);
+        pointerDownInfo.axis = 'horizontal';
       }
     } else {
-      // not in hot zone: do nothing (future: freehand)
       pointerDownInfo = null;
     }
   });
@@ -208,20 +231,14 @@
         const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
         const r = Math.hypot(p.x-cx, p.y-cy);
         ghost.setAttribute('r', r);
-      } else {
-        // edge
-        if(pointerDownInfo.nearLeft || pointerDownInfo.nearRight){
-          const x = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
-          ghost.setAttribute('x1', x);
-          ghost.setAttribute('x2', p.x);
-          ghost.setAttribute('y1', p.y);
-          ghost.setAttribute('y2', p.y);
+      } else if(pointerDownInfo.edge){
+        // update full-line position (perpendicular)
+        if(pointerDownInfo.axis === 'vertical'){
+          let x = Math.max(0, Math.min(svg.viewBox.baseVal.width, p.x));
+          ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
         } else {
-          const y = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
-          ghost.setAttribute('y1', y);
-          ghost.setAttribute('y2', p.y);
-          ghost.setAttribute('x1', p.x);
-          ghost.setAttribute('x2', p.x);
+          let y = Math.max(0, Math.min(svg.viewBox.baseVal.height, p.y));
+          ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
         }
       }
     }
@@ -236,12 +253,14 @@
       const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
       const r = parseFloat(ghost.getAttribute('r'));
       makeCircle(cx,cy,r);
-    } else {
-      const x1 = parseFloat(ghost.getAttribute('x1'));
-      const y1 = parseFloat(ghost.getAttribute('y1'));
-      const x2 = parseFloat(ghost.getAttribute('x2'));
-      const y2 = parseFloat(ghost.getAttribute('y2'));
-      makeLine(x1,y1,x2,y2);
+    } else if(pointerDownInfo.edge){
+      if(pointerDownInfo.axis === 'vertical'){
+        const x = parseFloat(ghost.getAttribute('x1'));
+        makeFullVerticalLine(x);
+      } else {
+        const y = parseFloat(ghost.getAttribute('y1'));
+        makeFullHorizontalLine(y);
+      }
     }
     pointerDownInfo=null;
     removeGhost();
@@ -250,23 +269,19 @@
   clearBtn.addEventListener('click', ()=>{ shapes.forEach(s=>s.el.remove()); shapes=[]; history.push({op:'clear'}); });
   undoBtn.addEventListener('click', ()=>{ const h = history.pop(); if(!h) return; if(h.op==='add'){ h.shape.el.remove(); shapes = shapes.filter(s=>s!==h.shape);} if(h.op==='clear'){ /* can't undo clear in prototype */ } });
 
-  // intersection math helpers
+  // (Intersection + split code unchanged from previous prototype - omitted for brevity in comments)
   function lineLineInter(l1, l2){
-    // l1: {x1,y1,x2,y2}
     const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
     const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
     const denom = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
     if(Math.abs(denom) < 1e-6) return null;
     const xi = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4))/denom;
     const yi = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4))/denom;
-    // check within segments
     function between(a,b,c){ return Math.min(a,b)-1e-6 <= c && c <= Math.max(a,b)+1e-6; }
     if(between(x1,x2,xi) && between(y1,y2,yi) && between(x3,x4,xi) && between(y3,y4,yi)) return {x:xi,y:yi};
     return null;
   }
-
   function lineCircleInter(line, circle){
-    // line endpoints (x1,y1)-(x2,y2), circle (cx,cy,r)
     const x1=line.x1, y1=line.y1, x2=line.x2, y2=line.y2;
     const cx=circle.cx, cy=circle.cy, r=circle.r;
     const dx = x2-x1, dy=y2-y1;
@@ -287,9 +302,7 @@
     });
     return points;
   }
-
   function circleCircleInter(c1, c2){
-    // returns intersection points between circles c1 and c2
     const x0=c1.cx, y0=c1.cy, r0=c1.r;
     const x1=c2.cx, y1=c2.cy, r1=c2.r;
     const dx = x1-x0, dy=y1-y0;
@@ -317,31 +330,22 @@
     setTimeout(()=>dot.remove(), 2000);
   }
 
-  // Approximate: sample circles into polylines of N points and split lines by intersection points.
   function splitAtIntersections(){
-    // Gather lines & circles
     const lines = shapes.filter(s=>s.type==='line').map(s=>s);
     const circles = shapes.filter(s=>s.type==='circle').map(s=>s);
-
     const intersections = [];
-
-    // line-line intersections
     for(let i=0;i<lines.length;i++){
       for(let j=i+1;j<lines.length;j++){
         const p = lineLineInter(lines[i], lines[j]);
         if(p){ intersections.push({p, with:[lines[i],lines[j]]}); markIntersection(p); }
       }
     }
-
-    // line-circle
     for(let i=0;i<lines.length;i++){
       for(let j=0;j<circles.length;j++){
         const pts = lineCircleInter(lines[i], circles[j]);
         pts.forEach(p => { intersections.push({p, with:[lines[i],circles[j]]}); markIntersection(p); });
       }
     }
-
-    // circle-circle
     for(let i=0;i<circles.length;i++){
       for(let j=i+1;j<circles.length;j++){
         const pts = circleCircleInter(circles[i], circles[j]);
@@ -349,27 +353,20 @@
       }
     }
 
-    // Now: split lines into segments at intersection points located on them
-    // For each line, collect t values (param along line) and create segments
     const newShapes = [];
     lines.forEach(l => {
       const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
-      // include endpoints
       ptsOnLine.push({x:l.x1,y:l.y1}); ptsOnLine.push({x:l.x2,y:l.y2});
-      // compute t
       const dx = l.x2 - l.x1, dy = l.y2 - l.y1;
       const params = ptsOnLine.map(p => {
         let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - l.x1) / (dx || 1e-6)) : ((p.y - l.y1)/(dy || 1e-6));
         return Math.max(0, Math.min(1, t));
       });
-      // dedupe and sort
       const uniq = Array.from(new Set(params.map(t=>t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
-      // create segments between consecutive t
       for(let i=0;i<uniq.length-1;i++){
         const ta=uniq[i], tb=uniq[i+1];
         const ax = l.x1 + dx * ta, ay = l.y1 + dy * ta;
         const bx = l.x1 + dx * tb, by = l.y1 + dy * tb;
-        // create polyline segment only if length > small threshold
         if(Math.hypot(bx-ax,by-ay) > 2){
           const seg = document.createElementNS('http://www.w3.org/2000/svg','line');
           seg.classList.add('shape');
@@ -379,21 +376,17 @@
           newShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by, w:l.w});
         }
       }
-      // remove original line
       l.el.remove();
     });
 
-    // For circles: approximate by polyline and split into segments
     circles.forEach(c => {
-      const N = 120; // sampling resolution (increase for smoother)
+      const N = 120;
       const pts = [];
       for(let i=0;i<N;i++){
         const a = (i/N)*Math.PI*2;
         pts.push({x: c.cx + c.r*Math.cos(a), y: c.cy + c.r*Math.sin(a), a});
       }
-      // find indices where intersections fall near a sample
       const intsOnC = intersections.filter(it => it.with.includes(c)).map(it => it.p);
-      // for each intersection point, find nearest index
       const idxSet = new Set();
       pts.forEach((pt, idx) => {
         intsOnC.forEach(ip => {
@@ -401,9 +394,7 @@
         });
       });
       const idxs = Array.from(idxSet).sort((a,b)=>a-b);
-      // if no intersections => keep circle as-is (leave original)
       if(idxs.length === 0){
-        // keep original circle
         const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
         circ.classList.add('shape');
         circ.setAttribute('cx', c.cx); circ.setAttribute('cy', c.cy); circ.setAttribute('r', c.r);
@@ -413,7 +404,6 @@
         c.el.remove();
         return;
       }
-      // create polylines segments between intersection indices
       const sorted = idxs;
       for(let s=0;s<sorted.length;s++){
         const i1 = sorted[s], i2 = sorted[(s+1)%sorted.length];
@@ -424,7 +414,6 @@
           if(i === i2) break;
           i = (i+1)%pts.length;
         }
-        // create path only if >1 pt
         if(segPts.length > 1){
           const path = document.createElementNS('http://www.w3.org/2000/svg','polyline');
           path.classList.add('shape');
@@ -438,7 +427,6 @@
       c.el.remove();
     });
 
-    // add newShapes to shapes array (remove old circles/lines references)
     shapes = shapes.filter(s => !(s.type==='line' || s.type==='circle'));
     newShapes.forEach(ns => shapes.push(ns));
   }
