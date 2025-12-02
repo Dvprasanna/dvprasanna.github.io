@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Drawing Canvas — Fill Device + Export (Pro)</title>
+<title>Drawing Canvas — Auto-fill before draw + Pro Export</title>
 <style>
   :root{
     --bg:#f4f6fb; --panel:#fff; --accent:#0b5cff; --muted:#666;
@@ -16,9 +16,9 @@
     padding:8px;box-sizing:border-box;overscroll-behavior:none;
   }
   .svg-frame{
-    display:block; /* acts as the container that gets resized to fill area */
-    max-width:100%;
-    max-height:100%;
+    display:block;
+    width:100%;
+    height:100%;
   }
   svg{
     display:block;
@@ -52,11 +52,12 @@
     .label{display:none}
     button{padding:8px 6px;font-size:13px}
   }
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <!-- svg-frame will be resized by JS to exactly fill available area (width & height) -->
+  <!-- frame will be auto-sized by JS to fill available area before drawing begins -->
   <div class="svg-frame" id="frame" role="presentation" aria-hidden="false">
     <!-- preserveAspectRatio='none' so svg stretches to fill both width and height -->
     <svg id="svg" viewBox="0 0 600 800" preserveAspectRatio="none" role="application" aria-label="Drawing canvas"></svg>
@@ -85,15 +86,16 @@
     <div class="label">Edge hot-zone: <strong>50px</strong></div>
     <div class="label">Trim range: <strong id="trimLabel">8px</strong></div>
     <div style="width:8px"></div>
-    <button id="btn-autozoom" title="Auto-zoom to device width & height">Auto-Zoom</button>
     <button id="btn-save-svg" title="Save as SVG">Save SVG</button>
     <button id="btn-save-jpeg" title="Save as JPEG">Save JPEG</button>
   </div>
 </div>
 
+<div class="sr-only" id="sr">Canvas auto-fills device area before drawing. Use Draw/Trim and bottom toolbar. Exports require pro code.</div>
+
 <script>
 (() => {
-  // CONFIG - unchanged behavior
+  // CONFIG
   const HOTZONE    = 50;   // px near edges/corners for draw start
   const TRIM_RANGE = 8;    // px fixed trim detection range
   const VIEW_W     = 600;  // SVG internal coordinate width
@@ -111,14 +113,12 @@
   const btnSplit     = document.getElementById('btn-split');
   const btnUndo      = document.getElementById('btn-undo');
   const btnClear     = document.getElementById('btn-clear');
-  const btnAutoZoom  = document.getElementById('btn-autozoom');
   const btnSaveSvg   = document.getElementById('btn-save-svg');
   const btnSaveJpeg  = document.getElementById('btn-save-jpeg');
   document.getElementById('trimLabel').textContent = TRIM_RANGE + 'px';
 
   // Initialize svg viewBox to internal units
   svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${VIEW_H}`);
-  // preserveAspectRatio already set to 'none' in HTML so it stretches to frame size
 
   // State
   let mode = 'draw';
@@ -127,13 +127,13 @@
   let history = [];
   let ghost = null;
   let pointerInfo = null;
+  let autoZoomApplied = false; // ensure auto-zoom runs before user draws
 
   // Helper - map event client coords to svg coords (handles stretched svg because of getScreenCTM)
   function svgPointFromEvent(evt){
     const pt = svg.createSVGPoint();
     pt.x = evt.clientX;
     pt.y = evt.clientY;
-    // getScreenCTM handles css scaling/stretching so inverse maps correctly
     return pt.matrixTransform(svg.getScreenCTM().inverse());
   }
 
@@ -196,8 +196,37 @@
     svg.appendChild(ghost);
   }
 
+  // === Ensure auto-zoom applied before first draw ===
+  function autoZoomToDeviceFill(){
+    const toolbar = document.querySelector('.toolbar');
+    const toolbarHeight = toolbar ? toolbar.getBoundingClientRect().height : 64;
+    const padHorizontal = 16; // total horizontal padding
+    const padVertical = 16;
+    const availW = Math.max(100, window.innerWidth - padHorizontal);
+    const availH = Math.max(100, window.innerHeight - toolbarHeight - padVertical);
+    frame.style.width = availW + 'px';
+    frame.style.height = availH + 'px';
+    autoZoomApplied = true;
+  }
+
+  // run auto-zoom on load
+  setTimeout(() => { autoZoomToDeviceFill(); }, 50);
+
+  // update on resize/orientation
+  let rzTimer = null;
+  window.addEventListener('resize', () => { clearTimeout(rzTimer); rzTimer = setTimeout(() => autoZoomToDeviceFill(), 120); });
+  window.addEventListener('orientationchange', () => { setTimeout(() => autoZoomToDeviceFill(), 120); });
+
   // === DRAW interactions ===
   svg.addEventListener('pointerdown', (e) => {
+    // ensure auto-zoom applied before continuing
+    if(!autoZoomApplied){
+      // apply auto-zoom now, then *do not* continue this pointerdown (user can touch again)
+      autoZoomToDeviceFill();
+      // small delay to allow layout to settle; abort this pointerdown
+      return;
+    }
+
     e.preventDefault();
     svg.setPointerCapture(e.pointerId);
     if(mode !== 'draw') return;
@@ -251,6 +280,12 @@
   }, {passive:false});
 
   svg.addEventListener('pointerup', (e) => {
+    // if autoZoom wasn't applied earlier, ensure it now (shouldn't happen, but safe)
+    if(!autoZoomApplied){
+      autoZoomToDeviceFill();
+      return;
+    }
+
     e.preventDefault();
     svg.releasePointerCapture(e.pointerId);
     const p = svgPointFromEvent(e);
@@ -404,7 +439,7 @@
 
     const newShapes = [];
 
-    // split lines
+    // split lines into smaller segments
     lines.forEach(l=>{
       const ptsOnLine = intersections.filter(it=>it.with.includes(l)).map(it=>it.p);
       ptsOnLine.push({x:l.x1,y:l.y1},{x:l.x2,y:l.y2});
@@ -524,34 +559,6 @@
 
   btnClear.addEventListener('click', () => { shapes.forEach(s => s.el.remove()); shapes = []; history.push({op:'clear'}); });
 
-  // === Auto-zoom: fill device width & height available for drawing ===
-  function autoZoomToDeviceFill(){
-    // calculate available area (window minus toolbar and outer padding)
-    const toolbar = document.querySelector('.toolbar');
-    const toolbarHeight = toolbar ? toolbar.getBoundingClientRect().height : 64;
-    // small horizontal/vertical padding used by .wrap (8px each side)
-    const pad = 16; // left+right total padding accounted
-    const availW = Math.max(100, window.innerWidth - pad);
-    const availH = Math.max(100, window.innerHeight - toolbarHeight - pad);
-    // Set frame to exactly available area to make svg fill both width & height (stretched)
-    frame.style.width = availW + 'px';
-    frame.style.height = availH + 'px';
-    // ensure svg will stretch to fill (preserveAspectRatio="none" already set)
-  }
-
-  // Wire auto-zoom button and lifecycle events
-  btnAutoZoom.addEventListener('click', autoZoomToDeviceFill);
-  // initial auto-zoom and on resize/orientation change (debounced)
-  setTimeout(autoZoomToDeviceFill, 80);
-  let rzTimer = null;
-  window.addEventListener('resize', () => {
-    clearTimeout(rzTimer);
-    rzTimer = setTimeout(() => autoZoomToDeviceFill(), 120);
-  });
-  window.addEventListener('orientationchange', () => {
-    setTimeout(() => autoZoomToDeviceFill(), 120);
-  });
-
   // === Export helpers (with pro-code prompt) ===
   function downloadBlob(blob, filename){
     const a = document.createElement('a');
@@ -563,18 +570,15 @@
     setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
   }
 
-  // SVG export with pro-code prompt
   btnSaveSvg.addEventListener('click', () => {
     const entered = prompt("Enter pro export code (email " + PRO_MAIL + " to purchase):");
     if(!entered){ alert("Export cancelled. This is a pro feature — to get a code mail " + PRO_MAIL + "."); return; }
     if(entered !== PRO_CODE){ alert("Invalid code. This is a pro feature — to get a code mail " + PRO_MAIL + "."); return; }
 
-    // Serialize live SVG — ensure correct internal coordinate size
     const clone = svg.cloneNode(true);
     clone.setAttribute('width', VIEW_W);
     clone.setAttribute('height', VIEW_H);
-    clone.setAttribute('preserveAspectRatio', 'xMinYMin meet'); // for exported svg use natural aspect
-    // add white background rectangle
+    clone.setAttribute('preserveAspectRatio', 'xMinYMin meet');
     const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
     rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width', VIEW_W); rect.setAttribute('height', VIEW_H); rect.setAttribute('fill','#fff');
     clone.insertBefore(rect, clone.firstChild);
@@ -584,24 +588,19 @@
     downloadBlob(blob, `drawing-${Date.now()}.svg`);
   });
 
-  // JPEG export with pro-code prompt
   btnSaveJpeg.addEventListener('click', async () => {
     const entered = prompt("Enter pro export code (email " + PRO_MAIL + " to purchase):");
     if(!entered){ alert("Export cancelled. This is a pro feature — to get a code mail " + PRO_MAIL + "."); return; }
     if(entered !== PRO_CODE){ alert("Invalid code. This is a pro feature — to get a code mail " + PRO_MAIL + "."); return; }
 
-    // Render current SVG into canvas sized from displayed frame for W x H and DPR for crispness
     const displayW = frame.clientWidth || VIEW_W;
     const displayH = frame.clientHeight || VIEW_H;
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const canvasW = Math.round(displayW * dpr);
     const canvasH = Math.round(displayH * dpr);
-
-    // Clone the SVG, add white background rect, serialize and render as image
     const clone = svg.cloneNode(true);
     clone.setAttribute('width', VIEW_W);
     clone.setAttribute('height', VIEW_H);
-    // ensure white background in clone
     const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
     rect.setAttribute('x','0'); rect.setAttribute('y','0'); rect.setAttribute('width', VIEW_W); rect.setAttribute('height', VIEW_H); rect.setAttribute('fill','#fff');
     clone.insertBefore(rect, clone.firstChild);
@@ -616,9 +615,7 @@
         canvas.width = canvasW;
         canvas.height = canvasH;
         const ctx = canvas.getContext('2d');
-        // scale to device pixels then draw scaled image
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        // draw the SVG image scaled to displayed size (the clone is in VIEW_W x VIEW_H internal units)
         ctx.drawImage(img, 0, 0, VIEW_W, VIEW_H, 0, 0, displayW, displayH);
         canvas.toBlob((blob) => {
           if(blob) downloadBlob(blob, `drawing-${Date.now()}.jpg`);
@@ -629,14 +626,11 @@
         URL.revokeObjectURL(url);
       }
     };
-    img.onerror = (err) => {
-      console.error('image load error', err);
-      URL.revokeObjectURL(url);
-    };
+    img.onerror = (err) => { console.error('image load error', err); URL.revokeObjectURL(url); };
     img.src = url;
   });
 
-  // helper for showing transient intersection marks
+  // helper for marking intersections
   function markIntersection(pt){
     const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
     dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3);
@@ -645,43 +639,9 @@
     setTimeout(()=>dot.remove(), 700);
   }
 
-  // initial auto-zoom (fill viewport)
-  setTimeout(autoZoomToDeviceFill, 80);
-
-  // small debounce for resize/orientation
-  let rzTimer = null;
-  window.addEventListener('resize', () => { clearTimeout(rzTimer); rzTimer = setTimeout(() => autoZoomToDeviceFill(), 120); });
-  window.addEventListener('orientationchange', () => { setTimeout(() => autoZoomToDeviceFill(), 120); });
-
-  // expose auto-fit function used above
-  function autoZoomToDeviceFill(){
-    const toolbar = document.querySelector('.toolbar');
-    const toolbarHeight = toolbar ? toolbar.getBoundingClientRect().height : 64;
-    const padHorizontal = 16; // total horizontal padding (wrap left/right)
-    const padVertical = 16;   // total vertical padding (top + small margin)
-    const availW = Math.max(100, window.innerWidth - padHorizontal);
-    const availH = Math.max(100, window.innerHeight - toolbarHeight - padVertical);
-    frame.style.width = availW + 'px';
-    frame.style.height = availH + 'px';
-    // note: svg has preserveAspectRatio='none', so it will stretch to fill frame
-  }
-
-  // keyboard shortcuts (optional)
-  window.addEventListener('keydown', (e) => {
-    if(e.key === 't') btnTrim.click();
-    if(e.key === 'd') btnDraw.click();
-    if(e.key === '1') lwS.click();
-    if(e.key === '2') lwM.click();
-    if(e.key === '3') lwL.click();
-    if(e.key === 'i') btnSplit.click();
-    if(e.key === 'u') btnUndo.click();
-    if(e.key === 'c') btnClear.click();
-    if(e.key === 'z') btnAutoZoom.click();
-    if(e.key === 's') btnSaveJpeg.click();
-  });
-
-  // prevent default touch scrolling on svg frame
+  // Prevent default touch scrolling on svg
   svg.addEventListener('touchstart', (e) => { e.preventDefault(); }, {passive:false});
+
 })();
 </script>
 </body>
