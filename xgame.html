@@ -1,292 +1,186 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Canvas Lines — drag to create</title>
-<style>
-  html,body { height:100%; margin:0; background:#111; color:#ddd; font-family:system-ui,-apple-system,Segoe UI,Roboto; }
-  #app { position:fixed; inset:0; display:flex; flex-direction:column; }
-  header { padding:8px 12px; background:#0f1113; display:flex; gap:8px; align-items:center; box-shadow:0 2px 6px rgba(0,0,0,0.6); z-index:5; }
-  #undo { padding:8px 12px; border-radius:6px; background:#222; color:#fff; border:1px solid #333; cursor:pointer; }
-  #info { font-size:13px; opacity:0.9; }
-  #canvasWrap { flex:1; position:relative; }
-  canvas { width:100%; height:100%; display:block; background: linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px), 
-                                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
-           background-size: 40px 40px, 40px 40px; cursor: crosshair; }
-  .hint { position:absolute; left:12px; bottom:12px; padding:8px 10px; background:rgba(0,0,0,0.4); border-radius:6px; font-size:13px; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finger Fishing Game</title>
+  
+  <!-- Open Graph / Twitter Card so the link looks beautiful when shared on X -->
+  <meta property="og:title" content="Finger Fishing Game" />
+  <meta property="og:description" content="Move your finger at the top to drop the hook & catch fish! 30-second challenge!" />
+  <meta property="og:image" content="https://raw.githubusercontent.com/YOUR-USERNAME/YOUR-REPO-NAME/main/preview.jpg" />
+  <meta property="og:url" content="https://YOUR-USERNAME.github.io/YOUR-REPO-NAME/" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <style>
+    body { margin:0; background:#0088ff; overflow:hidden; touch-action: manipulation; }
+    canvas { display:block; }
+    #ui {
+      position:absolute; top:10px; left:10px; color:white; font:bold 22px Arial; z-index:10;
+      text-shadow: 2px 2px 5px #000;
+    }
+    #startScreen {
+      position:absolute; inset:0; background:rgba(0,80,180,0.95); color:white;
+      display:flex; flex-direction:column; justify-content:center; align-items:center;
+      text-align:center; z-index:20; padding:20px; box-sizing:border-box;
+    }
+    button {
+      margin-top:30px; padding:16px 40px; font-size:22px; border:none; border-radius:12px;
+      background:#ffeb3b; color:#333; cursor:pointer; font-weight:bold;
+    }
+  </style>
 </head>
 <body>
-<div id="app">
-  <header>
-    <button id="undo" title="Undo last created line">Undo</button>
-    <div id="info">Drag horizontally → vertical line. Drag vertically → horizontal line. Touch & mouse supported.</div>
-  </header>
-  <div id="canvasWrap">
-    <canvas id="c"></canvas>
-    <div class="hint">Origin snaps to nearest intersection / edge. Lines split by intersections.</div>
-  </div>
+
+<div id="startScreen">
+  <h1>Finger Fishing Game</h1>
+  <p>Move your finger (or mouse) in the <strong>top area</strong> to control the hook<br>
+     Catch as many fish as possible in 30 seconds!</p>
+  <button onclick="startGame()">START FISHING</button>
 </div>
 
+<div id="ui">Score: <span id="score">0</span> | Time: <span id="time">30</span>s</div>
+<canvas id="game"></canvas>
+
 <script>
-(() => {
-  const canvas = document.getElementById('c');
-  const ctx = canvas.getContext('2d', { alpha: false });
-  let DPR = window.devicePixelRatio || 1;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-  // Keep lines as segments:
-  // vertical: {type:'v', x, y1, y2}
-  // horizontal: {type:'h', y, x1, x2}
-  const lines = [];
-  const undoStack = [];
+let score = 0, timeLeft = 30, gameRunning = false;
+let hookX = canvas.width / 2, hookY = 100;
+let fishes = [], particles = [];
+const hookZoneHeight = canvas.height * 0.25;
 
-  // Interaction state
-  let isDown = false;
-  let start = null;
-  let lastPos = null;
-  let preview = null; // preview segment while dragging
+function startGame() {
+  document.getElementById('startScreen').style.display = 'none';
+  score = 0; timeLeft = 30; fishes = []; particles = [];
+  hookY = 100; hookX = canvas.width / 2;
+  gameRunning = true;
+  document.getElementById('score').textContent = score;
+  document.getElementById('time').textContent = timeLeft;
 
-  function resize() {
-    DPR = window.devicePixelRatio || 1;
-    const w = canvas.clientWidth || canvas.parentElement.clientWidth;
-    const h = canvas.clientHeight || canvas.parentElement.clientHeight;
-    canvas.width = Math.round(w * DPR);
-    canvas.height = Math.round(h * DPR);
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); // keep drawing in CSS pixels
-    draw();
-  }
+  for(let i = 0; i < 12; i++) spawnFish();
 
-  window.addEventListener('resize', resize);
-  // make canvas fill area
-  canvas.style.width = '100%';
-  canvas.style.height = '100%';
-  resize();
-
-  function clear() {
-    ctx.fillStyle = '#0b0c0d';
-    ctx.fillRect(0,0,canvas.width/DPR, canvas.height/DPR);
-  }
-
-  function drawGrid() {
-    // subtle grid (we used CSS grid background too; this is additional thin lines)
-    const w = canvas.width/DPR, h = canvas.height/DPR;
-    ctx.save();
-    ctx.globalAlpha = 0.12;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    const step = 40;
-    for (let x=0.5; x<w; x+=step) {
-      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+  const timer = setInterval(() => {
+    timeLeft--;
+    document.getElementById('time').textContent = timeLeft;
+    if (timeLeft <= 0) {
+      clearInterval(timer);
+      gameRunning = false;
+      alert(`Time's up! You caught ${score} fish!`);
+      document.getElementById('startScreen').style.display = 'flex';
     }
-    for (let y=0.5; y<h; y+=step) {
-      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
-    }
-    ctx.restore();
+  }, 1000);
+
+  requestAnimationFrame(loop);
+}
+
+function spawnFish() {
+  fishes.push({
+    x: Math.random() * canvas.width,
+    y: canvas.height + 100,
+    vx: (Math.random() - 0.5) * 2.5,
+    size: 40 + Math.random() * 40,
+    color: ['#ff5e5e','#ffaa00','#00ffcc','#ff66aa','#66ff66'][Math.floor(Math.random()*5)],
+    bob: Math.random() * 360
+  });
+}
+
+// Controls — only top area moves the hook
+canvas.addEventListener('mousemove', e => { if(e.clientY < hookZoneHeight) hookX = e.clientX; });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  if(t.clientY < hookZoneHeight) hookX = t.clientX;
+});
+
+function createParticles(x,y) {
+  for(let i=0;i<18;i++){
+    particles.push({x,y,
+      vx:(Math.random()-0.5)*10,
+      vy:(Math.random()-0.5)*10-4,
+      life:30,
+      color:'#ffff66'
+    });
   }
+}
 
-  function drawLines() {
-    ctx.save();
-    ctx.lineCap = 'square';
-    for (const L of lines) {
-      ctx.beginPath();
-      if (L.type === 'v') {
-        ctx.strokeStyle = '#49a6ff';
-        ctx.lineWidth = 2;
-        ctx.moveTo(L.x, L.y1);
-        ctx.lineTo(L.x, L.y2);
-      } else {
-        ctx.strokeStyle = '#f8b84c';
-        ctx.lineWidth = 2;
-        ctx.moveTo(L.x1, L.y);
-        ctx.lineTo(L.x2, L.y);
-      }
-      ctx.stroke();
+function loop() {
+  ctx.fillStyle = '#0088ff';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-      // draw small intersection circles
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    }
-    ctx.restore();
-  }
-
-  function drawPreview() {
-    if (!preview) return;
-    ctx.save();
-    ctx.setLineDash([6,6]);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = preview.type === 'v' ? '#7fd1ff' : '#ffd98a';
+  // Gentle waves
+  ctx.fillStyle = 'rgba(0,150,255,0.25)';
+  for(let i=0;i<6;i++){
     ctx.beginPath();
-    if (preview.type === 'v') ctx.moveTo(preview.x, preview.y1), ctx.lineTo(preview.x, preview.y2);
-    else ctx.moveTo(preview.x1, preview.y), ctx.lineTo(preview.x2, preview.y);
-    ctx.stroke();
-
-    // origin marker
-    ctx.fillStyle = 'white';
-    const ox = preview.type === 'v' ? preview.x : preview.x1;
-    const oy = preview.type === 'v' ? preview.y1 : preview.y;
-    ctx.beginPath(); ctx.arc(ox, oy, 4, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-  }
-
-  function draw() {
-    clear();
-    drawGrid();
-    drawLines();
-    drawPreview();
-  }
-
-  // utilities
-  function getMouse(e) {
-    const rect = canvas.getBoundingClientRect();
-    if (e.touches) {
-      const t = e.touches[0] || e.changedTouches[0];
-      return { x: (t.clientX - rect.left), y: (t.clientY - rect.top) };
-    } else {
-      return { x: (e.clientX - rect.left), y: (e.clientY - rect.top) };
+    ctx.moveTo(0,120+i*50);
+    for(let x=0;x<=canvas.width;x+=30){
+      ctx.lineTo(x,120+i*50 + Math.sin(Date.now()*0.001 + x*0.01 + i)*20);
     }
+    ctx.lineTo(canvas.width,canvas.height);
+    ctx.lineTo(0,canvas.height);
+    ctx.fill();
   }
 
-  function addLineAndRecord(L) {
-    lines.push(L);
-    undoStack.push(L);
-    preview = null;
-    draw();
-  }
+  // Hook line + hook
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(hookX,0); ctx.lineTo(hookX,hookY); ctx.stroke();
+  ctx.font = '48px Arial';
+  ctx.fillText('hook', hookX-24, hookY+16);
 
-  function undo() {
-    if (undoStack.length === 0) return;
-    const last = undoStack.pop();
-    // remove last from lines (in case user modified order)
-    const idx = lines.lastIndexOf(last);
-    if (idx !== -1) lines.splice(idx,1);
-    draw();
-  }
+  if(gameRunning) hookY = Math.min(hookY + 4, canvas.height-80);
 
-  // Find intersections for vertical/horizontal creation
-  function getHorizontalYs() {
-    const h = canvas.height/DPR;
-    const ys = [0, h]; // edges
-    for (const L of lines) if (L.type === 'h') ys.push(L.y);
-    const uniq = Array.from(new Set(ys)).sort((a,b)=>a-b);
-    return uniq;
-  }
-  function getVerticalXs() {
-    const w = canvas.width/DPR;
-    const xs = [0, w];
-    for (const L of lines) if (L.type === 'v') xs.push(L.x);
-    return Array.from(new Set(xs)).sort((a,b)=>a-b);
-  }
-
-  // Given a coordinate (x,y) and a vertical xPos, compute preview vertical segment:
-  function computeVerticalSegment(xPos, startY) {
-    const ys = getHorizontalYs(); // includes edges and existing horizontals
-    // find interval containing startY
-    let i = 0;
-    while (i+1 < ys.length && !(startY >= ys[i] && startY <= ys[i+1])) i++;
-    // pick nearest intersection as origin
-    const a = ys[i], b = ys[i+1] ?? a;
-    const originY = (Math.abs(startY - a) <= Math.abs(startY - b)) ? a : b;
-    // other intersection is the opposite one in the interval
-    const otherY = originY === a ? b : a;
-    // Build segment from origin to other (so anchored at nearest intersection)
-    const seg = { type:'v', x: Math.max(0, Math.min(canvas.width/DPR, xPos)), y1: originY, y2: otherY };
-    // normalize order so y1<=y2
-    if (seg.y2 < seg.y1) [seg.y1, seg.y2] = [seg.y2, seg.y1];
-    return seg;
-  }
-
-  // Given coordinate and horizontal yPos
-  function computeHorizontalSegment(yPos, startX) {
-    const xs = getVerticalXs();
-    let i = 0;
-    while (i+1 < xs.length && !(startX >= xs[i] && startX <= xs[i+1])) i++;
-    const a = xs[i], b = xs[i+1] ?? a;
-    const originX = (Math.abs(startX - a) <= Math.abs(startX - b)) ? a : b;
-    const otherX = originX === a ? b : a;
-    const seg = { type:'h', y: Math.max(0, Math.min(canvas.height/DPR, yPos)), x1: originX, x2: otherX };
-    if (seg.x2 < seg.x1) [seg.x1, seg.x2] = [seg.x2, seg.x1];
-    return seg;
-  }
-
-  // Pointer handlers
-  function onDown(e) {
-    e.preventDefault();
-    isDown = true;
-    const p = getMouse(e);
-    start = { x: p.x, y: p.y, time: Date.now() };
-    lastPos = { ...start };
-    preview = null;
-  }
-  function onMove(e) {
-    if (!isDown) return;
-    const p = getMouse(e);
-    lastPos = { x: p.x, y: p.y };
-    const dx = lastPos.x - start.x;
-    const dy = lastPos.y - start.y;
-    // if tiny movement, don't show preview
-    if (Math.hypot(dx,dy) < 6) { preview = null; draw(); return; }
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-      // horizontal drag -> create vertical preview at x=last.x
-      preview = computeVerticalSegment(lastPos.x, start.y);
-    } else {
-      // vertical drag -> create horizontal preview at y=last.y
-      preview = computeHorizontalSegment(lastPos.y, start.x);
-    }
-    draw();
-  }
-  function onUp(e) {
-    if (!isDown) return;
-    isDown = false;
-    const p = getMouse(e);
-    lastPos = { x: p.x, y: p.y };
-    const dx = lastPos.x - start.x;
-    const dy = lastPos.y - start.y;
-    if (Math.hypot(dx,dy) < 6) {
-      preview = null;
-      draw();
+  fishes.forEach((f,i) => {
+    if(f.caught){
+      f.y -= 7;
+      f.x += (hookX - f.x)*0.12;
+      if(f.y < -100) fishes.splice(i,1);
+      ctx.font = f.size+'px Arial';
+      ctx.fillText('fish', f.x-f.size/2, f.y);
       return;
     }
-    if (Math.abs(dx) > Math.abs(dy)) {
-      // horizontal drag -> vertical line
-      const seg = computeVerticalSegment(lastPos.x, start.y);
-      addLineAndRecord(seg);
-    } else {
-      const seg = computeHorizontalSegment(lastPos.y, start.x);
-      addLineAndRecord(seg);
+
+    f.x += f.vx;
+    f.y += Math.sin(Date.now()*0.001 + f.bob)*0.6 - 0.8;
+    if(f.x < -100 || f.x > canvas.width+100) f.vx *= -1;
+    if(f.y < 180) f.y = canvas.height + 100;
+
+    // Collision
+    if(Math.hypot(f.x-hookX, f.y-hookY) < f.size && hookY > 200){
+      f.caught = true;
+      score++;
+      document.getElementById('score').textContent = score;
+      createParticles(f.x,f.y);
+      setTimeout(spawnFish, 600);
     }
-  }
 
-  // attach mouse & touch
-  canvas.addEventListener('mousedown', onDown);
-  window.addEventListener('mousemove', onMove, { passive:false });
-  window.addEventListener('mouseup', onUp);
-
-  canvas.addEventListener('touchstart', onDown, {passive:false});
-  window.addEventListener('touchmove', onMove, {passive:false});
-  window.addEventListener('touchend', onUp);
-
-  // Undo button
-  document.getElementById('undo').addEventListener('click', undo);
-
-  // helpful keyboard shortcuts (u to undo, c to clear all)
-  window.addEventListener('keydown', (ev) => {
-    if (ev.key === 'u' || ev.key === 'U') undo();
-    if (ev.key === 'c' || ev.key === 'C') {
-      lines.length = 0; undoStack.length = 0; preview = null; draw();
-    }
+    // Draw fish (emoji with color tint)
+    ctx.font = f.size+'px Arial';
+    ctx.fillStyle = f.color;
+    ctx.fillText('fish', f.x-f.size/2, f.y);
+    ctx.fillStyle = 'white';
+    ctx.fillText('fish', f.x-f.size/2+3, f.y-3);
   });
 
-  // initial draw
-  draw();
+  // Sparkles
+  particles = particles.filter(p => {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.3; p.life--;
+    ctx.globalAlpha = p.life/30;
+    ctx.fillStyle = p.color;
+    ctx.fillText('sparkle', p.x, p.y);
+    return p.life > 0;
+  });
+  ctx.globalAlpha = 1;
 
-  // expose some debug + API on window (optional)
-  window._lineapp = {
-    getLines: () => JSON.parse(JSON.stringify(lines)),
-    clear: () => { lines.length=0; undoStack.length=0; draw(); },
-  };
+  if(gameRunning) requestAnimationFrame(loop);
+}
 
-})();
+window.addEventListener('resize', () => {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+});
 </script>
 </body>
 </html>
