@@ -4,21 +4,59 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Draw X/Y/Arc — Fully Working 2025</title>
-<style>
-  :root{--bg:#0b1220;--panel:rgba(12,18,28,0.95);--fg:#e6eef6;--muted:#9fb3c9;--accent:#44d7b6;--x:#6ee7b7;--arc:#ffd166}
-  *,*::before,*::after{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;overflow:hidden}
-  canvas{display:block;width:100vw;height:100vh;background:var(--bg);touch-action:none;cursor:crosshair}
-  #toolbar{position:fixed;top:12px;left:12px;z-index:999;background:var(--panel);padding:12px;border-radius:14px;
-    display:flex;gap:10px;flex-wrap:wrap;align-items:center;box-shadow:0 8px 32px rgba(0,0,0,0.7);backdrop-filter:blur(12px);
-    pointer-events: auto;}
-  #toolbar * {pointer-events: auto !important;}
-  button{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);color:var(--fg);padding:10px 16px;
-    border-radius:10px;cursor:pointer;font:inherit;transition:all .2s; pointer-events: auto !important; position: relative; z-index: 1000;}
-  button:hover{background:rgba(255,255,255,0.25)}
-  button.active{background:rgba(68,215,182,0.3);border-color:var(--accent);box-shadow:0 0 12px rgba(68,215,182,0.5)}
-  .label{color:var(--muted);font-size:14px; pointer-events: none;}
-</style>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let dpr = window.devicePixelRatio || 1;
+
+// ... [keep all your existing resize(), pos(), draw(), etc. functions unchanged] ...
+
+// DEBUG: Add console logging + alert for testing
+console.log('Script loaded, initializing buttons...');
+
+const els = {
+  x: document.getElementById('xBtn'),
+  y: document.getElementById('yBtn'),
+  arc: document.getElementById('arcBtn'),
+  mode: document.getElementById('modeText'),
+  undo: document.getElementById('undoBtn'),
+  clear: document.getElementById('clearBtn'),
+  jpeg: document.getElementById('jpegBtn'),
+  svg: document.getElementById('svgBtn')
+};
+
+let mode = 'idle';
+
+// Test elements exist
+console.log('Elements found:', Object.keys(els).map(k => els[k] ? 'OK' : 'MISSING'));
+
+function setMode(m) {
+  console.log('setMode called with:', m);  // ← DEBUG
+  mode = m;
+  els.mode.textContent = m === 'idle' ? 'idle' : m.toUpperCase();
+  els.x.classList.toggle('active', m==='x');
+  els.y.classList.toggle('active', m==='y');
+  els.arc.classList.toggle('active', m==='arc');
+  preview = null; arcStage = null; draw();
+}
+
+// FIXED EVENT LISTENERS with DEBUG
+els.x.addEventListener('click', (e) => {
+  console.log('X button clicked!');  // ← DEBUG
+  setMode(mode==='x' ? 'idle' : 'x');
+});
+els.y.addEventListener('click', (e) => {
+  console.log('Y button clicked!');
+  setMode(mode==='y' ? 'idle' : 'y');
+});
+els.arc.addEventListener('click', (e) => {
+  console.log('Arc button clicked!');
+  setMode(mode==='arc' ? 'idle' : 'arc');
+});
+
+// ... [keep rest of your script unchanged] ...
+</script>
+
 
 </head>
 <body>
