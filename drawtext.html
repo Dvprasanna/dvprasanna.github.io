@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Random Hype Text Canvas</title>
+<style>
+  body { margin:0; overflow:hidden; background:#000; }
+  canvas { display:block; }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<script>
+// List of words and fonts
+const words = [
+  "WOW", "NICE", "GREAT", "AWESOME", "EPIC", "COOL", "PERFECT", 
+  "INSANE", "LEGENDS", "FIRE", "LIT", "DOPE", "CRAZY", "WILD",
+  "AMAZING", "BRILLIANT", "FANTASTIC", "OUTSTANDING", "YES!"
+];
+
+const fonts = [
+  "Arial Black", "Impact", "Comic Sans MS", "Courier New", 
+  "Georgia", "Verdana", "Trebuchet MS", "Helvetica", 
+  "Times New Roman", "Pacifico", "Lobster", "Bebas Neue",
+  "Montserrat", "Oswald", "Roboto", "Dancing Script"
+];
+
+// Make sure custom fonts load (optional, fallback works anyway)
+const fontLink = document.createElement('link');
+fontLink.rel = 'stylesheet';
+fontLink.href = 'https://fonts.googleapis.com/css2?family=Pacifico&family=Lobster&family=Bebas+Neue&family=Montserrat&family=Oswald&family=Roboto&family=Dancing+Script:wght@700&display=swap';
+document.head.appendChild(fontLink);
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// Random helpers
+function rand(min, max) { return Math.random() * (max - min) + min; }
+function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function randomColor() {
+  return `hsl(${randInt(0,360)}, ${randInt(70,100)}%, ${randInt(40,80)}%)`;
+}
+function randomWord() { return words[randInt(0, words.length)]; }
+function randomFont() { return fonts[randInt(0, fonts.length)]; }
+
+let texts = [];
+
+function createText() {
+  const size = rand(40, 200);
+  texts.push({
+    text: randomWord(),
+    x: rand(0, canvas.width),
+    y: rand(0, canvas.height),
+    size: size,
+    font: `${randInt(400,900)} ${size}px ${randomFont()}`,
+    color: randomColor(),
+    bgColor: randomColor(),
+    rotation: rand(-Math.PI/4, Math.PI/4),
+    shape: ['circle', 'rect', 'triangle', 'star'][randInt(0,3)],
+    alpha: rand(0.3, 0.9),
+    vx: rand(-1, 1),
+    vy: rand(-1, 1),
+    life: randInt(120, 400) // frames to live
+  });
+}
+
+// Draw shapes behind text
+function drawShape(item) {
+  ctx.globalAlpha = item.alpha * 0.5;
+  ctx.fillStyle = item.bgColor;
+  ctx.save();
+  ctx.translate(item.x, item.y);
+  ctx.rotate(item.rotation);
+
+  switch(item.shape) {
+    case 'circle':
+      ctx.beginPath();
+      ctx.arc(0, 0, item.size * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'rect':
+      ctx.fillRect(-item.size, -item.size * 0.6, item.size * 2, item.size * 1.2);
+      break;
+    case 'triangle':
+      ctx.beginPath();
+      ctx.moveTo(0, -item.size);
+      ctx.lineTo(-item.size * 0.9, item.size * 0.8);
+      ctx.lineTo(item.size * 0.9, item.size * 0.8);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'star':
+      const spikes = 5;
+      const outer = item.size;
+      const inner = item.size * 0.5;
+      ctx.beginPath();
+      for (let i = 0; i < spikes * 2; i++) {
+        const radius = i % 2 === 0 ? outer : inner;
+        const angle = i * Math.PI / spikes;
+        ctx.lineTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
+      }
+      ctx.closePath();
+      ctx.fill();
+      break;
+  }
+  ctx.restore();
+}
+
+function draw() {
+  // Fade effect (optional semi-transparent overlay for trail)
+  ctx.fillStyle = 'rgba(0,0,0,0.05)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Occasionally create new text
+  if (Math.random() < 0.15) createText(); // ~9 new texts per second at 60fps
+
+  for (let i = texts.length - 1; i >= 0; i--) {
+    const t = texts[i];
+    
+    // Update position (floating effect)
+    t.x += t.vx;
+    t.y += t.vy;
+    
+    // Bounce off walls
+    if (t.x < 0 || t.x > canvas.width) t.vx *= -1;
+    if (t.y < 0 || t.y > canvas.height) t.vy *= -1;
+
+    // Draw background shape
+    drawShape(t);
+
+    // Draw text
+    ctx.globalAlpha = t.alpha;
+    ctx.fillStyle = t.color;
+    ctx.font = t.font;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.save();
+    ctx.translate(t.x, t.y);
+    ctx.rotate(t.rotation);
+    ctx.fillText(t.text, 0, 0);
+    ctx.restore();
+
+    // Age and remove
+    t.life--;
+    if (t.life <= 0) {
+      texts.splice(i, 1);
+    }
+  }
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+
+</body>
+</html>
