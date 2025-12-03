@@ -3,47 +3,60 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Lines & Arcs — Fixed Buttons + Undo + Export</title>
+<title>Draw: X / Y / Arc — Working Build</title>
 <style>
-  :root{--bg:#0b1220;--fg:#e6eef6;--muted:#8aa0b8;--accent:#44d7b6}
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto}
-  #toolbar{position:fixed;left:12px;top:12px;z-index:30;background:rgba(10,14,20,0.86);padding:8px;border-radius:10px;display:flex;gap:8px;align-items:center;backdrop-filter:blur(6px)}
-  .btn{background:transparent;color:var(--fg);border:1px solid rgba(255,255,255,0.04);padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px}
-  .btn.active{box-shadow:0 0 0 2px rgba(68,215,182,0.14);border-color:rgba(68,215,182,0.28)}
-  #modeLabel{font-size:13px;color:var(--muted);margin-left:6px}
-  canvas{display:block;width:100vw;height:100vh;touch-action:none;cursor:crosshair}
-  .hint{font-size:12px;color:var(--muted)}
+  :root{
+    --bg:#0b1220;
+    --panel: rgba(12,18,28,0.95);
+    --fg:#e6eef6;
+    --muted:#9fb3c9;
+    --accent:#44d7b6;
+    --xline:#6ee7b7;
+    --arc:#ffd166;
+  }
+  html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto;background:var(--bg);color:var(--fg)}
+  #toolbar{
+    position:fixed; left:12px; top:12px; z-index:50;
+    background:var(--panel); padding:8px; border-radius:10px; display:flex; gap:8px; align-items:center;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+  }
+  button.btn{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--fg);padding:8px 10px;border-radius:8px;cursor:pointer}
+  button.btn.active{background:linear-gradient(90deg, rgba(68,215,182,0.12), rgba(68,215,182,0.06));outline:2px solid rgba(68,215,182,0.12)}
+  .label{font-size:13px;color:var(--muted)}
+  canvas{display:block; width:100vw; height:100vh; touch-action:none; cursor:crosshair}
+  /* ensure toolbar doesn't let clicks fall through to canvas */
+  #toolbar *{pointer-events:auto}
 </style>
 </head>
 <body>
-<div id="toolbar">
-  <button id="xBtn" class="btn">X Line</button>
-  <button id="yBtn" class="btn">Y Line</button>
-  <button id="arcBtn" class="btn">Arc</button>
-  <div id="modeLabel" class="hint">Mode: <strong id="mode">idle</strong></div>
-  <div style="width:8px"></div>
-  <button id="undoBtn" class="btn">Undo</button>
-  <button id="clearBtn" class="btn">Clear</button>
-  <button id="jpegBtn" class="btn">Export JPEG</button>
-  <button id="svgBtn" class="btn">Export SVG</button>
-</div>
+  <div id="toolbar">
+    <button id="xBtn" class="btn">X Line</button>
+    <button id="yBtn" class="btn">Y Line</button>
+    <button id="arcBtn" class="btn">Arc</button>
+    <div class="label">Mode: <strong id="modeText">idle</strong></div>
+    <div style="width:10px"></div>
+    <button id="undoBtn" class="btn">Undo</button>
+    <button id="clearBtn" class="btn">Clear</button>
+    <button id="jpegBtn" class="btn">Export JPEG</button>
+    <button id="svgBtn" class="btn">Export SVG</button>
+  </div>
 
-<canvas id="c"></canvas>
+  <canvas id="c" aria-label="drawing canvas"></canvas>
 
 <script>
-/* =========================
-   Lines & Arcs — working
-   - X Line / Y Line / Arc modes
-   - Arc center movable before finalize
-   - double-tap / dblclick undo
+/* Working single-file drawing app
+   - Buttons reliably switch mode
+   - X Line (horizontal), Y Line (vertical), Arc (two-step: chord then move center)
+   - Move arc center by grabbing white handle
+   - Double-tap / dblclick = undo
    - Export JPEG / SVG
-   ========================= */
+*/
 
 const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', { alpha: false }); // opaque canvas for stable JPEG
 let DPR = window.devicePixelRatio || 1;
 
-function resize(){
+function resizeCanvas(){
   DPR = window.devicePixelRatio || 1;
   canvas.width = Math.round(innerWidth * DPR);
   canvas.height = Math.round(innerHeight * DPR);
@@ -52,186 +65,179 @@ function resize(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   draw();
 }
-addEventListener('resize', resize);
-resize();
+addEventListener('resize', resizeCanvas, { passive: true });
+resizeCanvas();
 
 // UI elements
 const xBtn = document.getElementById('xBtn');
 const yBtn = document.getElementById('yBtn');
 const arcBtn = document.getElementById('arcBtn');
-const modeLabel = document.getElementById('mode');
+const modeText = document.getElementById('modeText');
 const undoBtn = document.getElementById('undoBtn');
 const clearBtn = document.getElementById('clearBtn');
 const jpegBtn = document.getElementById('jpegBtn');
 const svgBtn = document.getElementById('svgBtn');
 
-// state
 let mode = 'idle'; // 'idle' | 'x' | 'y' | 'arc'
-let shapes = [];   // finalized shapes
-let history = [];  // undo snapshots (store clones)
-let pointerDown = false;
-let activePointerId = null;
-let startPt = null;
-let preview = null; // preview object varies by mode
-let arcTemp = null; // holds chord during arc creation
-let lastTapTime = 0;
-
-// helpers
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-function ptFromEvent(e){ return {x: e.clientX, y: e.clientY}; }
-function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
-function copy(obj){ return JSON.parse(JSON.stringify(obj)); }
-function pushHistory(){ history.push(copy(shapes)); if(history.length>60) history.shift(); }
-function undo(){ if(history.length) shapes = history.pop(); else shapes.pop(); draw(); }
-
-// mode setter (fixed bug: ensure UI updates)
 function setMode(m){
   mode = m;
-  modeLabel.textContent = m==='idle' ? 'idle' : (m==='x' ? 'X Line' : (m==='y' ? 'Y Line' : 'Arc'));
+  modeText.textContent = m === 'idle' ? 'idle' : (m==='x'?'X Line':(m==='y'?'Y Line':'Arc'));
   [xBtn,yBtn,arcBtn].forEach(b=>b.classList.remove('active'));
   if(m==='x') xBtn.classList.add('active');
   if(m==='y') yBtn.classList.add('active');
   if(m==='arc') arcBtn.classList.add('active');
-  // clear previews when switching
-  preview = null; arcTemp = null; draw();
+  // cancel active previews when switching
+  preview = null; arcStage = null; draw();
 }
 xBtn.addEventListener('click', ()=> setMode(mode==='x' ? 'idle' : 'x'));
 yBtn.addEventListener('click', ()=> setMode(mode==='y' ? 'idle' : 'y'));
 arcBtn.addEventListener('click', ()=> setMode(mode==='arc' ? 'idle' : 'arc'));
+
 undoBtn.addEventListener('click', undo);
-clearBtn.addEventListener('click', ()=>{ shapes=[]; history=[]; draw(); });
+clearBtn.addEventListener('click', ()=>{ shapes=[]; history=[]; preview=null; arcStage=null; draw(); });
 
-// Export JPEG
-jpegBtn.addEventListener('click', ()=>{
-  // draw full final view into a temp canvas at DPR=1 for good JPEG
-  const tmp = document.createElement('canvas');
-  tmp.width = innerWidth; tmp.height = innerHeight;
-  const tctx = tmp.getContext('2d');
-  // background
-  tctx.fillStyle = '#0b1220'; tctx.fillRect(0,0,tmp.width,tmp.height);
-  // draw shapes (same style)
-  drawShapesToContext(tctx);
-  const link = document.createElement('a');
-  link.download = 'drawing.jpg';
-  link.href = tmp.toDataURL('image/jpeg', 0.95);
-  link.click();
-});
+// DATA
+let shapes = []; // finalized shapes
+/*
+ shape formats:
+  - {type:'line', x1,y1,x2,y2, orientation:'x'|'y'}
+  - {type:'arc', p1:{x,y}, p2:{x,y}, center:{x,y}, r, startAngle, endAngle, cw}
+*/
+let history = []; // snapshots for undo (deep clones), limited
 
-// Export SVG
-svgBtn.addEventListener('click', ()=>{
-  const w = innerWidth, h = innerHeight;
-  const parts = [];
-  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`);
-  parts.push(`<rect width="100%" height="100%" fill="#0b1220"/>`);
-  for(const s of shapes){
-    if(s.type==='line'){
-      parts.push(`<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="#6ee7b7" stroke-width="3" stroke-linecap="round"/>`);
-    } else if(s.type==='arc'){
-      const x1 = s.center.x + s.r * Math.cos(s.startAngle);
-      const y1 = s.center.y + s.r * Math.sin(s.startAngle);
-      const x2 = s.center.x + s.r * Math.cos(s.endAngle);
-      const y2 = s.center.y + s.r * Math.sin(s.endAngle);
-      let delta = s.endAngle - s.startAngle;
-      if(!s.cw && delta < 0) delta += Math.PI*2;
-      if(s.cw && delta > 0) delta -= Math.PI*2;
-      const large = Math.abs(delta) > Math.PI ? 1 : 0;
-      const sweep = s.cw ? 1 : 0;
-      parts.push(`<path d="M ${x1} ${y1} A ${s.r} ${s.r} 0 ${large} ${s.cw?1:0} ${x2} ${y2}" fill="none" stroke="#ffd166" stroke-width="3" stroke-linecap="round"/>`);
-    }
-  }
-  parts.push('</svg>');
-  const blob = new Blob([parts.join('\n')], {type:'image/svg+xml'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'drawing.svg'; a.click();
-  URL.revokeObjectURL(url);
-});
-
-// drawing utils
-function drawGridToContext(c){
-  c.save();
-  c.globalAlpha = 0.06;
-  c.fillStyle = '#fff';
-  for(let x=0;x<innerWidth;x+=24) c.fillRect(x,0,1,innerHeight);
-  for(let y=0;y<innerHeight;y+=24) c.fillRect(0,y,innerWidth,1);
-  c.restore();
+function pushHistory(){
+  history.push(JSON.parse(JSON.stringify(shapes)));
+  if(history.length>80) history.shift();
 }
-function drawShapesToContext(c){
-  // shapes on provided context
-  for(const s of shapes){
-    if(s.type==='line'){
-      c.beginPath(); c.moveTo(s.x1,s.y1); c.lineTo(s.x2,s.y2); c.lineWidth = 3; c.strokeStyle = '#6ee7b7'; c.stroke();
-    } else if(s.type==='arc'){
-      c.beginPath(); c.arc(s.center.x,s.center.y,s.r,s.startAngle,s.endAngle, s.cw===false); c.lineWidth=3; c.strokeStyle='#ffd166'; c.stroke();
-      // center handle
-      c.fillStyle = '#fff'; c.beginPath(); c.arc(s.center.x, s.center.y, 5,0,Math.PI*2); c.fill();
-    }
+function undo(){
+  if(history.length>0){
+    shapes = history.pop();
+  } else {
+    shapes.pop();
   }
+  preview = null; arcStage = null; draw();
+}
+
+// PREVIEW state during drawing
+let preview = null; // object varies by type
+let arcStage = null; // null or {phase:1|2, chord:{p1,p2}, tempCenter?}
+
+// POINTER state
+let activePointerId = null;
+let isPointerDown = false;
+let lastTap = 0;
+
+// helpers
+function p(e){ return {x: e.clientX, y: e.clientY}; }
+function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+function angleBetween(c, p){ return Math.atan2(p.y-c.y, p.x-c.x); }
+
+// DRAWING
+function drawBackground(context){
+  // fill background (not black) so JPEG visible
+  context.fillStyle = '#0b1220';
+  context.fillRect(0,0,innerWidth,innerHeight);
+  // faint grid
+  context.save();
+  context.globalAlpha = 0.06;
+  context.fillStyle = '#fff';
+  for(let x=0;x<innerWidth;x+=24) context.fillRect(x,0,1,innerHeight);
+  for(let y=0;y<innerHeight;y+=24) context.fillRect(0,y,innerWidth,1);
+  context.restore();
 }
 
 function draw(){
-  // final canvas
   ctx.clearRect(0,0,innerWidth,innerHeight);
-  drawGridToContext(ctx);
-  drawShapesToContext(ctx);
+  drawBackground(ctx);
 
-  // preview rendering
+  // draw shapes
+  for(const s of shapes){
+    if(s.type === 'line'){
+      ctx.strokeStyle = '#6ee7b7';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2);
+      ctx.stroke();
+    } else if(s.type === 'arc'){
+      ctx.strokeStyle = '#ffd166';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(s.center.x, s.center.y, s.r, s.startAngle, s.endAngle, s.cw===false);
+      ctx.stroke();
+      // center handle
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(s.center.x, s.center.y, 5, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
+  // preview
   if(preview){
     ctx.save();
-    if(preview.type==='linePreview'){
+    if(preview.type === 'linePreview'){
       ctx.setLineDash([8,6]); ctx.lineWidth = 2; ctx.strokeStyle = '#7dd3fc';
       ctx.beginPath(); ctx.moveTo(preview.x1, preview.y1); ctx.lineTo(preview.x2, preview.y2); ctx.stroke();
-    } else if(preview.type==='arcChord'){
+    } else if(preview.type === 'arcChord'){
       ctx.setLineDash([8,6]); ctx.lineWidth = 2; ctx.strokeStyle = '#f472b6';
       ctx.beginPath(); ctx.moveTo(preview.p1.x, preview.p1.y); ctx.lineTo(preview.p2.x, preview.p2.y); ctx.stroke();
-    } else if(preview.type==='arcAdjust'){
+    } else if(preview.type === 'arcAdjust'){
       ctx.lineWidth = 3; ctx.strokeStyle = '#ffd166';
-      ctx.beginPath(); ctx.arc(preview.center.x, preview.center.y, preview.r, preview.startAngle, preview.endAngle, preview.cw===false); ctx.stroke();
-      // center handle
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(preview.center.x, preview.center.y, 6,0,Math.PI*2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(preview.center.x, preview.center.y, preview.r, preview.startAngle, preview.endAngle, preview.cw===false);
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(preview.center.x, preview.center.y, 6, 0, Math.PI*2); ctx.fill();
     }
     ctx.restore();
   }
 }
 
-// pointer logic: single handler for pointerdown/move/up
+// HIT TEST for arc center handle
+function hitCenter(p){
+  for(let i=shapes.length-1;i>=0;i--){
+    const s = shapes[i];
+    if(s.type === 'arc'){
+      if(Math.hypot(p.x - s.center.x, p.y - s.center.y) <= 10) return i;
+    }
+  }
+  return -1;
+}
+
+// POINTER EVENTS (single set)
 canvas.addEventListener('pointerdown', (ev)=>{
   ev.preventDefault();
-  // ignore if another pointer owns it
-  if(pointerDown) return;
-  pointerDown = true; activePointerId = ev.pointerId;
+  // if toolbar button clicked, don't start drawing (toolbar is separate element so this shouldn't fire)
+  if(activePointerId !== null) return; // ignore multi-finger
+  activePointerId = ev.pointerId;
   canvas.setPointerCapture(activePointerId);
-  const p = ptFromEvent(ev);
+  isPointerDown = true;
 
-  // double-tap detection (touch) and dblclick fallback
+  const pos = p(ev);
+
+  // double-tap detection for touch (or fast clicks)
   const now = performance.now();
-  if(now - lastTapTime < 350){
-    undo(); lastTapTime = 0;
-    // consume event
-    pointerDown = false;
+  if(now - lastTap < 350){
+    undo();
+    lastTap = 0;
+    // consume
+    isPointerDown = false;
     try{ canvas.releasePointerCapture(activePointerId); }catch(e){}
     activePointerId = null;
     return;
   }
-  lastTapTime = now;
+  lastTap = now;
 
   if(mode === 'x' || mode === 'y'){
-    startPt = p;
-    if(mode === 'x'){
-      preview = {type:'linePreview', orientation:'x', x1:p.x, y1:p.y, x2:p.x, y2:p.y};
-    } else {
-      preview = {type:'linePreview', orientation:'y', x1:p.x, y1:p.y, x2:p.x, y2:p.y};
-    }
+    // start preview line
+    preview = { type:'linePreview', x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y, orientation: mode };
   } else if(mode === 'arc'){
-    // begin chord (phase 1)
-    startPt = p;
-    preview = {type:'arcChord', p1: p, p2: p};
-  } else { // idle: maybe begin moving an existing arc center
-    const hit = hitTestCenter(p);
-    if(hit !== null){
-      // start moving center of shape index=hit
-      startPt = p;
-      const s = shapes[hit];
-      preview = {type:'arcAdjust', movingIndex: hit, center: {...s.center}, startOffset: {x: p.x - s.center.x, y: p.y - s.center.y}, r: s.r, startAngle: s.startAngle, endAngle: s.endAngle, cw: s.cw};
+    // start chord (phase 1)
+    arcStage = { phase:1, chord:{ p1: pos, p2: pos } };
+    preview = { type:'arcChord', p1: arcStage.chord.p1, p2: arcStage.chord.p2 };
+  } else { // idle - maybe begin moving arc center
+    const hit = hitCenter(pos);
+    if(hit >= 0){
+      // start moving arc center for shape index = hit
+      preview = { type:'arcAdjust', movingIndex: hit, center: { ...shapes[hit].center }, startOffset: { x: pos.x - shapes[hit].center.x, y: pos.y - shapes[hit].center.y }, r: shapes[hit].r, startAngle: shapes[hit].startAngle, endAngle: shapes[hit].endAngle, cw: shapes[hit].cw };
     } else {
       preview = null;
     }
@@ -240,167 +246,201 @@ canvas.addEventListener('pointerdown', (ev)=>{
 });
 
 canvas.addEventListener('pointermove', (ev)=>{
-  if(!pointerDown || ev.pointerId !== activePointerId) return;
-  const p = ptFromEvent(ev);
+  if(!isPointerDown || ev.pointerId !== activePointerId) return;
+  const pos = p(ev);
 
-  if(!preview) return;
-  if(preview.type === 'linePreview'){
+  if(preview && preview.type === 'linePreview'){
     if(preview.orientation === 'x'){
-      preview.x2 = p.x; preview.y2 = preview.y1;
+      preview.x2 = pos.x; preview.y2 = preview.y1;
     } else {
-      preview.x2 = preview.x1; preview.y2 = p.y;
+      preview.x2 = preview.x1; preview.y2 = pos.y;
     }
-  } else if(preview.type === 'arcChord'){
-    preview.p2 = p;
-  } else if(preview.type === 'arcAdjust'){
-    // move the center while keeping chord endpoints same; if moving existing arc: recompute r/angles
+  } else if(preview && preview.type === 'arcChord' && arcStage && arcStage.phase === 1){
+    arcStage.chord.p2 = pos;
+    preview.p2 = pos;
+  } else if(preview && preview.type === 'arcAdjust'){
     if(preview.movingIndex !== undefined && preview.movingIndex !== null){
+      // moving existing arc center
+      preview.center.x = pos.x - preview.startOffset.x;
+      preview.center.y = pos.y - preview.startOffset.y;
       const s = shapes[preview.movingIndex];
-      preview.center.x = p.x - preview.startOffset.x;
-      preview.center.y = p.y - preview.startOffset.y;
-      // recompute r and angles from stored s.p1 / s.p2
-      const p1 = s.p1, p2 = s.p2;
-      preview.r = Math.hypot(preview.center.x - p1.x, preview.center.y - p1.y);
-      preview.startAngle = Math.atan2(p1.y - preview.center.y, p1.x - preview.center.x);
-      preview.endAngle   = Math.atan2(p2.y - preview.center.y, p2.x - preview.center.x);
-    } else if(arcTemp){
-      // adjusting newly created arc center before finalize
-      preview.center.x = p.x; preview.center.y = p.y;
-      // recompute r/angles based on arcTemp.p1/ p2
-      preview.r = Math.hypot(preview.center.x - arcTemp.p1.x, preview.center.y - arcTemp.p1.y);
-      preview.startAngle = Math.atan2(arcTemp.p1.y - preview.center.y, arcTemp.p1.x - preview.center.x);
-      preview.endAngle   = Math.atan2(arcTemp.p2.y - preview.center.y, arcTemp.p2.x - preview.center.x);
+      // recompute r and angles
+      preview.r = Math.hypot(preview.center.x - s.p1.x, preview.center.y - s.p1.y);
+      preview.startAngle = Math.atan2(s.p1.y - preview.center.y, s.p1.x - preview.center.x);
+      preview.endAngle   = Math.atan2(s.p2.y - preview.center.y, s.p2.x - preview.center.x);
+    } else if(arcStage && arcStage.phase === 2 && arcStage.chord){
+      // adjusting center for new arc
+      preview.center.x = pos.x;
+      preview.center.y = pos.y;
+      preview.r = Math.hypot(preview.center.x - arcStage.chord.p1.x, preview.center.y - arcStage.chord.p1.y);
+      preview.startAngle = Math.atan2(arcStage.chord.p1.y - preview.center.y, arcStage.chord.p1.x - preview.center.x);
+      preview.endAngle   = Math.atan2(arcStage.chord.p2.y - preview.center.y, arcStage.chord.p2.x - preview.center.x);
     }
   }
   draw();
 });
 
 canvas.addEventListener('pointerup', (ev)=>{
-  if(!pointerDown || ev.pointerId !== activePointerId) return;
-  pointerDown = false;
-  try{ canvas.releasePointerCapture(activePointerId); }catch(e){}
-  activePointerId = null;
-  const p = ptFromEvent(ev);
-
+  if(ev.pointerId !== activePointerId) return;
+  const pos = p(ev);
+  // finalize behavior depends on preview state
   if(preview && preview.type === 'linePreview'){
-    // finalize the horizontal/vertical line
+    // finalize line
     pushHistory();
     const s = { type:'line', orientation: preview.orientation, x1: preview.x1, y1: preview.y1, x2: preview.x2, y2: preview.y2 };
     shapes.push(s);
-    preview = null; startPt = null;
-  } else if(preview && preview.type === 'arcChord'){
-    // finish chord; if too tiny, cancel. Otherwise go to arc adjust phase
-    const p1 = preview.p1, p2 = preview.p2;
-    if(dist(p1,p2) < 6){ preview = null; startPt = null; draw(); return; }
-    // compute a nice default center (midpoint + perpendicular offset)
-    const mid = {x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2};
-    const dx = p2.x - p1.x, dy = p2.y - p1.y;
-    const len = Math.max(1, Math.hypot(dx,dy));
-    const ux = -dy/len, uy = dx/len;
-    const defaultOffset = Math.min(200, Math.max(24, len/3));
-    const center = {x: mid.x + ux*defaultOffset, y: mid.y + uy*defaultOffset};
-    const r = Math.hypot(center.x - p1.x, center.y - p1.y);
-    const a1 = Math.atan2(p1.y - center.y, p1.x - center.x);
-    const a2 = Math.atan2(p2.y - center.y, p2.x - center.x);
-    arcTemp = {p1: {...p1}, p2: {...p2}, center: {...center}, r, startAngle: a1, endAngle: a2, cw:false};
-    // enter adjust mode (user can drag the center handle to reposition)
-    preview = { type:'arcAdjust', center: {...center}, r, startAngle: a1, endAngle: a2, cw:false, movingIndex: null };
-    // set mode idle to avoid starting new shapes
-    setMode('idle');
+    preview = null;
+  } else if(preview && preview.type === 'arcChord' && arcStage && arcStage.phase === 1){
+    // move to phase 2: create default center and allow adjust
+    const p1 = arcStage.chord.p1, p2 = arcStage.chord.p2;
+    if(dist(p1,p2) < 6){
+      // ignore tiny chord
+      preview = null; arcStage = null;
+    } else {
+      // default center: midpoint + perpendicular offset
+      const mid = { x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2 };
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      const len = Math.max(1, Math.hypot(dx,dy));
+      const ux = -dy/len, uy = dx/len;
+      const offset = Math.min(200, Math.max(24, len/3));
+      const center = { x: mid.x + ux*offset, y: mid.y + uy*offset };
+      const r = Math.hypot(center.x - p1.x, center.y - p1.y);
+      const a1 = angleBetween(center, p1);
+      const a2 = angleBetween(center, p2);
+      // set up stage 2
+      arcStage.phase = 2;
+      arcStage.center = center;
+      preview = { type:'arcAdjust', center: { ...center }, r, startAngle: a1, endAngle: a2, cw: false, movingIndex:null };
+      // set mode to idle so further clicks don't start new shapes accidentally
+      setMode('idle');
+    }
   } else if(preview && preview.type === 'arcAdjust'){
-    // finalize either a move of an existing arc center OR creation of a new arc (if arcTemp exists)
-    if(preview.movingIndex !== null && preview.movingIndex !== undefined){
-      // commit move for existing arc
+    if(preview.movingIndex !== undefined && preview.movingIndex !== null){
+      // commit moving existing arc center
       pushHistory();
       const idx = preview.movingIndex;
-      shapes[idx].center = {x: preview.center.x, y: preview.center.y};
+      shapes[idx].center = { x: preview.center.x, y: preview.center.y };
       shapes[idx].r = preview.r;
       shapes[idx].startAngle = preview.startAngle;
       shapes[idx].endAngle = preview.endAngle;
       preview = null;
-    } else if(arcTemp){
-      // finalize the new arc using preview.center
+    } else if(arcStage && arcStage.phase === 2){
+      // finalize new arc
       pushHistory();
       const newArc = {
-        type:'arc',
-        p1: {...arcTemp.p1},
-        p2: {...arcTemp.p2},
-        center: {...preview.center},
+        type: 'arc',
+        p1: { ...arcStage.chord.p1 },
+        p2: { ...arcStage.chord.p2 },
+        center: { ...preview.center },
         r: preview.r,
         startAngle: preview.startAngle,
         endAngle: preview.endAngle,
         cw: preview.cw
       };
       shapes.push(newArc);
-      arcTemp = null;
-      preview = null;
+      preview = null; arcStage = null;
     } else {
       preview = null;
     }
   } else {
-    // nothing to finalize
+    // nothing finalized
     preview = null;
   }
 
+  // reset pointer state
+  isPointerDown = false;
+  try{ canvas.releasePointerCapture(activePointerId); }catch(e){}
+  activePointerId = null;
   draw();
 });
 
-// dblclick fallback (desktop) and touch handled above by double-tap detection
+canvas.addEventListener('pointercancel', ()=>{
+  isPointerDown = false; activePointerId = null; preview = null; arcStage = null; draw();
+});
+
+// dblclick fallback
 canvas.addEventListener('dblclick', (ev)=> { undo(); });
 
-// clicking near center handle finalizes a pending arc center quickly (optional convenience)
+// click to finalize arc quickly if clicking near center handle while arcStage active
 canvas.addEventListener('click', (ev)=>{
-  if(arcTemp && preview && preview.type === 'arcAdjust'){
-    const p = ptFromEvent(ev);
-    const d = Math.hypot(p.x - preview.center.x, p.y - preview.center.y);
+  if(arcStage && arcStage.phase === 2 && preview && preview.type === 'arcAdjust'){
+    const pos = p(ev);
+    const d = Math.hypot(pos.x - preview.center.x, pos.y - preview.center.y);
     if(d < 14){
-      // commit arc
+      // commit
       pushHistory();
-      const a = {
-        type:'arc',
-        p1: {...arcTemp.p1},
-        p2: {...arcTemp.p2},
-        center: {...preview.center},
+      const newArc = {
+        type: 'arc',
+        p1: { ...arcStage.chord.p1 },
+        p2: { ...arcStage.chord.p2 },
+        center: { ...preview.center },
         r: preview.r,
         startAngle: preview.startAngle,
         endAngle: preview.endAngle,
         cw: preview.cw
       };
-      shapes.push(a);
-      arcTemp = null; preview = null; draw();
+      shapes.push(newArc);
+      preview = null; arcStage = null; draw();
     }
   }
 });
 
-// hit test for arc centers (returns index or null)
-function hitTestCenter(p){
-  for(let i = shapes.length-1; i>=0; i--){
-    const s = shapes[i];
-    if(s.type === 'arc'){
-      if(Math.hypot(p.x - s.center.x, p.y - s.center.y) <= 10) return i;
-    }
-  }
-  return null;
-}
-
-// draw on a temp context for exports
-function drawShapesToContext(c){
-  c.save();
-  c.lineCap = 'round';
+// Export JPEG (raster) and SVG (vector)
+jpegBtn.addEventListener('click', ()=>{
+  // render into temporary canvas at device CSS pixels (not DPR scaled) for portable JPEG
+  const t = document.createElement('canvas'); t.width = innerWidth; t.height = innerHeight;
+  const tc = t.getContext('2d', { alpha: false });
+  // background
+  tc.fillStyle = '#0b1220'; tc.fillRect(0,0,t.width,t.height);
+  // faint grid (same as main)
+  tc.globalAlpha = 0.06; tc.fillStyle = '#fff';
+  for(let x=0;x<t.width;x+=24) tc.fillRect(x,0,1,t.height);
+  for(let y=0;y<t.height;y+=24) tc.fillRect(0,y,t.width,1);
+  tc.globalAlpha = 1;
+  // draw shapes
   for(const s of shapes){
     if(s.type === 'line'){
-      c.beginPath(); c.moveTo(s.x1, s.y1); c.lineTo(s.x2, s.y2); c.lineWidth = 3; c.strokeStyle = '#6ee7b7'; c.stroke();
+      tc.beginPath(); tc.moveTo(s.x1,s.y1); tc.lineTo(s.x2,s.y2); tc.lineWidth = 3; tc.strokeStyle = '#6ee7b7'; tc.stroke();
     } else if(s.type === 'arc'){
-      c.beginPath(); c.arc(s.center.x, s.center.y, s.r, s.startAngle, s.endAngle, s.cw===false); c.lineWidth = 3; c.strokeStyle = '#ffd166'; c.stroke();
-      // center handle
-      c.fillStyle = '#fff'; c.beginPath(); c.arc(s.center.x, s.center.y, 5, 0, Math.PI*2); c.fill();
+      tc.beginPath(); tc.arc(s.center.x,s.center.y,s.r,s.startAngle,s.endAngle,s.cw===false); tc.lineWidth=3; tc.strokeStyle='#ffd166'; tc.stroke();
+      tc.fillStyle = '#fff'; tc.beginPath(); tc.arc(s.center.x, s.center.y, 5, 0, Math.PI*2); tc.fill();
     }
   }
-  c.restore();
-}
+  const link = document.createElement('a'); link.download = 'drawing.jpg';
+  link.href = t.toDataURL('image/jpeg', 0.95); link.click();
+});
+
+svgBtn.addEventListener('click', ()=>{
+  const w = innerWidth, h = innerHeight;
+  const ns = 'http://www.w3.org/2000/svg';
+  const parts = [];
+  parts.push(`<svg xmlns="${ns}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`);
+  parts.push(`<rect width="100%" height="100%" fill="#0b1220"/>`);
+  for(const s of shapes){
+    if(s.type === 'line'){
+      parts.push(`<line x1="${s.x1}" y1="${s.y1}" x2="${s.x2}" y2="${s.y2}" stroke="#6ee7b7" stroke-width="3" stroke-linecap="round"/>`);
+    } else if(s.type === 'arc'){
+      const x1 = s.center.x + s.r * Math.cos(s.startAngle);
+      const y1 = s.center.y + s.r * Math.sin(s.startAngle);
+      const x2 = s.center.x + s.r * Math.cos(s.endAngle);
+      const y2 = s.center.y + s.r * Math.sin(s.endAngle);
+      let delta = s.endAngle - s.startAngle;
+      if(!s.cw && delta < 0) delta += Math.PI*2;
+      if(s.cw && delta > 0) delta -= Math.PI*2;
+      const large = Math.abs(delta) > Math.PI ? 1 : 0;
+      parts.push(`<path d="M ${x1} ${y1} A ${s.r} ${s.r} 0 ${large} ${s.cw?1:0} ${x2} ${y2}" fill="none" stroke="#ffd166" stroke-width="3" stroke-linecap="round"/>`);
+    }
+  }
+  parts.push('</svg>');
+  const blob = new Blob([parts.join('\n')], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'drawing.svg'; a.click();
+  URL.revokeObjectURL(url);
+});
 
 // initial draw
 draw();
+
 </script>
 </body>
 </html>
