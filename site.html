@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Drawing Canvas — Trim Arcs Fixed</title>
+<title>Drawing Canvas — Trim Snapping Fix</title>
 <style>
   :root{
     --bg:#f4f6fb; --panel:#fff; --accent:#0b5cff; --muted:#666;
@@ -65,8 +65,9 @@
 <script>
 (() => {
   // CONFIG
-  const HOTZONE    = 50;
-  const TRIM_RANGE = 8;
+  const HOTZONE    = 50;    // px for edge/corner detection
+  const TRIM_RANGE = 8;     // px fixed trim detection range (unchanged)
+  const SNAP_RADIUS = 12;   // px: if tap is within this of an intersection, snap to intersection
   const VIEW_W     = 600;
   const VIEW_H     = 800;
   const PRO_CODE   = 'qazwsx1';
@@ -89,11 +90,12 @@
   // state
   let mode = 'draw';
   let lineWidth = 4;
-  let shapes = [];   // shapes entries: {type, el, ...} For segments we may store groupId
+  let shapes = [];   // each entry: {type, el, ...} segments may have groupId/parentCircleId
   let history = [];
   let ghost = null;
   let pointerInfo = null;
   let autoZoomApplied = false;
+  let lastIntersections = []; // store [{x,y}] from last splitAtIntersectionsInternal() to allow snapping
 
   function svgPointFromEvent(evt){
     const pt = svg.createSVGPoint();
@@ -200,11 +202,24 @@
   function distPointToPolyline(px,py,pts){ let best = Infinity; for(let i=0;i<pts.length-1;i++){ const d = distPointToSegment(px,py, pts[i].x,pts[i].y, pts[i+1].x,pts[i+1].y); if(d < best) best = d; } return best; }
   function distPointToCircle(px,py,cx,cy,r){ return Math.abs(Math.hypot(px-cx,py-cy) - r); }
 
-  // Trim behavior updated:
-  // - If the closest shape has a `groupId`, remove all shapes with that same groupId.
-  // - Otherwise remove only the single segment.
-  function trimAtPoint(p){
+  // Snap utility: if tap is near any known intersection (from last split), snap to that intersection
+  function snapToIntersectionIfClose(p){
+    if(!lastIntersections || lastIntersections.length === 0) return p;
+    let best = Infinity, bestPt = null;
+    for(const ip of lastIntersections){
+      const d = Math.hypot(p.x - ip.x, p.y - ip.y);
+      if(d < best){ best = d; bestPt = ip; }
+    }
+    if(best <= SNAP_RADIUS) return {x: bestPt.x, y: bestPt.y, snapped: true};
+    return p;
+  }
+
+  // Trim: snap to intersections first (if near), then pick closest shape; if groupId, remove whole group
+  function trimAtPoint(pRaw){
     if(shapes.length === 0) return;
+    // attempt snapping
+    const p = snapToIntersectionIfClose(pRaw);
+
     let closest = null; let best = Infinity;
     for(const s of shapes){
       let d = Infinity;
@@ -215,7 +230,7 @@
     }
     if(!closest || best > TRIM_RANGE) return;
 
-    // If the shape has a groupId (arc group), remove all shapes with same groupId
+    // If snapped to an intersection, and closest has groupId, prefer removing the entire neighboring arc group (existing logic)
     if(closest.groupId){
       const gid = closest.groupId;
       const toRemove = shapes.filter(s => s.groupId === gid);
@@ -223,13 +238,13 @@
       return;
     }
 
-    // else remove single segment
+    // fallback: remove the single segment
     closest.el.remove();
     shapes = shapes.filter(s => s !== closest);
     history.push({op:'del', shape:closest});
   }
 
-  // intersection helpers
+  // intersection helpers (unchanged)
   function lineLineInter(l1,l2){
     const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
     const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
@@ -264,8 +279,7 @@
     return [p1,p2];
   }
 
-  // ---- splitAtIntersectionsInternal with arc-grouping for circles ----
-  // converts lines to segments as before, and converts each circle into segments grouped by arcs between intersection points.
+  // splitAtIntersectionsInternal with arc-grouping (populates lastIntersections)
   function splitAtIntersectionsInternal(){
     const lines = shapes.filter(s => s.type === 'line');
     const circles = shapes.filter(s => s.type === 'circle');
@@ -275,26 +289,32 @@
     for(let i=0;i<lines.length;i++){
       for(let j=i+1;j<lines.length;j++){
         const p = lineLineInter(lines[i], lines[j]);
-        if(p){ intersections.push({p, with:[lines[i], lines[j]]}); markIntersection(p); }
+        if(p){ intersections.push({p, with:[lines[i], lines[j]]}); }
       }
     }
     for(let i=0;i<lines.length;i++){
       for(let j=0;j<circles.length;j++){
         const pts = lineCircleInter(lines[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[lines[i], circles[j]]}); markIntersection(p); });
+        pts.forEach(p => { intersections.push({p, with:[lines[i], circles[j]]}); });
       }
     }
     for(let i=0;i<circles.length;i++){
       for(let j=i+1;j<circles.length;j++){
         const pts = circleCircleInter(circles[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[circles[i], circles[j]]}); markIntersection(p); });
+        pts.forEach(p => { intersections.push({p, with:[circles[i], circles[j]]}); });
       }
     }
+
+    // store a simple array of intersection points for snapping (x,y)
+    lastIntersections = intersections.map(it => ({x: it.p.x, y: it.p.y}));
+
+    // For UX, briefly mark intersections visually (same as before)
+    lastIntersections.forEach(pt => markIntersection(pt));
 
     const newShapes = [];
     let circleIndex = 0;
 
-    // split straight lines into segments at intersections (unchanged)
+    // split straight lines into segments at intersections
     lines.forEach(l => {
       const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
       ptsOnLine.push({x: l.x1, y: l.y1}, {x: l.x2, y: l.y2});
@@ -321,40 +341,34 @@
     });
 
     // convert circles into small straight segments and group them into arcs between intersections
-    const N = 72; // number of sample points around circumference
+    const N = 72;
     circles.forEach(c => {
-      const cid = 'c' + (circleIndex++); // parent circle id
-      // sample N points with their angles
+      const cid = 'c' + (circleIndex++);
       const pts = [];
       for(let k=0;k<N;k++){
         const a = (k / N) * Math.PI * 2;
         pts.push({ x: c.cx + c.r * Math.cos(a), y: c.cy + c.r * Math.sin(a), angle: a, idx: k });
       }
 
-      // find indices on the sampled ring closest to intersection points that involve this circle
+      // intersection indices on sampled ring for this circle
       const intsOnC = intersections.filter(it => it.with.includes(c)).map(it => it.p);
       const intIdxs = [];
       intsOnC.forEach(ip => {
-        // compute angle for intersection relative to circle center
         const ang = Math.atan2(ip.y - c.cy, ip.x - c.cx);
-        // normalize angle to [0, 2PI)
         const angNorm = (ang + Math.PI*2) % (Math.PI*2);
-        // find nearest sample index
         let bestIdx = 0; let bestD = Infinity;
         for(let s=0;s<pts.length;s++){
           let da = Math.abs(pts[s].angle - angNorm);
-          // handle wrap-around
           da = Math.min(da, Math.PI*2 - da);
           if(da < bestD){ bestD = da; bestIdx = s; }
         }
         intIdxs.push(bestIdx);
       });
 
-      // produce unique sorted intersection indices (if none, the circle becomes a single group)
       const uniqIdxs = Array.from(new Set(intIdxs)).sort((a,b) => a - b);
 
       if(uniqIdxs.length === 0){
-        // whole circle = one group. Create all segments and assign same groupId
+        // whole circle = one group
         const groupId = cid + '-g0';
         for(let k=0;k<pts.length;k++){
           const a = pts[k];
@@ -370,15 +384,11 @@
           }
         }
       } else {
-        // there are intersection points: build arc groups between sorted intersection indices
-        // ensure indices are in ascending order on circle; we'll iterate pairs (i -> next)
         const sorted = uniqIdxs.slice().sort((a,b)=>a-b);
         for(let s=0;s<sorted.length;s++){
           const i1 = sorted[s];
-          const i2 = sorted[(s+1) % sorted.length]; // wraps around for last -> first
-          // build group id
+          const i2 = sorted[(s+1) % sorted.length];
           const groupId = cid + '-g' + s;
-          // iterate from i1 to i2 (inclusive of i1->i2 arc). handle wrap if i2 <= i1
           let k = i1;
           while(true){
             const a = pts[k];
@@ -398,7 +408,6 @@
         }
       }
 
-      // remove original circle element
       c.el.remove();
     });
 
@@ -407,6 +416,7 @@
     newShapes.forEach(ns => shapes.push(ns));
   }
 
+  // visual helper
   function markIntersection(pt){
     const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
     dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3);
@@ -466,8 +476,6 @@
     img.onerror = (err) => { console.error('image load error', err); URL.revokeObjectURL(url); };
     img.src = url;
   });
-
-  function markIntersection(pt){ const dot = document.createElementNS('http://www.w3.org/2000/svg','circle'); dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3); dot.setAttribute('class','intersection-dot'); svg.appendChild(dot); setTimeout(()=>dot.remove(),700); }
 
   svg.addEventListener('touchstart', (e)=>{ e.preventDefault(); }, {passive:false});
 
