@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Canvas Lines — drag to create</title>
+<style>
+  html,body { height:100%; margin:0; background:#111; color:#ddd; font-family:system-ui,-apple-system,Segoe UI,Roboto; }
+  #app { position:fixed; inset:0; display:flex; flex-direction:column; }
+  header { padding:8px 12px; background:#0f1113; display:flex; gap:8px; align-items:center; box-shadow:0 2px 6px rgba(0,0,0,0.6); z-index:5; }
+  #undo { padding:8px 12px; border-radius:6px; background:#222; color:#fff; border:1px solid #333; cursor:pointer; }
+  #info { font-size:13px; opacity:0.9; }
+  #canvasWrap { flex:1; position:relative; }
+  canvas { width:100%; height:100%; display:block; background: linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px), 
+                                linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+           background-size: 40px 40px, 40px 40px; cursor: crosshair; }
+  .hint { position:absolute; left:12px; bottom:12px; padding:8px 10px; background:rgba(0,0,0,0.4); border-radius:6px; font-size:13px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button id="undo" title="Undo last created line">Undo</button>
+    <div id="info">Drag horizontally → vertical line. Drag vertically → horizontal line. Touch & mouse supported.</div>
+  </header>
+  <div id="canvasWrap">
+    <canvas id="c"></canvas>
+    <div class="hint">Origin snaps to nearest intersection / edge. Lines split by intersections.</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let DPR = window.devicePixelRatio || 1;
+
+  // Keep lines as segments:
+  // vertical: {type:'v', x, y1, y2}
+  // horizontal: {type:'h', y, x1, x2}
+  const lines = [];
+  const undoStack = [];
+
+  // Interaction state
+  let isDown = false;
+  let start = null;
+  let lastPos = null;
+  let preview = null; // preview segment while dragging
+
+  function resize() {
+    DPR = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth || canvas.parentElement.clientWidth;
+    const h = canvas.clientHeight || canvas.parentElement.clientHeight;
+    canvas.width = Math.round(w * DPR);
+    canvas.height = Math.round(h * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); // keep drawing in CSS pixels
+    draw();
+  }
+
+  window.addEventListener('resize', resize);
+  // make canvas fill area
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  resize();
+
+  function clear() {
+    ctx.fillStyle = '#0b0c0d';
+    ctx.fillRect(0,0,canvas.width/DPR, canvas.height/DPR);
+  }
+
+  function drawGrid() {
+    // subtle grid (we used CSS grid background too; this is additional thin lines)
+    const w = canvas.width/DPR, h = canvas.height/DPR;
+    ctx.save();
+    ctx.globalAlpha = 0.12;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    const step = 40;
+    for (let x=0.5; x<w; x+=step) {
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+    }
+    for (let y=0.5; y<h; y+=step) {
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawLines() {
+    ctx.save();
+    ctx.lineCap = 'square';
+    for (const L of lines) {
+      ctx.beginPath();
+      if (L.type === 'v') {
+        ctx.strokeStyle = '#49a6ff';
+        ctx.lineWidth = 2;
+        ctx.moveTo(L.x, L.y1);
+        ctx.lineTo(L.x, L.y2);
+      } else {
+        ctx.strokeStyle = '#f8b84c';
+        ctx.lineWidth = 2;
+        ctx.moveTo(L.x1, L.y);
+        ctx.lineTo(L.x2, L.y);
+      }
+      ctx.stroke();
+
+      // draw small intersection circles
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    }
+    ctx.restore();
+  }
+
+  function drawPreview() {
+    if (!preview) return;
+    ctx.save();
+    ctx.setLineDash([6,6]);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = preview.type === 'v' ? '#7fd1ff' : '#ffd98a';
+    ctx.beginPath();
+    if (preview.type === 'v') ctx.moveTo(preview.x, preview.y1), ctx.lineTo(preview.x, preview.y2);
+    else ctx.moveTo(preview.x1, preview.y), ctx.lineTo(preview.x2, preview.y);
+    ctx.stroke();
+
+    // origin marker
+    ctx.fillStyle = 'white';
+    const ox = preview.type === 'v' ? preview.x : preview.x1;
+    const oy = preview.type === 'v' ? preview.y1 : preview.y;
+    ctx.beginPath(); ctx.arc(ox, oy, 4, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  function draw() {
+    clear();
+    drawGrid();
+    drawLines();
+    drawPreview();
+  }
+
+  // utilities
+  function getMouse(e) {
+    const rect = canvas.getBoundingClientRect();
+    if (e.touches) {
+      const t = e.touches[0] || e.changedTouches[0];
+      return { x: (t.clientX - rect.left), y: (t.clientY - rect.top) };
+    } else {
+      return { x: (e.clientX - rect.left), y: (e.clientY - rect.top) };
+    }
+  }
+
+  function addLineAndRecord(L) {
+    lines.push(L);
+    undoStack.push(L);
+    preview = null;
+    draw();
+  }
+
+  function undo() {
+    if (undoStack.length === 0) return;
+    const last = undoStack.pop();
+    // remove last from lines (in case user modified order)
+    const idx = lines.lastIndexOf(last);
+    if (idx !== -1) lines.splice(idx,1);
+    draw();
+  }
+
+  // Find intersections for vertical/horizontal creation
+  function getHorizontalYs() {
+    const h = canvas.height/DPR;
+    const ys = [0, h]; // edges
+    for (const L of lines) if (L.type === 'h') ys.push(L.y);
+    const uniq = Array.from(new Set(ys)).sort((a,b)=>a-b);
+    return uniq;
+  }
+  function getVerticalXs() {
+    const w = canvas.width/DPR;
+    const xs = [0, w];
+    for (const L of lines) if (L.type === 'v') xs.push(L.x);
+    return Array.from(new Set(xs)).sort((a,b)=>a-b);
+  }
+
+  // Given a coordinate (x,y) and a vertical xPos, compute preview vertical segment:
+  function computeVerticalSegment(xPos, startY) {
+    const ys = getHorizontalYs(); // includes edges and existing horizontals
+    // find interval containing startY
+    let i = 0;
+    while (i+1 < ys.length && !(startY >= ys[i] && startY <= ys[i+1])) i++;
+    // pick nearest intersection as origin
+    const a = ys[i], b = ys[i+1] ?? a;
+    const originY = (Math.abs(startY - a) <= Math.abs(startY - b)) ? a : b;
+    // other intersection is the opposite one in the interval
+    const otherY = originY === a ? b : a;
+    // Build segment from origin to other (so anchored at nearest intersection)
+    const seg = { type:'v', x: Math.max(0, Math.min(canvas.width/DPR, xPos)), y1: originY, y2: otherY };
+    // normalize order so y1<=y2
+    if (seg.y2 < seg.y1) [seg.y1, seg.y2] = [seg.y2, seg.y1];
+    return seg;
+  }
+
+  // Given coordinate and horizontal yPos
+  function computeHorizontalSegment(yPos, startX) {
+    const xs = getVerticalXs();
+    let i = 0;
+    while (i+1 < xs.length && !(startX >= xs[i] && startX <= xs[i+1])) i++;
+    const a = xs[i], b = xs[i+1] ?? a;
+    const originX = (Math.abs(startX - a) <= Math.abs(startX - b)) ? a : b;
+    const otherX = originX === a ? b : a;
+    const seg = { type:'h', y: Math.max(0, Math.min(canvas.height/DPR, yPos)), x1: originX, x2: otherX };
+    if (seg.x2 < seg.x1) [seg.x1, seg.x2] = [seg.x2, seg.x1];
+    return seg;
+  }
+
+  // Pointer handlers
+  function onDown(e) {
+    e.preventDefault();
+    isDown = true;
+    const p = getMouse(e);
+    start = { x: p.x, y: p.y, time: Date.now() };
+    lastPos = { ...start };
+    preview = null;
+  }
+  function onMove(e) {
+    if (!isDown) return;
+    const p = getMouse(e);
+    lastPos = { x: p.x, y: p.y };
+    const dx = lastPos.x - start.x;
+    const dy = lastPos.y - start.y;
+    // if tiny movement, don't show preview
+    if (Math.hypot(dx,dy) < 6) { preview = null; draw(); return; }
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // horizontal drag -> create vertical preview at x=last.x
+      preview = computeVerticalSegment(lastPos.x, start.y);
+    } else {
+      // vertical drag -> create horizontal preview at y=last.y
+      preview = computeHorizontalSegment(lastPos.y, start.x);
+    }
+    draw();
+  }
+  function onUp(e) {
+    if (!isDown) return;
+    isDown = false;
+    const p = getMouse(e);
+    lastPos = { x: p.x, y: p.y };
+    const dx = lastPos.x - start.x;
+    const dy = lastPos.y - start.y;
+    if (Math.hypot(dx,dy) < 6) {
+      preview = null;
+      draw();
+      return;
+    }
+    if (Math.abs(dx) > Math.abs(dy)) {
+      // horizontal drag -> vertical line
+      const seg = computeVerticalSegment(lastPos.x, start.y);
+      addLineAndRecord(seg);
+    } else {
+      const seg = computeHorizontalSegment(lastPos.y, start.x);
+      addLineAndRecord(seg);
+    }
+  }
+
+  // attach mouse & touch
+  canvas.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove, { passive:false });
+  window.addEventListener('mouseup', onUp);
+
+  canvas.addEventListener('touchstart', onDown, {passive:false});
+  window.addEventListener('touchmove', onMove, {passive:false});
+  window.addEventListener('touchend', onUp);
+
+  // Undo button
+  document.getElementById('undo').addEventListener('click', undo);
+
+  // helpful keyboard shortcuts (u to undo, c to clear all)
+  window.addEventListener('keydown', (ev) => {
+    if (ev.key === 'u' || ev.key === 'U') undo();
+    if (ev.key === 'c' || ev.key === 'C') {
+      lines.length = 0; undoStack.length = 0; preview = null; draw();
+    }
+  });
+
+  // initial draw
+  draw();
+
+  // expose some debug + API on window (optional)
+  window._lineapp = {
+    getLines: () => JSON.parse(JSON.stringify(lines)),
+    clear: () => { lines.length=0; undoStack.length=0; draw(); },
+  };
+
+})();
+</script>
+</body>
+</html>
