@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Edge/Corners Draw + Trim</title>
+<style>
+  html,body {height:100%;margin:0;background:#111;color:#eee;font-family:system-ui,-apple-system,Segoe UI,Roboto;}
+  #toolbar {position:fixed;left:10px;top:10px;z-index:10;background:rgba(0,0,0,.5);padding:8px;border-radius:6px}
+  canvas {display:block;width:100vw;height:100vh;touch-action:none}
+  .hint {opacity:.8;font-size:13px}
+  button {margin-left:8px}
+</style>
+</head>
+<body>
+<div id="toolbar" class="hint">
+  Mode: <span id="modeText">idle</span>
+  <button id="clearBtn">Clear</button>
+  <label style="margin-left:8px"><input id="snapCheck" type="checkbox" checked/> Snap intersections</label>
+</div>
+<canvas id="c"></canvas>
+
+<script>
+// ---------- CONFIG ----------
+const EDGE_MARGIN = 30; // px - how close to edge counts as "edge drag"
+const CORNER_MARGIN = 30; // px - how close to corner counts as "corner drag"
+const HIT_EPS = 1e-6;
+const LINE_COLOR = '#7FFFD4';
+const CIRCLE_COLOR = '#FFD700';
+const INTERSECTION_COLOR = '#FF6B6B';
+const LINE_WIDTH = 3;
+const PREVIEW_ALPHA = 0.6;
+// ----------------------------
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const modeText = document.getElementById('modeText');
+const clearBtn = document.getElementById('clearBtn');
+const snapCheck = document.getElementById('snapCheck');
+
+let DPR = window.devicePixelRatio || 1;
+
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(innerWidth * DPR);
+  canvas.height = Math.floor(innerHeight * DPR);
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  draw();
+}
+addEventListener('resize', resize, {passive:true});
+resize();
+
+// ---------- state ----------
+let shapes = []; // holds finalized shapes
+// shape types:
+// {type:'line', p1:{x,y}, p2:{x,y} }
+// {type:'circle', center:{x,y}, r, arcs: [ {a1,a2}, ... ] } // arcs optional for trimmed circle
+
+let dragging = null; // {type:'line'|'circle', start:{x,y}, cur:{x,y}, edgeName? , cornerIndex?}
+let pointerId = null;
+
+// ---------- helpers ----------
+function dist(a,b){const dx=a.x-b.x, dy=a.y-b.y; return Math.hypot(dx,dy);}
+function dot(a,b){return a.x*b.x + a.y*b.y;}
+function sub(a,b){return {x:a.x-b.x, y:a.y-b.y};}
+function add(a,b){return {x:a.x+b.x, y:a.y+b.y};}
+function mul(a,s){return {x:a.x*s, y:a.y*s};}
+
+// clamp point to edge where edgeName in ['left','right','top','bottom']
+function clampToEdge(pt, edgeName){
+  if(edgeName==='left') return {x:0, y:Math.max(0, Math.min(innerHeight, pt.y))};
+  if(edgeName==='right') return {x:innerWidth, y:Math.max(0, Math.min(innerHeight, pt.y))};
+  if(edgeName==='top') return {x:Math.max(0, Math.min(innerWidth, pt.x)), y:0};
+  if(edgeName==='bottom') return {x:Math.max(0, Math.min(innerWidth, pt.x)), y:innerHeight};
+  return pt;
+}
+
+function nearEdge(pt){
+  if(pt.x <= EDGE_MARGIN) return 'left';
+  if(pt.x >= innerWidth - EDGE_MARGIN) return 'right';
+  if(pt.y <= EDGE_MARGIN) return 'top';
+  if(pt.y >= innerHeight - EDGE_MARGIN) return 'bottom';
+  return null;
+}
+function nearCorner(pt){
+  const corners = [
+    {x:0,y:0}, {x:innerWidth,y:0}, {x:0,y:innerHeight}, {x:innerWidth,y:innerHeight}
+  ];
+  for(let i=0;i<4;i++){
+    if(dist(pt,corners[i]) <= CORNER_MARGIN) return {index:i, corner:corners[i]};
+  }
+  return null;
+}
+
+// ---------- geometry intersections ----------
+
+// line segment AB (A->B) intersects line segment CD? returns point or null
+function intersectSegSeg(A,B,C,D){
+  // parametric: A + t*(B-A) = C + u*(D-C)
+  const r = sub(B,A);
+  const s = sub(D,C);
+  const rxs = r.x*s.y - r.y*s.x;
+  const qmp = sub(C,A);
+  const qmpxr = qmp.x*r.y - qmp.y*r.x;
+
+  if(Math.abs(rxs) < 1e-8){
+    // parallel
+    return null;
+  }
+  const t = (qmp.x*s.y - qmp.y*s.x) / rxs;
+  const u = (qmp.x*r.y - qmp.y*r.x) / rxs;
+  if(t >= -1e-9 && t <= 1+1e-9 && u >= -1e-9 && u <= 1+1e-9){
+    return {x: A.x + t*r.x, y: A.y + t*r.y, t, u};
+  }
+  return null;
+}
+
+// line segment AB intersects circle (center,r) -> returns array of points (can be 0,1,2)
+function intersectSegCircle(A,B, center, r){
+  // param: P(t) = A + t*(B-A), t in [0,1]
+  const d = sub(B,A);
+  const f = sub(A, center);
+  const a = dot(d,d);
+  const b = 2*dot(f,d);
+  const c = dot(f,f) - r*r;
+  const disc = b*b - 4*a*c;
+  if(disc < -1e-8) return [];
+  const pts = [];
+  const sqrtD = Math.sqrt(Math.max(0,disc));
+  const t1 = (-b - sqrtD) / (2*a);
+  const t2 = (-b + sqrtD) / (2*a);
+  [t1,t2].forEach(t=>{
+    if(t >= -1e-9 && t <= 1+1e-9){
+      pts.push({x: A.x + d.x * t, y: A.y + d.y * t, t});
+    }
+  });
+  return pts;
+}
+
+// circle-circle intersection (center1,r1) & (center2,r2) -> array of points
+function intersectCircleCircle(c1,r1,c2,r2){
+  const d = dist(c1,c2);
+  if(d < 1e-9) return [];
+  if(d > r1 + r2 + 1e-9) return [];
+  if(d < Math.abs(r1 - r2) - 1e-9) return [];
+  // compute
+  const a = (r1*r1 - r2*r2 + d*d) / (2*d);
+  const h = Math.sqrt(Math.max(0, r1*r1 - a*a));
+  const px = c1.x + a*(c2.x - c1.x)/d;
+  const py = c1.y + a*(c2.y - c1.y)/d;
+  const rx = -(c2.y - c1.y) * (h/d);
+  const ry = -(c2.x - c1.x) * (-h/d);
+  const p1 = {x: px + rx, y: py + ry};
+  const p2 = {x: px - rx, y: py - ry};
+  if(Math.hypot(p1.x-p2.x,p1.y-p2.y) < 1e-8) return [p1];
+  return [p1,p2];
+}
+
+// ---------- trimming logic ----------
+
+// trim line L so its p2 becomes nearest intersection from p1 (if any)
+function trimLineNew(L){
+  let intersections = [];
+  const A = L.p1, B = L.p2;
+  // check against all existing shapes
+  for(let s of shapes){
+    if(s.type === 'line'){
+      const P = intersectSegSeg(A,B, s.p1, s.p2);
+      if(P) intersections.push({pt:{x:P.x,y:P.y}, t:P.t, other:s, kind:'line'});
+    } else if(s.type === 'circle'){
+      const pts = intersectSegCircle(A,B, s.center, s.r);
+      for(let p of pts) intersections.push({pt:{x:p.x,y:p.y}, t:p.t, other:s, kind:'circle'});
+    }
+  }
+  if(intersections.length === 0) return; // nothing to trim
+  intersections.sort((a,b)=> a.t - b.t);
+  const nearest = intersections[0];
+  // set new p2 to nearest intersection
+  L.p2 = nearest.pt;
+
+  // For other lines that intersect, trim them if they extend beyond intersection wrt their p1 direction
+  for(let inter of intersections){
+    if(inter.kind==='line' && inter.other){
+      // find param t' along the other line
+      const other = inter.other;
+      const segRes = intersectSegSeg(other.p1, other.p2, A, B);
+      if(segRes){
+        // decide which endpoint to move: move endpoint that lies further from other.p1 towards other.p2
+        const ta = segRes.t; // along other
+        // if ta between 0 and 1, that is intersection point; now trim other.p2 to intersection if that keeps direction from p1 towards intersection
+        const distP1ToInter = ta; // param
+        // We'll set other.p2 = intersection if intersection is between p1 and p2 and other.p2 is further from p1 than intersection
+        const fullLen = dist(other.p1, other.p2);
+        const d1 = dist(other.p1, inter.pt);
+        if(d1 + 1e-6 < fullLen){
+          other.p2 = inter.pt;
+        }
+      }
+    } else if(inter.kind === 'circle'){
+      // if a line intersects a circle, we already trimmed the new line; we may also trim existing lines intersecting circle
+      if(inter.other && inter.other.type === 'line'){
+        const other = inter.other;
+        // compute param t along other
+        const segRes = intersectSegSeg(other.p1, other.p2, A, B);
+        if(segRes){
+          const fullLen = dist(other.p1, other.p2);
+          const d1 = dist(other.p1, inter.pt);
+          if(d1 + 1e-6 < fullLen){
+            other.p2 = inter.pt;
+          }
+        }
+      }
+    }
+  }
+}
+
+// finalize a circle: if intersections exist, we compute arcs to draw only segments between intersections
+function finalizeCircle(circ){
+  // find intersections with all shapes -> gather angles
+  const angles = [];
+  for(let s of shapes){
+    if(s.type === 'line'){
+      const pts = intersectSegCircle(s.p1, s.p2, circ.center, circ.r);
+      for(let p of pts){
+        const a = Math.atan2(p.y - circ.center.y, p.x - circ.center.x);
+        angles.push(a);
+        // also trim line at intersection if needed
+        const d1 = dist(s.p1, p);
+        const fulllen = dist(s.p1, s.p2);
+        if(d1 + 1e-6 < fulllen){
+          s.p2 = {x:p.x,y:p.y};
+        }
+      }
+    } else if(s.type === 'circle'){
+      const pts = intersectCircleCircle(circ.center, circ.r, s.center, s.r);
+      for(let p of pts){
+        const a = Math.atan2(p.y - circ.center.y, p.x - circ.center.x);
+        angles.push(a);
+      }
+    }
+  }
+
+  if(angles.length === 0){
+    // full circle
+    circ.arcs = [{a1:0, a2:Math.PI*2}];
+    return;
+  }
+  // normalize angles 0..2pi and sort
+  const norm = angles.map(a => (a % (2*Math.PI) + 2*Math.PI) % (2*Math.PI));
+  norm.sort((a,b)=>a-b);
+
+  // create arcs between consecutive angles; this draws arcs _between_ intersections (you may invert logic if you want the opposite)
+  const arcs = [];
+  for(let i=0;i<norm.length;i++){
+    const a1 = norm[i];
+    const a2 = norm[(i+1)%norm.length];
+    // ensure positive direction; if last -> wrap
+    if(i < norm.length - 1){
+      arcs.push({a1: a1, a2: a2});
+    } else {
+      // last to first (wrap)
+      arcs.push({a1: a1, a2: norm[0] + 2*Math.PI});
+    }
+  }
+  // optional: you may choose to keep arcs that are shorter/longer depending on preference
+  circ.arcs = arcs;
+}
+
+// ---------- finalize shape on pointerup ----------
+function finalizeDragging(){
+  if(!dragging) return;
+  if(dragging.type === 'line'){
+    const L = {type:'line', p1: {...dragging.start}, p2: {...dragging.cur}};
+    // trim L against existing shapes and also trim them as necessary
+    trimLineNew(L);
+    shapes.push(L);
+  } else if(dragging.type === 'circle'){
+    const center = dragging.corner;
+    const r = Math.max(1, dist(center, dragging.cur));
+    const circ = {type:'circle', center:{...center}, r:r, arcs: [{a1:0,a2:Math.PI*2}]};
+    finalizeCircle(circ);
+    shapes.push(circ);
+  }
+  dragging = null;
+  modeText.textContent = 'idle';
+  draw();
+}
+
+// ---------- rendering ----------
+function draw(){
+  ctx.clearRect(0,0,innerWidth,innerHeight);
+  // background grid faint
+  ctx.save();
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = '#fff';
+  for(let x=0;x<innerWidth;x+=20){
+    ctx.fillRect(x,0,1,innerHeight);
+  }
+  for(let y=0;y<innerHeight;y+=20){
+    ctx.fillRect(0,y,innerWidth,1);
+  }
+  ctx.restore();
+
+  // finalized shapes
+  for(let s of shapes){
+    if(s.type==='line'){
+      ctx.lineWidth = LINE_WIDTH;
+      ctx.strokeStyle = LINE_COLOR;
+      ctx.beginPath();
+      ctx.moveTo(s.p1.x, s.p1.y);
+      ctx.lineTo(s.p2.x, s.p2.y);
+      ctx.stroke();
+    } else if(s.type==='circle'){
+      ctx.lineWidth = LINE_WIDTH;
+      ctx.strokeStyle = CIRCLE_COLOR;
+      if(s.arcs && s.arcs.length){
+        for(let arc of s.arcs){
+          ctx.beginPath();
+          ctx.arc(s.center.x, s.center.y, s.r, arc.a1, arc.a2, false);
+          ctx.stroke();
+        }
+      } else {
+        ctx.beginPath();
+        ctx.arc(s.center.x, s.center.y, s.r, 0, Math.PI*2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // draw intersections for clarity
+  // compute pairwise intersections and draw small dots
+  const inters = computeAllIntersections();
+  ctx.fillStyle = INTERSECTION_COLOR;
+  for(let p of inters){
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,4,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // preview dragging
+  if(dragging){
+    ctx.globalAlpha = PREVIEW_ALPHA;
+    if(dragging.type === 'line'){
+      ctx.lineWidth = LINE_WIDTH;
+      ctx.strokeStyle = LINE_COLOR;
+      ctx.beginPath();
+      ctx.moveTo(dragging.start.x, dragging.start.y);
+      ctx.lineTo(dragging.cur.x, dragging.cur.y);
+      ctx.stroke();
+    } else if(dragging.type === 'circle'){
+      ctx.lineWidth = LINE_WIDTH;
+      ctx.strokeStyle = CIRCLE_COLOR;
+      const r = Math.max(1, dist(dragging.corner, dragging.cur));
+      ctx.beginPath();
+      ctx.arc(dragging.corner.x, dragging.corner.y, r, 0, Math.PI*2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// compute intersections between all finalized shapes
+function computeAllIntersections(){
+  const points = [];
+  for(let i=0;i<shapes.length;i++){
+    for(let j=i+1;j<shapes.length;j++){
+      const A = shapes[i], B = shapes[j];
+      if(A.type==='line' && B.type==='line'){
+        const P = intersectSegSeg(A.p1, A.p2, B.p1, B.p2);
+        if(P) points.push({x:P.x,y:P.y});
+      } else if(A.type==='line' && B.type==='circle'){
+        const pts = intersectSegCircle(A.p1, A.p2, B.center, B.r);
+        for(let p of pts) points.push({x:p.x,y:p.y});
+      } else if(A.type==='circle' && B.type==='line'){
+        const pts = intersectSegCircle(B.p1, B.p2, A.center, A.r);
+        for(let p of pts) points.push({x:p.x,y:p.y});
+      } else if(A.type==='circle' && B.type==='circle'){
+        const pts = intersectCircleCircle(A.center, A.r, B.center, B.r);
+        for(let p of pts) points.push({x:p.x,y:p.y});
+      }
+    }
+  }
+  return points;
+}
+
+// ---------- pointer events ----------
+function toCanvasEvent(e){
+  // pointer events supply clientX/Y which map to css pixels
+  return {x: e.clientX, y: e.clientY};
+}
+
+canvas.addEventListener('pointerdown', (ev)=>{
+  ev.preventDefault();
+  if(pointerId !== null) return;
+  pointerId = ev.pointerId;
+  canvas.setPointerCapture(pointerId);
+
+  const p = toCanvasEvent(ev);
+  const corner = nearCorner(p);
+  const edge = nearEdge(p);
+
+  if(corner){
+    // circle mode: center at corner
+    dragging = {type:'circle', corner:corner.corner, cur:p};
+    modeText.textContent = 'drawing circle';
+  } else if(edge){
+    // line mode: clamp start to that edge
+    const start = clampToEdge(p, edge);
+    dragging = {type:'line', start:start, cur:p, edgeName:edge};
+    modeText.textContent = 'drawing line';
+  } else {
+    dragging = null;
+    modeText.textContent = 'idle';
+  }
+  draw();
+}, {passive:false});
+
+canvas.addEventListener('pointermove', (ev)=>{
+  if(pointerId === null || ev.pointerId !== pointerId) return;
+  const p = toCanvasEvent(ev);
+  if(!dragging) return;
+  if(dragging.type === 'line'){
+    dragging.cur = p;
+  } else if(dragging.type === 'circle'){
+    dragging.cur = p;
+  }
+  draw();
+}, {passive:false});
+
+canvas.addEventListener('pointerup', (ev)=>{
+  if(pointerId === null || ev.pointerId !== pointerId) return;
+  pointerId = null;
+  canvas.releasePointerCapture(ev.pointerId);
+  // finalize
+  if(dragging){
+    finalizeDragging();
+  }
+}, {passive:false});
+
+canvas.addEventListener('pointercancel', (ev)=>{
+  pointerId = null;
+  dragging = null;
+  draw();
+});
+
+// allow touch to cancel selection etc
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// clear
+clearBtn.addEventListener('click', ()=>{
+  shapes = [];
+  draw();
+});
+
+// ---------- optional: Snap existing intersection to pointer if requested ----------
+function snapToNearestIntersection(pt, maxDist=12){
+  const inters = computeAllIntersections();
+  if(!inters.length) return pt;
+  let best = null; let bd = Infinity;
+  for(let p of inters){
+    const d = dist(p, pt);
+    if(d < bd){
+      bd = d; best = p;
+    }
+  }
+  if(bd <= maxDist) return best;
+  return pt;
+}
+
+// redraw loop not required - events handle it, but keep initial draw
+draw();
+
+</script>
+</body>
+</html>
