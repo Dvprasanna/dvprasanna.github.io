@@ -17,9 +17,22 @@
   table.generated td{border:1px solid #999;padding:6px 8px;min-width:40px}
   .hint{color:#666;font-size:13px;margin-top:8px}
   .small{font-size:13px;color:#444}
+.top-header {
+    height: 20vh;         /* 20% of screen height */
+    background: white;    /* white header */
+    width: 100%;          /* full width */
+    position: fixed;      /* stays on top */
+    top: 0;
+    left: 0;
+    z-index: 999;         /* stays above all content */
+}
+body {
+    margin-top: 20vh;     /* push content below header */
+}
 </style>
 </head>
 <body>
+<div class="top-header"></div>
 
 <h1>Table Maker — Complete</h1>
 
