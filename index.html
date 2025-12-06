@@ -1,290 +1,121 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Table Maker — Complete + Editor Tools</title>
+<meta charset="utf-8">
+<title>Table Maker + Editor</title>
 <style>
-  :root{--accent:#0366d6}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:18px;color:#111;background:#fff}
-  h1{font-size:18px;margin:0 0 10px}
-  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
-  button, select{
-    padding:8px 12px;border-radius:6px;border:1px solid #bbb;background:#f7f8fa;cursor:pointer;font-size:14px
-  }
-  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-  button:hover, select:hover{opacity:0.9}
-  #editor{
-    min-height:300px;border:1px dashed #ccc;padding:14px;border-radius:8px;
-    white-space:pre-wrap;overflow:auto;outline:none
-  }
-  #output{width:100%;height:140px;margin-top:10px;padding:8px;box-sizing:border-box;font-family:monospace}
-  table.generated{border-collapse:collapse;margin:12px 0}
-  table.generated td{border:1px solid #999;padding:6px 10px;min-width:50px}
-  .hint{color:#666;font-size:13px;margin-top:8px}
-  .toolbar-group{margin-right:16px;display:flex;gap:6px;align-items:center}
-  .toolbar-label{font-size:13px;color:#555;font-weight:500}
-  hr{margin:16px 0;border:none;border-top:2px solid #ddd}
+  body{font-family:system-ui;margin:18px;background:#fff;color:#111}
+  .c{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+  button,select{padding:7px 11px;border-radius:6px;border:1px solid #bbb;background:#f8f9fa;cursor:pointer}
+  button:hover,select:hover{opacity:.9}
+  button.p{background:#0366d6;color:#fff;border-color:#0366d6}
+  #e{min-height:300px;border:1px dashed #ccc;padding:14px;border-radius:8px;outline:none}
+  #o{width:100%;height:130px;margin-top:10px;padding:8px;font-family:monospace;box-sizing:border-box}
+  table{margin:12px 0;border-collapse:collapse}
+  td{border:1px solid #999;padding:6px 10px;min-width:50px}
+  hr{margin:16px 0;border:0;border-top:2px solid #ddd}
+  .g{margin-right:16px}
+  .l{font-weight:500;color:#555;font-size:13px}
 </style>
 </head>
 <body>
 
-<h1>Table Maker — Complete + Rich Editor</h1>
+<h1 style="margin:0 0 10px;font-size:18px">Table Maker + Editor</h1>
 
-<div class="controls">
-
-  <!-- Text Formatting -->
-  <div class="toolbar-group">
-    <span class="toolbar-label">Size:</span>
-    <select id="text-size">
+<div class="c">
+  <div class="g"><span class="l">Size:</span>
+    <select id="s">
       <option value="">Normal</option>
       <option value="h1">Title</option>
       <option value="h2">Subtitle</option>
       <option value="p">Body</option>
     </select>
   </div>
-
-  <!-- Horizontal Rule -->
-  <div class="toolbar-group">
-    <button id="btn-hr" title="Insert horizontal line">Line (HR)</button>
+  <button id="hr">Line (HR)</button>
+  <div class="g"><span class="l">Table:</span>
+    <button id="al">Left</button>
+    <button id="ac">Center</button>
+    <button id="ar">Right</button>
   </div>
-
-  <!-- Table Alignment -->
-  <div class="toolbar-group">
-    <span class="toolbar-label">Table Align:</span>
-    <button id="align-left" title="Align table left">Left</button>
-    <button id="align-center" title="Align table center">Center</button>
-    <button id="align-right" title="Align table right">Right</button>
-  </div>
-
-  <div style="flex:1"></div> <!-- spacer -->
-
-  <!-- Original Buttons -->
-  <button id="btn-make-table" class="primary">Make Table</button>
-  <button id="btn-make-columns">Make Columns</button>
-  <button id="btn-select-all">Select All</button>
-  <button id="btn-export">Export CSV</button>
-  <button id="btn-copy">Copy CSV</button>
-  <button id="btn-clear">Clear</button>
+  <div style="flex:1"></div>
+  <button class="p" id="mt">Make Table</button>
+  <button id="mc">Make Columns</button>
+  <button id="sa">Select All</button>
+  <button id="ex">Export CSV</button>
+  <button id="cp">Copy CSV</button>
+  <button id="cl">Clear</button>
 </div>
 
-<div id="editor" contenteditable="true" spellcheck="false">
-Paste plain text here then select lines and click Make Table.
-
-Example:
-Apple
-Banana
-Cherry
-
-→ Select lines → Make Table → 3 rows
-Then select part of a cell → Make Columns
+<div id="e" contenteditable spellcheck="false">
+Paste text → select lines → Make Table
 </div>
 
-<textarea id="output" placeholder="CSV output will appear here"></textarea>
-<div class="hint">
-  New tools: Title/Subtitle/Body formatting • Insert HR • Align entire tables left/center/right
-</div>
+<textarea id="o" placeholder="CSV appears here"></textarea>
 
 <script>
-const editor = document.getElementById('editor');
-const output = document.getElementById('output');
+const e = document.getElementById('e'), o = document.getElementById('o');
+const sel = () => window.getSelection();
+const exec = (cmd, val=null) => (document.execCommand(cmd,false,val), e.focus());
 
-function exec(cmd, value = null) {
-  document.execCommand(cmd, false, value);
-  editor.focus();
-}
+// Text Size
+document.getElementById('s').onchange = function() {
+  exec('formatBlock', this.value ? '<'+this.value+'>' : '<div>');
+  this.value = '';
+};
 
-/* === 1. Text Size: Title / Subtitle / Body === */
-document.getElementById('text-size').addEventListener('change', function() {
-  const val = this.value;
-  if (!val) {
-    exec('formatBlock', '<div>'); // normal text
-  } else if (val === 'p') {
-    exec('formatBlock', '<p>');
-  } else {
-    exec('formatBlock', '<' + val + '>');
-  }
-  this.value = ''; // reset dropdown
-});
+// HR
+document.getElementById('hr').onclick = () => exec('insertHorizontalRule');
 
-/* === 2. Insert Horizontal Rule === */
-document.getElementById('btn-hr').addEventListener('click', () => {
-  exec('insertHorizontalRule');
-});
+// Table Align
+const align = a => {
+  const t = sel().rangeCount ? sel().getRangeAt(0).commonAncestorContainer.closest('table') : null;
+  if (!t) return alert('Click inside a table first');
+  t.style.cssText = a==='c' ? 'margin:'auto';display:table' : a==='r' ? 'margin-left:auto;display:table' : 'margin-right:auto;display:table';
+};
+document.getElementById('al').onclick = () => align('l');
+document.getElementById('ac').onclick = () => align('c');
+document.getElementById('ar').onclick = () => align('r');
 
-/* === 3. Table Alignment: Left / Center / Right === */
-function alignTable(align) {
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  const table = range.commonAncestorContainer.closest ? 
-    range.commonAncestorContainer.closest('table.generated') : null;
-
-  if (!table) {
-    alert('Place cursor inside a generated table to align it.');
-    return;
-  }
-
-  // Remove existing alignment
-  table.style.marginLeft = '';
-  table.style.marginRight = '';
-  table.style.display = '';
-
-  if (align === 'center') {
-    table.style.marginLeft = 'auto';
-    table.style.marginRight = 'auto';
-    table.style.display = 'table'; // ensures centering works
-  } else if (align === 'right') {
-    table.style.marginLeft = 'auto';
-    table.style.display = 'table';
-  } else { // left
-    table.style.marginRight = 'auto';
-    table.style.display = 'table';
-  }
-}
-
-document.getElementById('align-left').onclick   = () => alignTable('left');
-document.getElementById('align-center').onclick = () => alignTable('center');
-document.getElementById('align-right').onclick  = () => alignTable('right');
-
-/* === Original Functions (unchanged, just moved down) === */
-function getSel(){ return window.getSelection(); }
-function getSelText(){ const s = window.getSelection(); return s ? s.toString() : ''; }
-
-function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function csvEscape(v){
-  if (v==null) return '';
-  const s = String(v);
-  if (s.includes('"')||s.includes(',')||s.includes('\n')) return `"${s.replace(/"/g,'""')}"`;
-  return s;
-}
-
-function makeTableFromSelectionAsRows(){
-  const selText = getSelText().trim();
-  if (!selText) { alert('Select lines first'); return; }
-
-  const lines = selText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  if (!lines.length) return;
-
-  const table = document.createElement('table');
-  table.className = 'generated';
-  const tbody = document.createElement('tbody');
-
-  lines.forEach(text => {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.innerHTML = escapeHtml(text);
-    tr.appendChild(td);
-    tbody.appendChild(tr);
+// Make Table
+document.getElementById('mt').onclick = () => {
+  const lines = sel().toString().trim().split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return alert('Select lines');
+  const tbl = document.createElement('table');
+  lines.forEach(t => {
+    const tr = tbl.insertRow();
+    tr.insertCell().innerHTML = t.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'})[c]);
   });
+  sel().getRangeAt(0).insertNode(tbl);
+  e.focus();
+};
 
-  table.appendChild(tbody);
+// Make Columns
+document.getElementById('mc').onclick = () => {
+  const r = sel().getRangeAt(0);
+  const td = r.commonAncestorContainer.closest?.('td');
+  if (!td) return alert('Click inside a cell');
+  const left = r.toString() || r.cloneRange().setStart(td,0).toString();
+  const right = r.toString() ? (r.cloneRange().setStart(td,0).setEnd(r.startContainer,r.startOffset).toString() +
+                               r.cloneRange().setStart(r.endContainer,r.endOffset).setEnd(td,td.childNodes.length).toString()) : 
+                               r.cloneRange().setStart(r.endContainer,r.endOffset).setEnd(td,td.childNodes.length).toString();
+  td.innerHTML = left.trim().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'})[c]);
+  const n = td.parentNode.insertCell(td.cellIndex+1);
+  n.innerHTML = right.trim().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'})[c]);
+};
 
-  const sel = window.getSelection();
-  const range = sel.getRangeAt(0);
-  range.deleteContents();
-  range.insertNode(table);
+// Select All / Export / Copy / Clear
+document.getElementById('sa').onclick = () => (range=document.createRange(), range.selectNodeContents(e), sel().removeAllRanges(), sel().addRange(range));
+document.getElementById('ex').onclick = () => {
+  const rows = [...e.querySelectorAll('table tr')].length ? 
+    [...e.querySelectorAll('table tr')].map(tr => [...tr.cells].map(c=>c.innerText.replace(/"/g,'""')).map(c=>c.includes(',')||c.includes('\n')||c.includes('"')?'"'+c+'"':c).join(',')).join('\n') :
+    e.innerText.trim().split('\n').map(l=>l.trim()).filter(Boolean).join('\n');
+  o.value = rows;
+};
+document.getElementById('cp').onclick = () => navigator.clipboard.writeText(o.value).then(()=>alert('Copied!'));
+document.getElementById('cl').onclick = () => (e.innerHTML='<br>', o.value='', e.focus());
 
-  range.setStartAfter(table);
-  range.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(range);
-  editor.focus();
-}
-
-function makeColumnsFromSelection(){
-  const sel = window.getSelection();
-  if (!sel.rangeCount) return alert('Place caret or select inside a cell');
-  const range = sel.getRangeAt(0);
-  let td = range.commonAncestorContainer;
-  if (td.nodeType === 3) td = td.parentNode;
-  td = td.closest('td');
-  if (!td) return alert('Must be inside a <td>');
-
-  const before = range.cloneRange();
-  before.selectNodeContents(td);
-  before.setEnd(range.startContainer, range.startOffset);
-
-  const after = range.cloneRange();
-  after.selectNodeContents(td);
-  after.setStart(range.endContainer, range.endOffset);
-
-  const selected = sel.toString();
-  const left = before.toString();
-  const right = after.toString();
-
-  const firstText = selected || left;
-  const secondText = selected ? (left + right) : right;
-
-  td.innerHTML = escapeHtml(firstText.trim());
-  const newTd = document.createElement('td');
-  newTd.innerHTML = escapeHtml(secondText.trim());
-  td.after(newTd);
-
-  const newRange = document.createRange();
-  newRange.setStartAfter(newTd);
-  newRange.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(newRange);
-}
-
-function selectAllInEditor(){
-  const range = document.createRange();
-  range.selectNodeContents(editor);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-}
-
-function exportCSV(){
-  const tables = editor.querySelectorAll('table.generated');
-  const lines = [];
-
-  if (tables.length === 0) {
-    const text = editor.innerText || '';
-    text.split(/\r?\n/).forEach(l => {
-      const t = l.trim();
-      if (t) lines.push(csvEscape(t));
-    });
-  } else {
-    tables.forEach((table, i) => {
-      table.querySelectorAll('tr').forEach(tr => {
-        const row = Array.from(tr.children).map(cell => csvEscape(cell.innerText || ''));
-        lines.push(row.join(','));
-      });
-      if (i < tables.length - 1) lines.push('');
-    });
-  }
-  output.value = lines.join('\n');
-}
-
-async function copyCsvToClipboard(){
-  try {
-    await navigator.clipboard.writeText(output.value);
-    alert('Copied to clipboard!');
-  } catch(e) {
-    alert('Copy failed');
-  }
-}
-
-function clearAll(){
-  editor.innerHTML = '<br>';
-  output.value = '';
-  editor.focus();
-}
-
-/* Button Events */
-document.getElementById('btn-make-table').onclick = makeTableFromSelectionAsRows;
-document.getElementById('btn-make-columns').onclick = makeColumnsFromSelection;
-document.getElementById('btn-select-all').onclick = selectAllInEditor;
-document.getElementById('btn-export').onclick = exportCSV;
-document.getElementById('btn-copy').onclick = copyCsvToClipboard;
-document.getElementById('btn-clear').onclick = clearAll;
-
-/* Keep focus on editor after clicking buttons */
-document.querySelectorAll('button, select').forEach(el => {
-  el.addEventListener('mouseup', () => setTimeout(() => editor.focus(), 10));
-});
+// Keep focus
+document.querySelectorAll('button,select').forEach(b=>b.addEventListener('mouseup',()=>setTimeout(()=>e.focus(),10)));
 </script>
 </body>
 </html>
