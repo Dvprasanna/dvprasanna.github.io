@@ -84,6 +84,7 @@
   <button id="btn-export" title="Export generated tables as CSV">Export CSV</button>
   <button id="btn-copy" title="Copy CSV to clipboard">Copy CSV</button>
   <button id="btn-clear" title="Clear editor & output">Clear</button>
+  <button id="btn-add-hr" title="Insert horizontal rule">Add HR</button>
 </div>
 
 <div id="editor" contenteditable="true" spellcheck="false" aria-label="Editor">
@@ -104,6 +105,30 @@ third
 <div class="hint">Workflow: select lines → Make Table. Then select part of a cell (or caret) → use Make Columns or Split 3. Use Table menu for borders, merge & whole-table alignment.</div>
 
 <script>
+function insertHrLine() {
+  const sel = getSel();
+  if (!sel.rangeCount) return;
+
+  pushHistory();
+
+  const range = sel.getRangeAt(0);
+  const hr = document.createElement('hr');
+
+  range.insertNode(hr);
+
+  // Place caret after the HR
+  const r2 = document.createRange();
+  r2.setStartAfter(hr);
+  r2.collapse(true);
+
+  sel.removeAllRanges();
+  sel.addRange(r2);
+
+  editor.focus();
+
+  pushHistory();
+}
+
 /* ---------- State & Simple History (Undo/Redo) ---------- */
 const editor = document.getElementById('editor');
 const output = document.getElementById('output');
@@ -624,6 +649,7 @@ document.getElementById('btn-redo').addEventListener('click', redo);
 document.querySelectorAll('button').forEach(b => {
   b.addEventListener('mouseup', () => setTimeout(()=> editor.focus(), 0));
 });
+document.getElementById('btn-add-hr').addEventListener('click', insertHrLine);
 
 /* ensure history updated after programmatic actions too */
 function safeAction(fn) {
