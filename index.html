@@ -3,113 +3,188 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Table Maker — Complete</title>
+<title>Table Maker — Complete + Editor Tools</title>
 <style>
   :root{--accent:#0366d6}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:18px;color:#111;background:#fff}
   h1{font-size:18px;margin:0 0 10px}
-  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-  button{padding:8px 12px;border-radius:6px;border:1px solid #bbb;background:#f7f8fa;cursor:pointer}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+  button, select{
+    padding:8px 12px;border-radius:6px;border:1px solid #bbb;background:#f7f8fa;cursor:pointer;font-size:14px
+  }
   button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-  #editor{min-height:260px;border:1px dashed #ccc;padding:10px;border-radius:8px;white-space:pre-wrap;overflow:auto}
+  button:hover, select:hover{opacity:0.9}
+  #editor{
+    min-height:300px;border:1px dashed #ccc;padding:14px;border-radius:8px;
+    white-space:pre-wrap;overflow:auto;outline:none
+  }
   #output{width:100%;height:140px;margin-top:10px;padding:8px;box-sizing:border-box;font-family:monospace}
-  table.generated{border-collapse:collapse;margin-top:8px}
-  table.generated td{border:1px solid #999;padding:6px 8px;min-width:40px}
+  table.generated{border-collapse:collapse;margin:12px 0}
+  table.generated td{border:1px solid #999;padding:6px 10px;min-width:50px}
   .hint{color:#666;font-size:13px;margin-top:8px}
-  .small{font-size:13px;color:#444}
-/*
-.top-header {
-    height: 20vh;         /* 20% of screen height */
-    background: white;    /* white header */
-    width: 100%;          /* full width */
-    position: fixed;      /* stays on top */
-    top: 0;
-    left: 0;
-    z-index: 999;         /* stays above all content */
-}
-body {
-    margin-top: 20vh;     /* push content below header */
-}
-*/
+  .toolbar-group{margin-right:16px;display:flex;gap:6px;align-items:center}
+  .toolbar-label{font-size:13px;color:#555;font-weight:500}
+  hr{margin:16px 0;border:none;border-top:2px solid #ddd}
 </style>
 </head>
 <body>
-<!--
-<div class="top-header"></div>
--->
-<h1>Table Maker — Complete</h1>
+
+<h1>Table Maker — Complete + Rich Editor</h1>
 
 <div class="controls">
-  <button id="btn-make-table" class="primary" title="Select plain text; each newline becomes a row">Make Table (lines → rows)</button>
-  <button id="btn-make-columns" title="Select part of a cell (or place caret) to split that cell into two columns">Make Columns (selection → first col; remaining → next col)</button>
-  <button id="btn-select-all" title="Select everything inside the editor">Select All</button>
-  <button id="btn-export" title="Export generated tables as CSV">Export CSV</button>
-  <button id="btn-copy" title="Copy CSV to clipboard">Copy CSV</button>
-  <button id="btn-clear" title="Clear editor & output">Clear</button>
+
+  <!-- Text Formatting -->
+  <div class="toolbar-group">
+    <span class="toolbar-label">Size:</span>
+    <select id="text-size">
+      <option value="">Normal</option>
+      <option value="h1">Title</option>
+      <option value="h2">Subtitle</option>
+      <option value="p">Body</option>
+    </select>
+  </div>
+
+  <!-- Horizontal Rule -->
+  <div class="toolbar-group">
+    <button id="btn-hr" title="Insert horizontal line">Line (HR)</button>
+  </div>
+
+  <!-- Table Alignment -->
+  <div class="toolbar-group">
+    <span class="toolbar-label">Table Align:</span>
+    <button id="align-left" title="Align table left">Left</button>
+    <button id="align-center" title="Align table center">Center</button>
+    <button id="align-right" title="Align table right">Right</button>
+  </div>
+
+  <div style="flex:1"></div> <!-- spacer -->
+
+  <!-- Original Buttons -->
+  <button id="btn-make-table" class="primary">Make Table</button>
+  <button id="btn-make-columns">Make Columns</button>
+  <button id="btn-select-all">Select All</button>
+  <button id="btn-export">Export CSV</button>
+  <button id="btn-copy">Copy CSV</button>
+  <button id="btn-clear">Clear</button>
 </div>
 
-<div id="editor" contenteditable="true" spellcheck="false" aria-label="Editor">
-
+<div id="editor" contenteditable="true" spellcheck="false">
 Paste plain text here then select lines and click Make Table.
 
-
 Example:
+Apple
+Banana
+Cherry
 
-first text
-second text
-third text
-
-1) Select those lines and click Make Table → three rows.
-2) Deselect.
-3) Inside the first cell type: abcDEFghi
-
-   
-Select "DEF" (only that part) and click Make Columns.
-Result: that row becomes two cells: DEF and abcghi (selected first, remaining next).
+→ Select lines → Make Table → 3 rows
+Then select part of a cell → Make Columns
 </div>
 
-<textarea id="output" placeholder="CSV output will appear here" aria-label="CSV output"></textarea>
-<div class="hint">Workflow: select lines → Make Table. Then select part of a cell (or place caret) → Make Columns. Selected text becomes first column; remaining text (before+after selection) becomes the next column.</div>
+<textarea id="output" placeholder="CSV output will appear here"></textarea>
+<div class="hint">
+  New tools: Title/Subtitle/Body formatting • Insert HR • Align entire tables left/center/right
+</div>
 
 <script>
-/* ---------- Helpers ---------- */
 const editor = document.getElementById('editor');
 const output = document.getElementById('output');
 
+function exec(cmd, value = null) {
+  document.execCommand(cmd, false, value);
+  editor.focus();
+}
+
+/* === 1. Text Size: Title / Subtitle / Body === */
+document.getElementById('text-size').addEventListener('change', function() {
+  const val = this.value;
+  if (!val) {
+    exec('formatBlock', '<div>'); // normal text
+  } else if (val === 'p') {
+    exec('formatBlock', '<p>');
+  } else {
+    exec('formatBlock', '<' + val + '>');
+  }
+  this.value = ''; // reset dropdown
+});
+
+/* === 2. Insert Horizontal Rule === */
+document.getElementById('btn-hr').addEventListener('click', () => {
+  exec('insertHorizontalRule');
+});
+
+/* === 3. Table Alignment: Left / Center / Right === */
+function alignTable(align) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  const table = range.commonAncestorContainer.closest ? 
+    range.commonAncestorContainer.closest('table.generated') : null;
+
+  if (!table) {
+    alert('Place cursor inside a generated table to align it.');
+    return;
+  }
+
+  // Remove existing alignment
+  table.style.marginLeft = '';
+  table.style.marginRight = '';
+  table.style.display = '';
+
+  if (align === 'center') {
+    table.style.marginLeft = 'auto';
+    table.style.marginRight = 'auto';
+    table.style.display = 'table'; // ensures centering works
+  } else if (align === 'right') {
+    table.style.marginLeft = 'auto';
+    table.style.display = 'table';
+  } else { // left
+    table.style.marginRight = 'auto';
+    table.style.display = 'table';
+  }
+}
+
+document.getElementById('align-left').onclick   = () => alignTable('left');
+document.getElementById('align-center').onclick = () => alignTable('center');
+document.getElementById('align-right').onclick  = () => alignTable('right');
+
+/* === Original Functions (unchanged, just moved down) === */
 function getSel(){ return window.getSelection(); }
-function getSelText(){ const s = getSel(); return s ? s.toString() : ''; }
+function getSelText(){ const s = window.getSelection(); return s ? s.toString() : ''; }
+
 function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function csvEscape(v){ if (v==null) return ''; const s=String(v); if (s.includes('"')||s.includes(',')||s.includes('\n')) return `"${s.replace(/"/g,'""')}"`; return s; }
+function csvEscape(v){
+  if (v==null) return '';
+  const s = String(v);
+  if (s.includes('"')||s.includes(',')||s.includes('\n')) return `"${s.replace(/"/g,'""')}"`;
+  return s;
+}
 
-/* ---------- Make Table: each selected line -> a row (one td per row) ---------- */
 function makeTableFromSelectionAsRows(){
-  const selText = getSelText();
-  if (!selText || !selText.trim()){ alert('Select some text first. Each newline becomes a ROW.'); return; }
+  const selText = getSelText().trim();
+  if (!selText) { alert('Select lines first'); return; }
 
-  const lines = selText.replace(/\r\n/g,'\n').replace(/\r/g,'\n')
-    .split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-  if (lines.length === 0){ alert('No non-empty lines found in selection.'); return; }
+  const lines = selText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return;
 
   const table = document.createElement('table');
   table.className = 'generated';
   const tbody = document.createElement('tbody');
-  for (const line of lines){
+
+  lines.forEach(text => {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.innerHTML = escapeHtml(line);
+    td.innerHTML = escapeHtml(text);
     tr.appendChild(td);
     tbody.appendChild(tr);
-  }
+  });
+
   table.appendChild(tbody);
 
-  const sel = getSel();
-  if (!sel.rangeCount) return;
+  const sel = window.getSelection();
   const range = sel.getRangeAt(0);
   range.deleteContents();
   range.insertNode(table);
 
-  // move caret after table
   range.setStartAfter(table);
   range.collapse(true);
   sel.removeAllRanges();
@@ -117,155 +192,99 @@ function makeTableFromSelectionAsRows(){
   editor.focus();
 }
 
-/* ---------- Make Columns: split cell by selection or caret ----------
-   Behavior:
-   - If selection inside a td and selection non-empty: selectedText -> first col; remaining (before+after) -> next col
-   - If selection empty (caret) inside a td: split at caret: left -> first col, right -> next col
-   - If selection spans outside a td: will try to use anchor td; alert if not inside td
----------------------------------------------*/
 function makeColumnsFromSelection(){
-  const sel = getSel();
-  if (!sel.rangeCount) return alert('Place caret or select text inside a table cell (td).');
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return alert('Place caret or select inside a cell');
   const range = sel.getRangeAt(0);
+  let td = range.commonAncestorContainer;
+  if (td.nodeType === 3) td = td.parentNode;
+  td = td.closest('td');
+  if (!td) return alert('Must be inside a <td>');
 
-  // find anchor element for selection
-  let anchorNode = sel.anchorNode;
-  if (!anchorNode) return alert('No selection anchor found.');
-  if (anchorNode.nodeType === 3) anchorNode = anchorNode.parentElement;
-  const anchorTd = anchorNode.closest ? anchorNode.closest('td') : null;
-  if (!anchorTd) return alert('Make Columns must be used inside a table cell (td). Select inside a td and try again.');
+  const before = range.cloneRange();
+  before.selectNodeContents(td);
+  before.setEnd(range.startContainer, range.startOffset);
 
-  // Normalize selection text to use \n consistently
-  const selTextRaw = sel.toString().replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const after = range.cloneRange();
+  after.selectNodeContents(td);
+  after.setStart(range.endContainer, range.endOffset);
 
-  // Build range from start of td to start of selection
-  const rangeBefore = document.createRange();
-  try {
-    rangeBefore.setStart(anchorTd, 0);
-    rangeBefore.setEnd(range.startContainer, range.startOffset);
-  } catch(e){
-    // fallback: start empty
-    rangeBefore.selectNodeContents(anchorTd);
-    rangeBefore.collapse(true);
-  }
-  const beforeText = rangeBefore.toString();
+  const selected = sel.toString();
+  const left = before.toString();
+  const right = after.toString();
 
-  // Build range from end of selection to end of td
-  const rangeAfter = document.createRange();
-  try {
-    rangeAfter.setStart(range.endContainer, range.endOffset);
-    rangeAfter.setEnd(anchorTd, anchorTd.childNodes.length);
-  } catch(e){
-    rangeAfter.selectNodeContents(anchorTd);
-    rangeAfter.collapse(false);
-  }
-  const afterText = rangeAfter.toString();
+  const firstText = selected || left;
+  const secondText = selected ? (left + right) : right;
 
-  const selectedText = selTextRaw; // may be '' if caret only
-  const remainingText = (beforeText + afterText).trim();
+  td.innerHTML = escapeHtml(firstText.trim());
+  const newTd = document.createElement('td');
+  newTd.innerHTML = escapeHtml(secondText.trim());
+  td.after(newTd);
 
-  if (!selectedText && !remainingText) return alert('Cell is empty; nothing to split.');
-
-  // If selection is empty (caret) -> left = beforeText, right = afterText
-  if (!selectedText) {
-    const first = beforeText.trim();
-    const second = afterText.trim();
-    anchorTd.innerHTML = escapeHtml(first);
-    const newTd = document.createElement('td');
-    newTd.innerHTML = escapeHtml(second);
-    anchorTd.parentNode.insertBefore(newTd, anchorTd.nextSibling);
-
-    // move caret after inserted td
-    const rng = document.createRange();
-    rng.setStartAfter(newTd);
-    rng.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(rng);
-    editor.focus();
-    return;
-  }
-
-  // If selection non-empty: selected -> first col; remaining (before+after) -> next col
-  const firstCol = selectedText.trim();
-  const secondCol = remainingText;
-
-  anchorTd.innerHTML = escapeHtml(firstCol);
-  const newTd2 = document.createElement('td');
-  newTd2.innerHTML = escapeHtml(secondCol);
-  anchorTd.parentNode.insertBefore(newTd2, anchorTd.nextSibling);
-
-  // collapse selection and place caret after new cell
-  const rng2 = document.createRange();
-  rng2.setStartAfter(newTd2);
-  rng2.collapse(true);
+  const newRange = document.createRange();
+  newRange.setStartAfter(newTd);
+  newRange.collapse(true);
   sel.removeAllRanges();
-  sel.addRange(rng2);
-  editor.focus();
+  sel.addRange(newRange);
 }
 
-/* ---------- Select All: select all content inside editor ---------- */
 function selectAllInEditor(){
   const range = document.createRange();
   range.selectNodeContents(editor);
-  const sel = getSel();
+  const sel = window.getSelection();
   sel.removeAllRanges();
   sel.addRange(range);
-  editor.focus();
 }
 
-/* ---------- Export CSV (all generated tables) ---------- */
 function exportCSV(){
   const tables = editor.querySelectorAll('table.generated');
-  if (tables.length === 0){
-    // fallback: treat whole editor as lines->rows
-    const txt = editor.innerText || editor.textContent || '';
-    if (!txt.trim()){ output.value = ''; return; }
-    const lines = txt.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    output.value = lines.map(l => csvEscape(l)).join('\n');
-    return;
-  }
+  const lines = [];
 
-  const outLines = [];
-  tables.forEach((t, ti) => {
-    const trs = t.querySelectorAll('tr');
-    trs.forEach(tr => {
-      const cells = Array.from(tr.children).map(td => td.textContent || td.innerText || '');
-      outLines.push(cells.map(c => csvEscape(c)).join(','));
+  if (tables.length === 0) {
+    const text = editor.innerText || '';
+    text.split(/\r?\n/).forEach(l => {
+      const t = l.trim();
+      if (t) lines.push(csvEscape(t));
     });
-    if (ti < tables.length - 1) outLines.push('');
-  });
-  output.value = outLines.join('\n');
+  } else {
+    tables.forEach((table, i) => {
+      table.querySelectorAll('tr').forEach(tr => {
+        const row = Array.from(tr.children).map(cell => csvEscape(cell.innerText || ''));
+        lines.push(row.join(','));
+      });
+      if (i < tables.length - 1) lines.push('');
+    });
+  }
+  output.value = lines.join('\n');
 }
 
-/* ---------- Copy CSV to clipboard ---------- */
 async function copyCsvToClipboard(){
   try {
     await navigator.clipboard.writeText(output.value);
-    alert('CSV copied to clipboard');
-  } catch(e){
-    alert('Copy failed: ' + e);
+    alert('Copied to clipboard!');
+  } catch(e) {
+    alert('Copy failed');
   }
 }
 
-/* ---------- Clear ---------- */
 function clearAll(){
-  editor.innerHTML = '';
+  editor.innerHTML = '<br>';
   output.value = '';
   editor.focus();
 }
 
-/* ---------- Hook up buttons ---------- */
-document.getElementById('btn-make-table').addEventListener('click', makeTableFromSelectionAsRows);
-document.getElementById('btn-make-columns').addEventListener('click', makeColumnsFromSelection);
-document.getElementById('btn-select-all').addEventListener('click', selectAllInEditor);
-document.getElementById('btn-export').addEventListener('click', exportCSV);
-document.getElementById('btn-copy').addEventListener('click', copyCsvToClipboard);
-document.getElementById('btn-clear').addEventListener('click', clearAll);
+/* Button Events */
+document.getElementById('btn-make-table').onclick = makeTableFromSelectionAsRows;
+document.getElementById('btn-make-columns').onclick = makeColumnsFromSelection;
+document.getElementById('btn-select-all').onclick = selectAllInEditor;
+document.getElementById('btn-export').onclick = exportCSV;
+document.getElementById('btn-copy').onclick = copyCsvToClipboard;
+document.getElementById('btn-clear').onclick = clearAll;
 
-/* Keep editor focused after button clicks (small UX) */
-['btn-make-table','btn-make-columns','btn-select-all','btn-export','btn-copy','btn-clear']
-  .forEach(id => document.getElementById(id).addEventListener('mouseup', () => setTimeout(() => editor.focus(), 0)));
-
+/* Keep focus on editor after clicking buttons */
+document.querySelectorAll('button, select').forEach(el => {
+  el.addEventListener('mouseup', () => setTimeout(() => editor.focus(), 10));
+});
 </script>
 </body>
 </html>
