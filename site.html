@@ -3,12 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Edge/Corner Draw — Trim Tool (Improved)</title>
-
+<title>Edge/Corner Draw — Trim Tool (Fixed trim & mobile menu)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-
 <style>
   :root{
     --bg:#f6f7fb;
@@ -101,13 +99,15 @@
   .ghost{stroke:var(--accent);stroke-dasharray:6 4;opacity:.6;pointer-events:none}
   .intersection-dot{fill:var(--accent);stroke:white;stroke-width:1.5;pointer-events:none;opacity:0;transition:opacity .2s}
   .intersection-dot.show{opacity:1}
-  /* small responsive */
+
+  /* responsive */
   @media (max-width:860px){
     .toolbar{position:fixed;left:0;right:0;bottom:0;width:100%;height:auto;padding:8px 12px;border-right:none;border-top:1px solid var(--panel-border);border-radius:12px 12px 0 0;flex-direction:row;align-items:center;justify-content:space-around;gap:8px}
     .toolbar .controls{flex-direction:row;gap:8px;align-items:center}
     .toolbar .section-title{display:none}
     .app{padding-bottom:86px}
-    .toggle-btn{display:none}
+    /* ensure toggle is usable on mobile — show it */
+    .toggle-btn{display:flex;left:12px;right:auto;top:auto;bottom:84px;transform:none;z-index:60}
     .status{left:12px;bottom:96px}
     .fab{right:16px;bottom:96px}
   }
@@ -195,22 +195,20 @@
   const toolbar = document.getElementById('toolbar'), toggleBtn = document.getElementById('toggle');
 
   // App state
-  let strokeWidth = 4;               // px (visual)
-  let currentMode = 'draw';          // 'draw' or 'trim'
-  let shapes = [];                   // shape objects
-  const history = [];                // history stack
-  let pointerDown = null;            // pointer info during draw
-  let ghost = null;                  // ghost element reference
-  let rafPending = false;            // rAF throttle flag
-  let lastPointer = null;            // last pointer position
+  let strokeWidth = 4;
+  let currentMode = 'draw';
+  let shapes = [];
+  const history = [];
+  let pointerDown = null;
+  let ghost = null;
+  let rafPending = false;
+  let lastPointer = null;
   const HOTZONE = 50;
-  let viewW = 800, viewH = 600;      // cached viewbox dims
+  let viewW = 800, viewH = 600;
 
-  // Performance tuning constants
-  const CIRCLE_SEGMENTS = 64;        // fewer segments => faster split for circles
+  const CIRCLE_SEGMENTS = 64;
   const EPS = 1e-6;
 
-  // helpers: cache viewbox and update on resize
   function setCanvasSize(val){
     const [w,h] = val.split('x').map(Number);
     svg.setAttribute('width', w);
@@ -219,11 +217,8 @@
     viewW = w; viewH = h;
   }
   setCanvasSize(sizeSel.value);
-  sizeSel.addEventListener('change', e => {
-    setCanvasSize(e.target.value);
-  });
+  sizeSel.addEventListener('change', e => setCanvasSize(e.target.value));
 
-  // stroke width setters
   function setWidth(sizeKey){
     lwS.classList.toggle('active', sizeKey === 'S');
     lwM.classList.toggle('active', sizeKey === 'M');
@@ -238,28 +233,27 @@
   lwL.addEventListener('click', () => setWidth('L'));
   setWidth('M');
 
-  // mode toggle
   function setMode(m){
     currentMode = m;
     modeDraw.classList.toggle('active', m === 'draw');
     modeTrim.classList.toggle('active', m === 'trim');
     modeText.textContent = (m === 'trim') ? 'Trim Mode' : 'Draw Mode';
     fab.textContent = (m === 'trim') ? '✏️' : '✂';
-    // when switching to trim, run light split to show intersections (non-destructive)
-    if(m === 'trim'){ // delay small to allow UI to update
-      requestAnimationFrame(() => {
-        // don't modify existing shapes here — mark intersections for quick visual feedback
-        quickMarkIntersections();
-      });
-    }
+    if(m === 'trim'){ requestAnimationFrame(()=>quickMarkIntersections()); }
   }
   modeDraw.addEventListener('click', ()=>setMode('draw'));
   modeTrim.addEventListener('click', ()=>setMode('trim'));
-  fab.addEventListener('click', ()=>setMode(currentMode === 'draw' ? 'trim' : 'draw'));
+  fab.addEventListener('click', ()=>{ 
+    // toggle draw/trim
+    setMode(currentMode === 'draw' ? 'trim' : 'draw');
+    // also on small screens toggle toolbar visible if collapsed
+    if(window.innerWidth <= 860) {
+      collapsed = false; applyToolbar();
+    }
+  });
 
   function updateStatus(){ widthText.textContent = `Width: ${strokeWidth === 2?1:strokeWidth ===4?2:3}`; }
 
-  // toolbar collapse persisted
   let collapsed = localStorage.getItem('toolbar-collapsed') === 'true';
   function applyToolbar(){
     toolbar.classList.toggle('collapsed', collapsed);
@@ -274,10 +268,7 @@
   });
   applyToolbar();
 
-  // Utility: create element with ns
   function ns(tag){ return document.createElementNS('http://www.w3.org/2000/svg', tag); }
-
-  // Create ghost helpers (reuse ghost instead of recreating often)
   function ensureGhost(tag){
     if(!ghost || ghost.tagName.toLowerCase() !== tag){
       removeGhost();
@@ -289,13 +280,11 @@
   }
   function removeGhost(){ if(ghost){ ghost.remove(); ghost = null; } }
 
-  // Add shape records
   function pushShape(obj){
     shapes.push(obj);
     history.push({op:'add', shape:obj});
   }
 
-  // Factory create shapes & register
   function makeFullVerticalLine(x){
     const line = ns('line');
     line.classList.add('shape');
@@ -323,14 +312,13 @@
     pushShape({type:'circle', el:c, cx, cy, r, w:strokeWidth});
   }
 
-  // Convert client coords to svg coords (fast)
   function svgPoint(evt){
     const pt = svg.createSVGPoint();
     pt.x = evt.clientX; pt.y = evt.clientY;
     return pt.matrixTransform(svg.getScreenCTM().inverse());
   }
 
-  // pointer handling using rAF for smoothness and reduced CPU
+  // pointer handling
   function onPointerDown(e){
     if(e.button && e.button !== 0) return;
     const p = svgPoint(e);
@@ -341,11 +329,7 @@
     const nearBottom = p.y >= viewH - margin;
     const nearCorner = (nearLeft || nearRight) && (nearTop || nearBottom);
     const nearEdge = nearLeft || nearRight || nearTop || nearBottom;
-    if(currentMode !== 'draw' || !nearEdge) {
-      // only start drawing when in draw mode and near an edge/corner
-      pointerDown = null;
-      return;
-    }
+    if(currentMode !== 'draw' || !nearEdge) { pointerDown = null; return; }
     pointerDown = {start: p, corner: nearCorner, edge: nearEdge, nearLeft, nearRight, nearTop, nearBottom, axis: null};
     if(nearCorner){
       const cx = nearLeft ? 0 : viewW, cy = nearTop ? 0 : viewH;
@@ -371,13 +355,12 @@
     } else {
       pointerDown = null;
     }
-    svg.setPointerCapture(e.pointerId);
+    try{ svg.setPointerCapture(e.pointerId);}catch(e){}
     lastPointer = p;
   }
 
   function onPointerMove(e){
     lastPointer = svgPoint(e);
-    // schedule an rAF update (single in-flight)
     if(!rafPending){
       rafPending = true;
       requestAnimationFrame(processPointerMove);
@@ -426,29 +409,334 @@
     try{ svg.releasePointerCapture(e.pointerId);}catch(e){}
   }
 
-  // Attach pointer listeners to svg
   svg.addEventListener('pointerdown', onPointerDown, {passive:true});
   svg.addEventListener('pointermove', onPointerMove, {passive:true});
   svg.addEventListener('pointerup', onPointerUp, {passive:true});
   svg.addEventListener('pointercancel', onPointerUp, {passive:true});
 
-  // click delete when in trim mode (works with shapes)
+  // OLD simple delete handler removed. Replace with trim behavior:
   svg.addEventListener('click', (e) => {
     if(currentMode !== 'trim') return;
-    const t = e.target;
-    if(!t || !t.classList?.contains('shape')) return;
-    const shapeObj = shapes.find(s => s.el === t);
-    if(shapeObj){
-      t.remove();
-      shapes = shapes.filter(s => s !== shapeObj);
-      history.push({op:'del', shape: shapeObj});
+    const target = e.target;
+    if(!target || !target.classList?.contains('shape')) return;
+    const shapeObj = shapes.find(s => s.el === target);
+    if(!shapeObj) return;
+
+    // compute click point
+    const p = svgPoint(e);
+
+    // shape trimming functions
+    function replaceShape(oldShape, newShapeObjs){
+      // remove old element
+      try{ if(oldShape.el && oldShape.el.parentNode) oldShape.el.remove(); } catch(err){}
+      // append new elements (fragment)
+      const frag = document.createDocumentFragment();
+      newShapeObjs.forEach(ns => {
+        frag.appendChild(ns.el);
+        shapes.push(ns);
+        history.push({op:'add', shape:ns});
+      });
+      svg.appendChild(frag);
+      // remove old from shapes array
+      shapes = shapes.filter(s => s !== oldShape);
+      history.push({op:'del', shape: oldShape});
     }
+
+    // helper: find intersection points on this shape with other shapes
+    function gatherIntersectionsForShape(s){
+      const result = [];
+      shapes.forEach(other => {
+        if(other === s) return;
+        if(s.type === 'line'){
+          if(other.type === 'line'){
+            const pt = lineLineInter(s, other);
+            if(pt) result.push(pt);
+          } else if(other.type === 'circle'){
+            const pts = lineCircleInter(s, other);
+            pts.forEach(x=>result.push(x));
+          } else if(other.type === 'polyline'){
+            // check each segment of polyline
+            for(let i=0;i<other.pts.length-1;i++){
+              const seg = {x1: other.pts[i].x, y1: other.pts[i].y, x2: other.pts[i+1].x, y2: other.pts[i+1].y};
+              const pt = lineLineInter(s, seg);
+              if(pt) result.push(pt);
+            }
+          }
+        } else if(s.type === 'circle'){
+          if(other.type === 'line'){
+            const pts = lineCircleInter(other, s); // line/circle intersection symmetric
+            pts.forEach(x=>result.push(x));
+          } else if(other.type === 'circle'){
+            const pts = circleCircleInter(s, other);
+            pts.forEach(x=>result.push(x));
+          } else if(other.type === 'polyline'){
+            // check polyline segments
+            for(let i=0;i<other.pts.length-1;i++){
+              const seg = {x1: other.pts[i].x, y1: other.pts[i].y, x2: other.pts[i+1].x, y2: other.pts[i+1].y};
+              const pts = lineCircleInter(seg, s);
+              pts.forEach(x=>result.push(x));
+            }
+          }
+        } else if(s.type === 'polyline'){
+          // treat polyline as collection of segments
+          for(let i=0;i<s.pts.length-1;i++){
+            const seg = {x1:s.pts[i].x,y1:s.pts[i].y,x2:s.pts[i+1].x,y2:s.pts[i+1].y};
+            // check with other shape
+            if(other.type === 'line'){
+              const pt = lineLineInter(seg, other);
+              if(pt) result.push(pt);
+            } else if(other.type === 'circle'){
+              const pts = lineCircleInter(seg, other);
+              pts.forEach(x=>result.push(x));
+            } else if(other.type === 'polyline'){
+              for(let j=0;j<other.pts.length-1;j++){
+                const seg2 = {x1:other.pts[j].x,y1:other.pts[j].y,x2:other.pts[j+1].x,y2:other.pts[j+1].y};
+                const pt = lineLineInter(seg, seg2);
+                if(pt) result.push(pt);
+              }
+            }
+          }
+        }
+      });
+      // deduplicate by coordinates (6dp)
+      const uniq = {};
+      result.forEach(pt => {
+        const k = `${pt.x.toFixed(6)}|${pt.y.toFixed(6)}`;
+        uniq[k] = pt;
+      });
+      return Object.values(uniq);
+    }
+
+    // param along line (0..1)
+    function paramOnLine(line, pt){
+      const dx = line.x2 - line.x1, dy = line.y2 - line.y1;
+      if(Math.abs(dx) > Math.abs(dy)) return ((pt.x - line.x1) / (dx || 1e-9));
+      return ((pt.y - line.y1) / (dy || 1e-9));
+    }
+
+    // find interval containing click (on line)
+    if(shapeObj.type === 'line'){
+      const inters = gatherIntersectionsForShape(shapeObj);
+      // include endpoints
+      inters.push({x: shapeObj.x1, y: shapeObj.y1});
+      inters.push({x: shapeObj.x2, y: shapeObj.y2});
+      // compute t for each, unique+sorted
+      const dx = shapeObj.x2 - shapeObj.x1, dy = shapeObj.y2 - shapeObj.y1;
+      let ts = inters.map(p => {
+        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - shapeObj.x1) / (dx || 1e-9)) : ((p.y - shapeObj.y1) / (dy || 1e-9));
+        return Math.max(0, Math.min(1, t));
+      });
+      ts = Array.from(new Set(ts.map(t=>t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
+      // find t_click
+      const tClick = Math.max(0, Math.min(1, paramOnLine(shapeObj, p)));
+      // find interval [ta,tb] such that tClick in (ta,tb)
+      let idx = -1;
+      for(let i=0;i<ts.length-1;i++){
+        if(tClick >= ts[i]-1e-6 && tClick <= ts[i+1]+1e-6){ idx = i; break; }
+      }
+      if(idx === -1){
+        // fallback: delete entire (as old behavior) if not found — but we avoid this unless nothing else
+        shapeObj.el.remove();
+        shapes = shapes.filter(s => s !== shapeObj);
+        history.push({op:'del', shape: shapeObj});
+        return;
+      }
+      // create remaining segments excluding the clicked segment
+      const fragShapes = [];
+      for(let i=0;i<ts.length-1;i++){
+        if(i === idx) continue; // remove this segment
+        const ta = ts[i], tb = ts[i+1];
+        const ax = shapeObj.x1 + dx * ta, ay = shapeObj.y1 + dy * ta;
+        const bx = shapeObj.x1 + dx * tb, by = shapeObj.y1 + dy * tb;
+        if(Math.hypot(bx-ax, by-ay) > 1.5){
+          const seg = ns('line');
+          seg.classList.add('shape');
+          seg.setAttribute('x1', ax); seg.setAttribute('y1', ay); seg.setAttribute('x2', bx); seg.setAttribute('y2', by);
+          seg.setAttribute('stroke-width', shapeObj.w || strokeWidth);
+          fragShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by,w:shapeObj.w || strokeWidth});
+        }
+      }
+      replaceShape(shapeObj, fragShapes);
+      return;
+    }
+
+    // polyline trimming: remove the polyline segment that contains clicked point
+    if(shapeObj.type === 'polyline'){
+      // find closest segment index
+      const pts = shapeObj.pts;
+      let bestSeg = -1, bestDist = Infinity, projT = 0;
+      for(let i=0;i<pts.length-1;i++){
+        const a = pts[i], b = pts[i+1];
+        const vx = b.x - a.x, vy = b.y - a.y;
+        const wx = p.x - a.x, wy = p.y - a.y;
+        const denom = vx*vx + vy*vy;
+        const t = denom === 0 ? 0 : Math.max(0, Math.min(1, (wx*vx + wy*vy) / denom));
+        const cx = a.x + vx * t, cy = a.y + vy * t;
+        const d = Math.hypot(cx - p.x, cy - p.y);
+        if(d < bestDist){ bestDist = d; bestSeg = i; projT = t; }
+      }
+      if(bestSeg === -1){
+        // fallback delete whole element
+        shapeObj.el.remove();
+        shapes = shapes.filter(s => s !== shapeObj);
+        history.push({op:'del', shape: shapeObj});
+        return;
+      }
+      // gather intersection indices on polyline (via gatherIntersectionsForShape)
+      const inters = gatherIntersectionsForShape(shapeObj);
+      // convert intersection points to indices along pts by nearest point index
+      const idxSet = new Set();
+      pts.forEach((pt, idx) => {
+        inters.forEach(ip => {
+          if(Math.hypot(pt.x - ip.x, pt.y - ip.y) < 6) idxSet.add(idx);
+        });
+      });
+      // ensure endpoints included
+      idxSet.add(0); idxSet.add(pts.length - 1);
+      const idxs = Array.from(idxSet).sort((a,b)=>a-b);
+      // find which pair of adjacent indices contains the clicked segment best
+      // locate the segment index (bestSeg) and remove the chunk that includes it
+      let removeRange = null;
+      for(let i=0;i<idxs.length-1;i++){
+        const sIdx = idxs[i], eIdx = idxs[i+1];
+        if(bestSeg >= sIdx && bestSeg < eIdx){
+          removeRange = [sIdx, eIdx];
+          break;
+        }
+      }
+      if(!removeRange){
+        // fallback: delete
+        shapeObj.el.remove();
+        shapes = shapes.filter(s => s !== shapeObj);
+        history.push({op:'del', shape: shapeObj});
+        return;
+      }
+      // build remaining polylines excluding removeRange segment
+      const newObjs = [];
+      // part before removeRange
+      if(removeRange[0] > 0){
+        const partPts = pts.slice(0, removeRange[0]+1);
+        if(partPts.length > 1){
+          const poly = ns('polyline');
+          poly.classList.add('shape');
+          poly.setAttribute('points', partPts.map(q => `${q.x},${q.y}`).join(' '));
+          poly.setAttribute('fill','none');
+          poly.setAttribute('stroke-width', shapeObj.w || strokeWidth);
+          newObjs.push({type:'polyline', el:poly, pts:partPts, w:shapeObj.w || strokeWidth});
+        }
+      }
+      // part after removeRange
+      if(removeRange[1] < pts.length - 1){
+        const partPts = pts.slice(removeRange[1], pts.length);
+        if(partPts.length > 1){
+          const poly = ns('polyline');
+          poly.classList.add('shape');
+          poly.setAttribute('points', partPts.map(q => `${q.x},${q.y}`).join(' '));
+          poly.setAttribute('fill','none');
+          poly.setAttribute('stroke-width', shapeObj.w || strokeWidth);
+          newObjs.push({type:'polyline', el:poly, pts:partPts, w:shapeObj.w || strokeWidth});
+        }
+      }
+      replaceShape(shapeObj, newObjs);
+      return;
+    }
+
+    // circle trimming: remove the arc segment containing click
+    if(shapeObj.type === 'circle'){
+      const inters = gatherIntersectionsForShape(shapeObj);
+      // sample circle to indexes for arc mapping
+      const N = Math.max(32, Math.min(CIRCLE_SEGMENTS, Math.round(CIRCLE_SEGMENTS * (shapeObj.r / Math.max(1, Math.min(viewW, viewH))))));
+      const pts = [];
+      for(let i=0;i<N;i++){
+        const a = (i/N) * Math.PI * 2;
+        pts.push({x: shapeObj.cx + shapeObj.r*Math.cos(a), y: shapeObj.cy + shapeObj.r*Math.sin(a), a, i});
+      }
+      // find index of point closest to click
+      let bestI = 0, bestD = Infinity;
+      for(let i=0;i<pts.length;i++){
+        const d = Math.hypot(pts[i].x - p.x, pts[i].y - p.y);
+        if(d < bestD){ bestD = d; bestI = i; }
+      }
+      // find indices near intersections
+      const idxSet = new Set();
+      pts.forEach((pt, idx) => {
+        inters.forEach(ip => {
+          if(Math.hypot(pt.x - ip.x, pt.y - ip.y) < Math.max(4, shapeObj.r * 0.02)) idxSet.add(idx);
+        });
+      });
+      // if no intersections, remove entire circle (fallback)
+      if(idxSet.size === 0){
+        shapeObj.el.remove();
+        shapes = shapes.filter(s => s !== shapeObj);
+        history.push({op:'del', shape: shapeObj});
+        return;
+      }
+      const idxs = Array.from(idxSet).sort((a,b)=>a-b);
+      // find pair that surrounds bestI (walk through)
+      let removeStart = -1, removeEnd = -1;
+      for(let k=0;k<idxs.length;k++){
+        const a = idxs[k], b = idxs[(k+1)%idxs.length];
+        let inRange = false;
+        if(a < b){
+          inRange = (bestI >= a && bestI <= b);
+        } else { // wrap
+          inRange = (bestI >= a || bestI <= b);
+        }
+        if(inRange){
+          removeStart = a; removeEnd = b;
+          break;
+        }
+      }
+      if(removeStart === -1){
+        // fallback delete
+        shapeObj.el.remove();
+        shapes = shapes.filter(s => s !== shapeObj);
+        history.push({op:'del', shape: shapeObj});
+        return;
+      }
+      // build arcs for the rest
+      const newObjs = [];
+      // walk indices and skip arc between removeStart..removeEnd
+      let i = removeEnd;
+      const buildArc = (startIdx, endIdx) => {
+        // gather points from startIdx -> endIdx (inclusive)
+        const arcPts = [];
+        let j = startIdx;
+        while(true){
+          arcPts.push(pts[j]);
+          if(j === endIdx) break;
+          j = (j+1) % pts.length;
+        }
+        if(arcPts.length > 1){
+          const poly = ns('polyline');
+          poly.classList.add('shape');
+          poly.setAttribute('points', arcPts.map(q=>`${q.x},${q.y}`).join(' '));
+          poly.setAttribute('fill','none');
+          poly.setAttribute('stroke-width', shapeObj.w || strokeWidth);
+          newObjs.push({type:'polyline', el:poly, pts:arcPts, w:shapeObj.w || strokeWidth});
+        }
+      };
+      // If removeStart < removeEnd (no wrap): remaining arcs are [removeEnd..removeStart] with wrap
+      // We'll build from removeEnd to removeStart (wrap)
+      let start = removeEnd;
+      let end = (removeStart - 1 + pts.length) % pts.length;
+      if(start !== ((end + 1) % pts.length)){
+        // ensure we don't accidentally create zero-length
+        buildArc(start, end);
+      }
+      replaceShape(shapeObj, newObjs);
+      return;
+    }
+
+    // fallback: if shape type unknown, delete it (old behavior fallback)
+    shapeObj.el.remove();
+    shapes = shapes.filter(s => s !== shapeObj);
+    history.push({op:'del', shape: shapeObj});
   });
 
-  // basic undo/clear
+  // clear, undo
   function clearAll(){
     if(shapes.length === 0) return;
-    // push clear snapshot to history so we can undo clear
     const snapshot = shapes.slice();
     history.push({op:'clear', shapes: snapshot});
     shapes.forEach(s => s.el.remove());
@@ -466,25 +754,19 @@
       svg.appendChild(h.shape.el);
       shapes.push(h.shape);
     } else if(h.op === 'clear'){
-      // restore snapshot
       h.shapes.forEach(s => { svg.appendChild(s.el); shapes.push(s); });
+    } else if(h.op === 'split'){
+      // note: split history not fully undo-friendly in this code path
     }
   }
   undoBtn.addEventListener('click', undo);
 
-  // Intersection math helpers (kept but optimized with bbox early-reject)
+  // Intersection helpers
   function bboxOverlap(aMinX, aMinY, aMaxX, aMaxY, bMinX, bMinY, bMaxX, bMaxY){
     return !(aMaxX < bMinX || aMinX > bMaxX || aMaxY < bMinY || aMinY > bMaxY);
   }
 
   function lineLineInter(l1, l2){
-    // quick bbox reject
-    const aMinX = Math.min(l1.x1,l1.x2), aMaxX = Math.max(l1.x1,l1.x2);
-    const aMinY = Math.min(l1.y1,l1.y2), aMaxY = Math.max(l1.y1,l1.y2);
-    const bMinX = Math.min(l2.x1,l2.x2), bMaxX = Math.max(l2.x1,l2.x2);
-    const bMinY = Math.min(l2.y1,l2.y2), bMaxY = Math.max(l2.y1,l2.y2);
-    if(!bboxOverlap(aMinX,aMinY,aMaxX,aMaxY,bMinX,bMinY,bMaxX,bMaxY)) return null;
-
     const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
     const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
     const denom = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
@@ -497,12 +779,6 @@
   }
 
   function lineCircleInter(line, circle){
-    // bbox quick reject
-    const minX = Math.min(line.x1,line.x2) - circle.r, maxX = Math.max(line.x1,line.x2) + circle.r;
-    const minY = Math.min(line.y1,line.y2) - circle.r, maxY = Math.max(line.y1,line.y2) + circle.r;
-    if(circle.cx < minX || circle.cx > maxX || circle.cy < minY || circle.cy > maxY) {
-      // don't early return too eagerly, but helps common cases
-    }
     const x1=line.x1, y1=line.y1, x2=line.x2, y2=line.y2;
     const cx=circle.cx, cy=circle.cy, r=circle.r;
     const dx = x2-x1, dy=y2-y1;
@@ -544,37 +820,30 @@
     return [p1,p2];
   }
 
-  // show a temporary intersection dot (fade and remove)
   function markIntersection(pt){
     const dot = ns('circle');
     dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3);
     dot.classList.add('intersection-dot');
     svg.appendChild(dot);
-    // trigger show class in next frame for CSS transition
     requestAnimationFrame(()=>dot.classList.add('show'));
     setTimeout(()=>{ dot.classList.remove('show'); setTimeout(()=>dot.remove(), 300); }, 900);
   }
 
-  // Quick mark intersections (non-destructive) used when switching mode -> trim
   function quickMarkIntersections(){
-    // small cheap scan for intersections and mark them
     const lines = shapes.filter(s=>s.type==='line');
     const circles = shapes.filter(s=>s.type==='circle');
-    // line-line
     for(let i=0;i<lines.length;i++){
       for(let j=i+1;j<lines.length;j++){
         const p = lineLineInter(lines[i], lines[j]);
         if(p) markIntersection(p);
       }
     }
-    // line-circle
     for(let i=0;i<lines.length;i++){
       for(let j=0;j<circles.length;j++){
         const pts = lineCircleInter(lines[i], circles[j]);
         pts.forEach(pt => markIntersection(pt));
       }
     }
-    // circle-circle
     for(let i=0;i<circles.length;i++){
       for(let j=i+1;j<circles.length;j++){
         const pts = circleCircleInter(circles[i], circles[j]);
@@ -583,85 +852,72 @@
     }
   }
 
-  // Split routine optimized (batch DOM updates)
   function splitAtIntersectionsInternal(){
     if(shapes.length === 0) return;
-    // extract current primitives
-    const lines = shapes.filter(s=>s.type==='line').map(s => ({...s}));
-    const circles = shapes.filter(s=>s.type==='circle').map(s => ({...s}));
+    const lines = shapes.filter(s=>s.type==='line').map(s=>s);
+    const circles = shapes.filter(s=>s.type==='circle').map(s=>s);
     const intersections = [];
-
-    // gather intersections
     for(let i=0;i<lines.length;i++){
       for(let j=i+1;j<lines.length;j++){
         const p = lineLineInter(lines[i], lines[j]);
-        if(p){ intersections.push({p, with:[lines[i], lines[j]]}); }
+        if(p){ intersections.push({p, with:[lines[i],lines[j]]}); }
       }
     }
     for(let i=0;i<lines.length;i++){
       for(let j=0;j<circles.length;j++){
         const pts = lineCircleInter(lines[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[lines[i], circles[j]]}); });
+        pts.forEach(p => { intersections.push({p, with:[lines[i],circles[j]]}); });
       }
     }
     for(let i=0;i<circles.length;i++){
       for(let j=i+1;j<circles.length;j++){
         const pts = circleCircleInter(circles[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[circles[i], circles[j]]}); });
+        pts.forEach(p => { intersections.push({p, with:[circles[i],circles[j]]}); });
       }
     }
-
-    // We'll construct new shapes in fragment and swap
-    const frag = document.createDocumentFragment();
     const newShapes = [];
-
-    // process lines -> segments between unique t parameters
+    const frag = document.createDocumentFragment();
     lines.forEach(l => {
       const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
-      ptsOnLine.push({x:l.x1, y:l.y1}); ptsOnLine.push({x:l.x2, y:l.y2});
+      ptsOnLine.push({x:l.x1,y:l.y1}); ptsOnLine.push({x:l.x2,y:l.y2});
       const dx = l.x2 - l.x1, dy = l.y2 - l.y1;
       const params = ptsOnLine.map(p => {
-        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - l.x1) / (dx || 1e-6)) : ((p.y - l.y1) / (dy || 1e-6));
+        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - l.x1) / (dx || 1e-6)) : ((p.y - l.y1)/(dy || 1e-6));
         return Math.max(0, Math.min(1, t));
       });
-      const uniq = Array.from(new Set(params.map(t => t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
+      const uniq = Array.from(new Set(params.map(t=>t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
       for(let i=0;i<uniq.length-1;i++){
-        const ta = uniq[i], tb = uniq[i+1];
+        const ta=uniq[i], tb=uniq[i+1];
         const ax = l.x1 + dx * ta, ay = l.y1 + dy * ta;
         const bx = l.x1 + dx * tb, by = l.y1 + dy * tb;
-        if(Math.hypot(bx-ax, by-ay) > 2){
+        if(Math.hypot(bx-ax,by-ay) > 2){
           const seg = ns('line');
           seg.classList.add('shape');
-          seg.setAttribute('x1', ax); seg.setAttribute('y1', ay); seg.setAttribute('x2', bx); seg.setAttribute('y2', by);
+          seg.setAttribute('x1',ax); seg.setAttribute('y1',ay); seg.setAttribute('x2',bx); seg.setAttribute('y2',by);
           seg.setAttribute('stroke-width', l.w);
           frag.appendChild(seg);
           newShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by, w:l.w});
         }
       }
-      // remove original element
       if(l.el && l.el.parentNode) l.el.remove();
     });
 
-    // process circles -> approximate with polylines between intersections
     circles.forEach(c => {
-      // compute sampled circle points
-      const N = Math.max(32, Math.min(CIRCLE_SEGMENTS, Math.round(CIRCLE_SEGMENTS * (c.r / Math.max(1, Math.min(viewW, viewH))))));
+      const N = 120;
       const pts = [];
       for(let i=0;i<N;i++){
-        const a = (i/N) * Math.PI * 2;
+        const a = (i/N)*Math.PI*2;
         pts.push({x: c.cx + c.r*Math.cos(a), y: c.cy + c.r*Math.sin(a), a});
       }
       const intsOnC = intersections.filter(it => it.with.includes(c)).map(it => it.p);
-      // find indices near intersection points
       const idxSet = new Set();
       pts.forEach((pt, idx) => {
         intsOnC.forEach(ip => {
-          if(Math.hypot(pt.x - ip.x, pt.y - ip.y) < Math.max(4, c.r * 0.02)) idxSet.add(idx);
+          if(Math.hypot(pt.x-ip.x, pt.y-ip.y) < 6){ idxSet.add(idx); }
         });
       });
       const idxs = Array.from(idxSet).sort((a,b)=>a-b);
       if(idxs.length === 0){
-        // keep full circle
         const circ = ns('circle');
         circ.classList.add('shape');
         circ.setAttribute('cx', c.cx); circ.setAttribute('cy', c.cy); circ.setAttribute('r', c.r);
@@ -671,39 +927,33 @@
         if(c.el && c.el.parentNode) c.el.remove();
         return;
       }
-      // build segments between intersection indices
-      for(let s=0;s<idxs.length;s++){
-        const i1 = idxs[s], i2 = idxs[(s+1)%idxs.length];
+      const sorted = idxs;
+      for(let s=0;s<sorted.length;s++){
+        const i1 = sorted[s], i2 = sorted[(s+1)%sorted.length];
+        let segPts = [];
         let i = i1;
-        const segPts = [];
         while(true){
           segPts.push(pts[i]);
           if(i === i2) break;
-          i = (i+1) % pts.length;
+          i = (i+1)%pts.length;
         }
         if(segPts.length > 1){
-          const poly = ns('polyline');
-          poly.classList.add('shape');
-          poly.setAttribute('points', segPts.map(p=>`${p.x},${p.y}`).join(' '));
-          poly.setAttribute('fill','none');
-          poly.setAttribute('stroke-width', c.w);
-          frag.appendChild(poly);
-          newShapes.push({type:'polyline', el:poly, pts:segPts, w:c.w});
+          const path = ns('polyline');
+          path.classList.add('shape');
+          path.setAttribute('points', segPts.map(p=>`${p.x},${p.y}`).join(' '));
+          path.setAttribute('fill','none');
+          path.setAttribute('stroke-width', c.w);
+          frag.appendChild(path);
+          newShapes.push({type:'polyline', el:path, pts:segPts, w:c.w});
         }
       }
       if(c.el && c.el.parentNode) c.el.remove();
     });
 
-    // append frag once
     svg.appendChild(frag);
-
-    // replace shapes array: remove old lines/circles and append new shapes
-    shapes = shapes.filter(s => !(s.type === 'line' || s.type === 'circle'));
+    shapes = shapes.filter(s => !(s.type==='line' || s.type==='circle'));
     newShapes.forEach(ns => shapes.push(ns));
-
-    // optional: mark intersections visually
     intersections.forEach(it => markIntersection(it.p));
-    // push a history op for split (not undoing geometry inside this function currently)
     history.push({op:'split', created: newShapes});
   }
 
@@ -718,17 +968,19 @@
     if(e.key === 's' || e.key === 'S'){ splitAtIntersectionsInternal(); }
   });
 
-  // clicking outside toolbar collapses if on mobile (nice touch)
+  // small-screen convenience: tapping FAB toggles toolbar when collapsed
+  fab.addEventListener('dblclick', ()=>{ collapsed = !collapsed; applyToolbar(); });
+
+  // convenience: clicking outside toolbar on small screens collapses
   document.addEventListener('click', (ev) => {
     if(window.innerWidth <= 860 && !toolbar.contains(ev.target) && !ev.target.closest('.fab')){
       collapsed = true; applyToolbar();
     }
   });
 
-  // initial status
   updateStatus();
 
-  // Expose some functions for debugging in console (optional)
+  // expose some functions for debugging
   window._edgeDraw = {shapes, splitAtIntersectionsInternal, clearAll, undo, setMode, setWidth};
 })();
 </script>
