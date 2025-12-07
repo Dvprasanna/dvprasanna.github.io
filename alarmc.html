@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Alarm App — Responsive (notifications & sound)</title>
+<style>
+  :root{
+    --accent:#c92b2b;
+    --accent-dark:#b60e0e;
+    --bg-pink:#ff3fb7;
+    --bg-yellow:#fff100;
+    --gap:12px;
+    --box-h:48px;
+    --radius:8px;
+    --font-main: 'Segoe UI', Roboto, system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:var(--font-main)}
+  html,body{height:100%}
+  body{background:#fff;color:#111;display:flex;flex-direction:column;min-height:100vh}
+
+  /* header */
+  header{
+    background:var(--bg-pink);
+    color:#0c0520;
+    padding:18px 16px;
+    text-align:center;
+    font-size:clamp(20px,5vw,40px);
+    font-weight:700;
+    letter-spacing:1px;
+    position:relative;
+  }
+  header .sub{position:absolute;left:14px;top:12px;font-size:12px}
+
+  main{padding:18px;flex:1;display:flex;flex-direction:column;gap:16px;align-items:stretch}
+
+  /* top controls row */
+  .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+  .controls-left{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  button, .control-btn{
+    padding:10px 14px;border:2px solid var(--accent);background:transparent;color:var(--accent);font-weight:600;border-radius:8px;
+    cursor:pointer;font-size:14px;min-height:44px;
+  }
+  .hint{flex:1;color:#444;font-size:13px;padding-left:12px;min-width:160px}
+
+  /* alarm list container */
+  .alarms{display:flex;flex-direction:column;gap:14px;max-width:1100px;margin:0 auto;width:100%}
+
+  /* alarm row: responsive grid that collapses */
+  .alarm{
+    display:grid;
+    gap:var(--gap);
+    align-items:center;
+    padding:12px;
+    border:3px solid var(--accent);
+    border-radius:var(--radius);
+    background:transparent;
+  }
+
+  /* default (large screens): 7 columns */
+  .alarm.large {
+    grid-template-columns: 140px 84px 84px 1fr 140px 72px 72px;
+  }
+  .alarm .box{height:var(--box-h);border:2px solid var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;padding:6px;background:transparent}
+  .alarm input[type="text"]{height:40px;padding:8px;border:none;outline:none;width:100%;font-size:14px}
+  .alarm select{width:100%;height:40px;border:none;outline:none;padding:6px;font-size:14px}
+
+  /* extra row content (days/datetime) spans full width */
+  .extra{grid-column:1/-1;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+
+  .days{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .day-toggle{width:40px;height:40px;border-radius:8px;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:600}
+  .day-toggle.on{background:var(--accent);color:#fff}
+
+  .del-btn{border:2px solid var(--accent);background:transparent;padding:10px;border-radius:8px;cursor:pointer;min-width:64px}
+
+  /* Small screens: stack logically */
+  @media (max-width:880px){
+    .alarm{grid-template-columns: 1fr 72px 72px; padding:10px}
+    .alarm .box{height:48px}
+    .alarm .label-box{grid-column:1/-1}
+    .alarm .timeleft-box{text-align:center}
+    .extra{justify-content:flex-start}
+    .controls{align-items:flex-start}
+    .hint{display:none}
+  }
+  /* Very small screens: single column per alarm */
+  @media (max-width:460px){
+    .alarm{grid-template-columns:1fr;gap:10px}
+    .day-toggle{width:34px;height:34px;font-size:13px}
+    .controls-left{width:100%;display:flex;flex-direction:column;gap:8px}
+    button{width:100%}
+  }
+
+  footer{background:var(--bg-yellow);padding:12px;text-align:center;font-size:15px;color:#0b0b0b}
+</style>
+</head>
+<body>
+<header>
+  <div class="sub">time: day dd/mm/yy/hh/mm/ss</div>
+  alarm app
+</header>
+
+<main>
+  <div class="controls">
+    <div class="controls-left">
+      <button id="newAlarmBtn">New Alarm</button>
+      <button id="saveAllBtn">Save All</button>
+      <button id="enableAlertsBtn">Enable Alerts</button>
+    </div>
+    <div class="hint">Responsive: works on phones, tablets, and desktop. Alerts = browser notifications + beep.</div>
+  </div>
+
+  <div class="alarms" id="alarmsContainer"></div>
+</main>
+
+<footer>code: prasann</footer>
+
+<script>
+/* Responsive Alarm App with Notifications & Sound
+   - Client-only, stores alarms in localStorage
+   - Responsive layout: rows collapse on small screens
+   - Notifications require user gesture (Enable Alerts)
+*/
+
+/* storage & model */
+const STORAGE_KEY = 'alarms_v1_responsive';
+function uid(){ return 'a'+Math.random().toString(36).slice(2,9) }
+function loadAlarms(){ try{ const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : [] }catch(e){ return [] } }
+function saveAlarms(list){ localStorage.setItem(STORAGE_KEY, JSON.stringify(list)) }
+
+/* helper: next occurrence for weekly or onetime */
+function nearestWeeklyOccurrenceFromNow(weekdays, hour, minute){
+  const now = new Date()
+  for(let add=0; add<14; add++){
+    const d = new Date(now.getTime() + add*24*60*60*1000)
+    const dow = d.getDay()
+    if((weekdays||[]).includes(dow)){
+      const cand = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hour, minute, 0, 0)
+      if(cand > now) return cand
+    }
+  }
+  return null
+}
+function nearestOccurrence(alarm){
+  const now = new Date()
+  if(alarm.repeatType === 'onetime'){
+    if(!alarm.dateISO) return null
+    const d = new Date(alarm.dateISO)
+    return d > now ? d : null
+  } else {
+    return nearestWeeklyOccurrenceFromNow(alarm.weekdays || [], alarm.hour, alarm.minute)
+  }
+}
+
+/* UI rendering - responsive-friendly structure */
+const container = document.getElementById('alarmsContainer')
+function render(){
+  container.innerHTML = ''
+  const list = loadAlarms()
+  list.forEach(alarm=>{
+    const row = document.createElement('div')
+    row.className = 'alarm large'
+    row.dataset.id = alarm.id
+
+    // Type/select box (first column)
+    const typeBox = document.createElement('div'); typeBox.className='box'
+    typeBox.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;align-items:center;width:100%">
+      <label style="font-size:12px;color:var(--accent-dark)">Type</label>
+      <select data-role="repeatType">
+        <option value="weekly">Weekly</option>
+        <option value="onetime">One-time</option>
+      </select>
+    </div>`
+    row.appendChild(typeBox)
+
+    // hour
+    const hrBox = document.createElement('div'); hrBox.className='box'
+    const hrSel = document.createElement('select'); hrSel.dataset.role='hour'
+    for(let h=0; h<24; h++){ const o=document.createElement('option'); o.value=h; o.innerText = String(h).padStart(2,'0'); hrSel.appendChild(o) }
+    hrSel.value = alarm.hour; hrBox.appendChild(hrSel); row.appendChild(hrBox)
+
+    // minute
+    const minBox = document.createElement('div'); minBox.className='box'
+    const minSel = document.createElement('select'); minSel.dataset.role='minute'
+    for(let m=0; m<60; m++){ const o=document.createElement('option'); o.value=m; o.innerText=String(m).padStart(2,'0'); minSel.appendChild(o) }
+    minSel.value = alarm.minute; minBox.appendChild(minSel); row.appendChild(minBox)
+
+    // label (this should be wide)
+    const labelBox = document.createElement('div'); labelBox.className='box label-box'
+    const txt = document.createElement('input'); txt.type='text'; txt.value = alarm.label || ''; txt.dataset.role='label'; txt.style.width='100%'
+    labelBox.appendChild(txt); row.appendChild(labelBox)
+
+    // time-left
+    const tlBox = document.createElement('div'); tlBox.className='box timeleft-box'
+    const span = document.createElement('div'); span.dataset.role='timeleft'; span.style.textAlign='center'
+    tlBox.appendChild(span); row.appendChild(tlBox)
+
+    // delete
+    const dbox = document.createElement('div'); dbox.className='box'
+    const del = document.createElement('button'); del.className='del-btn'; del.innerText='Delete'; del.onclick = ()=> deleteAlarm(alarm.id)
+    dbox.appendChild(del); row.appendChild(dbox)
+
+    // duplicate
+    const dupbox = document.createElement('div'); dupbox.className='box'
+    const dup = document.createElement('button'); dup.className='del-btn'; dup.innerText='Dup'; dup.onclick = ()=> duplicateAlarm(alarm.id)
+    dupbox.appendChild(dup); row.appendChild(dupbox)
+
+    // extra controls row (days + datetime) spans full width
+    const extra = document.createElement('div'); extra.className='extra'
+    // weekdays toggles
+    const days = document.createElement('div'); days.className='days'
+    const dayNames = ['S','M','T','W','T','F','S']
+    dayNames.forEach((dn, idx)=>{
+      const d = document.createElement('div'); d.className='day-toggle'; d.innerText = dn
+      if(alarm.weekdays && alarm.weekdays.includes(idx)) d.classList.add('on')
+      d.onclick = ()=>{
+        const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id)
+        if(!a.weekdays) a.weekdays = []
+        if(a.weekdays.includes(idx)) a.weekdays = a.weekdays.filter(x=>x!==idx)
+        else a.weekdays.push(idx)
+        saveAlarms(list); render()
+      }
+      days.appendChild(d)
+    })
+    extra.appendChild(days)
+
+    // date input for one-time alarms
+    const dateWrap = document.createElement('div'); dateWrap.style.display='flex'; dateWrap.style.alignItems='center'; dateWrap.style.gap='8px'
+    const dateIn = document.createElement('input'); dateIn.type='datetime-local'; dateIn.dataset.role='dateISO'
+    dateIn.value = alarm.dateISO ? alarm.dateISO.slice(0,16) : ''
+    dateIn.onchange = (e)=>{
+      const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id); a.dateISO = new Date(e.target.value).toISOString(); saveAlarms(list); render()
+    }
+    dateWrap.appendChild(dateIn)
+    extra.appendChild(dateWrap)
+
+    row.appendChild(extra)
+
+    // handlers for selects and text
+    const selRepeat = row.querySelector('[data-role="repeatType"]')
+    selRepeat.value = alarm.repeatType || 'weekly'
+    selRepeat.onchange = (e)=>{ const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id); a.repeatType = e.target.value; saveAlarms(list); render() }
+
+    hrSel.onchange = (e)=>{ const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id); a.hour = Number(e.target.value); saveAlarms(list); render() }
+    minSel.onchange = (e)=>{ const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id); a.minute = Number(e.target.value); saveAlarms(list); render() }
+    txt.onchange = (e)=>{ const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id); a.label = e.target.value; saveAlarms(list) }
+
+    container.appendChild(row)
+  })
+
+  updateCountdowns()
+}
+
+/* update countdown displays */
+function timeLeftText(target){
+  if(!target) return '—'
+  const diff = Math.max(0, Math.floor((target - new Date())/1000))
+  if(diff<=0) return 'now'
+  const days = Math.floor(diff/86400); let rem = diff%86400
+  const hrs = Math.floor(rem/3600); rem = rem%3600
+  const mins = Math.floor(rem/60); const secs = rem%60
+  const parts=[]
+  if(days) parts.push(days+'d')
+  if(hrs) parts.push(hrs+'h')
+  if(mins) parts.push(mins+'m')
+  parts.push(secs+'s')
+  return parts.join(' ')
+}
+function updateCountdowns(){
+  const list = loadAlarms()
+  const rows = container.querySelectorAll('.alarm')
+  rows.forEach(r=>{
+    const id = r.dataset.id; const alarm = list.find(a=>a.id===id)
+    const span = r.querySelector('[data-role="timeleft"]')
+    const target = nearestOccurrence(alarm)
+    span.innerText = timeLeftText(target)
+  })
+}
+
+/* CRUD */
+function addNewAlarm(){
+  const list = loadAlarms()
+  const d = new Date()
+  const alarm = {
+    id: uid(),
+    repeatType: 'weekly',
+    weekdays: [d.getDay()],
+    hour: d.getHours(),
+    minute: (d.getMinutes()+1)%60,
+    label: 'Alarm',
+    createdAt: (new Date()).toISOString(),
+    lastTriggered: null
+  }
+  list.unshift(alarm); saveAlarms(list); render()
+}
+function deleteAlarm(id){ let list = loadAlarms(); list = list.filter(a=>a.id!==id); saveAlarms(list); render() }
+function duplicateAlarm(id){ const list = loadAlarms(); const src = list.find(a=>a.id===id); if(!src) return; const copy = JSON.parse(JSON.stringify(src)); copy.id = uid(); copy.createdAt = (new Date()).toISOString(); copy.lastTriggered = null; list.unshift(copy); saveAlarms(list); render() }
+
+/* notifications & beep */
+let audioCtx = null
+function playBeep(durationSec = 0.8){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain()
+    o.type = 'sine'; o.frequency.value = 880
+    o.connect(g); g.connect(audioCtx.destination)
+    g.gain.value = 0
+    o.start()
+    g.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 0.02)
+    g.gain.linearRampToValueAtTime(0.0001, audioCtx.currentTime + durationSec)
+    o.stop(audioCtx.currentTime + durationSec + 0.05)
+  }catch(e){}
+}
+function showNotification(alarm, body){
+  if(!('Notification' in window)){ alert(`${alarm.label || 'Alarm'}\n${body}`); return }
+  if(Notification.permission === 'granted'){
+    try{
+      const n = new Notification(alarm.label || 'Alarm', { body: body, tag: 'alarm-'+alarm.id, renotify: true })
+      n.onclick = ()=>{ window.focus(); n.close() }
+    }catch(e){ alert(`${alarm.label || 'Alarm'}\n${body}`) }
+  } else if(Notification.permission === 'default'){
+    Notification.requestPermission().then(p=>{ if(p==='granted') showNotification(alarm, body); else alert(`${alarm.label || 'Alarm'}\n${body}`) })
+  } else { alert(`${alarm.label || 'Alarm'}\n${body}`) }
+}
+
+/* check for due alarms and trigger once per occurrence */
+function checkAndTriggerAlarms(){
+  const list = loadAlarms()
+  const now = new Date()
+  let modified = false
+  list.forEach(alarm=>{
+    const target = nearestOccurrence(alarm)
+    if(!target) return
+    const diffSec = Math.floor((target - now)/1000)
+    const targetISO = target.toISOString()
+    if(diffSec <= 0){
+      if(alarm.lastTriggered !== targetISO){
+        const pretty = alarm.repeatType==='onetime' ? `One-time at ${new Date(alarm.dateISO).toLocaleString()}` : 
+          `Repeats ${alarm.weekdays ? alarm.weekdays.map(i=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]).join(',') : 'days'} at ${String(alarm.hour).padStart(2,'0')}:${String(alarm.minute).padStart(2,'0')}`
+        showNotification(alarm, pretty)
+        playBeep(1.0)
+        if(navigator.vibrate) navigator.vibrate([250,100,250])
+        alarm.lastTriggered = targetISO
+        modified = true
+      }
+    }
+  })
+  if(modified) saveAlarms(list)
+}
+
+/* enable alerts button (user gesture) */
+const enableBtn = document.getElementById('enableAlertsBtn')
+enableBtn.addEventListener('click', async ()=>{
+  if('Notification' in window){
+    const p = await Notification.requestPermission()
+    if(p === 'granted'){
+      try{ if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); await audioCtx.resume() }catch(e){}
+      alert('Alerts enabled. Notifications allowed and audio primed.')
+    } else alert('Notifications not granted. Alerts will fallback to alert() popups.')
+  } else alert('Notifications not supported in this browser.')
+})
+
+/* init */
+document.getElementById('newAlarmBtn').addEventListener('click', addNewAlarm)
+document.getElementById('saveAllBtn').addEventListener('click', ()=>{ alert('Alarms saved locally') })
+
+if(loadAlarms().length===0){
+  const now = new Date()
+  const sample = [
+    { id: uid(), repeatType:'weekly', weekdays:[now.getDay()], hour: now.getHours(), minute:(now.getMinutes()+1)%60, label:'Sample 1', createdAt:(new Date()).toISOString(), lastTriggered:null },
+    { id: uid(), repeatType:'onetime', dateISO: new Date(now.getTime()+65000).toISOString(), hour: now.getHours(), minute:(now.getMinutes()+1)%60, label:'One-time soon', createdAt:(new Date()).toISOString(), lastTriggered:null }
+  ]
+  saveAlarms(sample)
+}
+render()
+setInterval(updateCountdowns, 1000)
+setInterval(checkAndTriggerAlarms, 1000)
+</script>
+</body>
+</html>
