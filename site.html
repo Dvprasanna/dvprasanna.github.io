@@ -10,21 +10,21 @@
 <style>
   :root {
     --bg: #f8f9fc;
-    --panel: rgba(255, 255, 255, 0.85);
-    --panel-border: rgba(255, 255, 255, 0.6);
+    --panel: rgba(255, 255, 255, 0.95);
+    --panel-border: rgba(255, 255, 255, 0.8);
     --accent: #0066ff;
     --accent-light: #e6f0ff;
     --text: #1a1a1a;
     --text-muted: #666;
     --shadow: 0 8px 32px rgba(0,0,0,0.08);
-    --radius: 16px;
-    --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    --radius: 12px;
+    --transition: all 0.2s ease;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0f1117;
-      --panel: rgba(20, 22, 36, 0.85);
-      --panel-border: rgba(40, 44, 74, 0.6);
+      --panel: rgba(20, 22, 36, 0.95);
+      --panel-border: rgba(40, 44, 74, 0.8);
       --text: #e0e0ff;
       --text-muted: #999;
       --accent-light: #1a2b50;
@@ -42,83 +42,115 @@
   }
   .app { display: flex; height: 100dvh; }
 
-  /* Toolbar - Desktop (left) / Mobile (bottom) */
+  /* Toolbar - Collapsible on Desktop, Compact Bottom on Mobile */
   .toolbar {
-    width: 340px;
-    padding: 20px;
+    width: 280px; /* Reduced width */
+    padding: 16px;
     background: var(--panel);
     backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
     border-right: 1px solid var(--panel-border);
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 16px; /* Reduced gap */
     z-index: 10;
     transition: var(--transition);
+    overflow-y: auto;
   }
+  .toolbar.collapsed { width: 60px; }
+  .toolbar-content { transition: opacity 0.2s; }
+  .toolbar.collapsed .toolbar-content { opacity: 0; pointer-events: none; }
+  .toggle-btn {
+    position: absolute;
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: none;
+  }
+  @media (min-width: 861px) {
+    .toggle-btn { display: block; }
+  }
+
   @media (max-width: 860px) {
     .toolbar {
       position: fixed;
       bottom: 0; left: 0; right: 0;
       width: 100%;
       height: auto;
-      padding: 12px 16px;
+      padding: 8px 12px; /* Compact padding */
       flex-direction: row;
       align-items: center;
-      justify-content: space-between;
+      justify-content: space-around;
       border-right: none;
       border-top: 1px solid var(--panel-border);
       border-radius: var(--radius) var(--radius) 0 0;
-      box-shadow: 0 -8px 32px rgba(0,0,0,0.12);
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
+      gap: 4px;
     }
-    .app { padding-bottom: 78px; }
-    .controls { flex-direction: row; gap: 12px; width: 100%; }
+    .app { padding-bottom: 70px; } /* Reduced padding */
+    .controls { flex-direction: row; gap: 4px; width: 100%; flex-wrap: wrap; }
+    .section { margin: 0; padding: 0; }
+    .section-title { display: none; }
+    .btn-group { gap: 2px; }
+    button, select { padding: 6px 8px; font-size: 12px; min-width: 40px; } /* Smaller buttons */
+    .hint { display: none; }
+    .toggle-btn { display: none; }
   }
 
   h1 {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
-    margin: 0;
+    margin: 0 0 4px 0;
     color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
-   .section {
+  .section {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px; /* Reduced */
   }
   .section-title {
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-muted);
   }
 
-  /* Buttons & Controls */
+  /* Buttons & Controls - Compact */
   button, select {
-    padding: 10px 14px;
+    padding: 8px 12px; /* Slightly smaller */
     border: none;
-    border-radius: 12px;
-    background: rgba(255,255,255,0.7);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.8);
     backdrop-filter: blur(10px);
     font: inherit;
     font-weight: 500;
     cursor: pointer;
     transition: var(--transition);
     border: 1px solid rgba(0,0,0,0.08);
+    min-height: 36px;
   }
-  button:hover { background: rgba(255,255,255,0.9); transform: translateY(-1px); }
+  button:hover { background: rgba(255,255,255,0.95); transform: translateY(-1px); }
   button:active { transform: translateY(0); }
   button.active {
     background: var(--accent);
     color: white;
-    box-shadow: 0 0 0 3px var(--accent-light);
+    box-shadow: 0 0 0 2px var(--accent-light);
   }
-  select { background: white; }
+  select { background: white; min-width: 120px; }
 
   .btn-group {
     display: flex;
-    gap: 8px;
+    gap: 4px; /* Reduced gap */
     flex-wrap: wrap;
   }
   .fab {
@@ -131,13 +163,13 @@
     background: var(--accent);
     color: white;
     border: none;
-    font-size: 24px;
+    font-size: 20px;
     box-shadow: var(--shadow);
     z-index: 100;
     cursor: pointer;
     transition: var(--transition);
   }
-  .fab:hover { transform: scale(1.1); }
+  .fab:hover { transform: scale(1.05); }
 
   /* Canvas */
   .canvas-wrap {
@@ -145,7 +177,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: 16px;
     background: linear-gradient(135deg, #f0f2f6 0%, #e4e8f0 100%);
     overflow: hidden;
   }
@@ -168,71 +200,67 @@
   /* Status & Hints */
   .status {
     position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: 24px;
+    left: 20px;
+    bottom: 20px;
     background: var(--panel);
     backdrop-filter: blur(20px);
-    padding: 10px 20px;
-    border-radius: 30px;
-    font-size: 14px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
     font-weight: 500;
     box-shadow: var(--shadow);
     z-index: 20;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     border: 1px solid var(--panel-border);
   }
-  .status svg { width: 20px; height: 20px; }
+  @media (max-width: 860px) {
+    .status { left: 12px; bottom: 80px; font-size: 12px; padding: 6px 12px; }
+  }
 
   .hint {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-muted);
-    line-height: 1.5;
+    line-height: 1.4;
     background: rgba(255,255,255,0.6);
-    padding: 12px;
-    border-radius: 12px;
+    padding: 10px;
+    border-radius: 8px;
     border: 1px solid rgba(0,0,0,0.06);
   }
 
   /* SVG Styles */
   .shape { stroke: #111; fill: none; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; transition: stroke 0.2s; }
-  .shape:hover { stroke: var(--accent); stroke-width: calc(attr(stroke-width) * 1.5); }
+  .shape:hover { stroke: var(--accent); }
   .ghost { stroke: var(--accent); stroke-dasharray: 8 6; opacity: 0.5; pointer-events: none; }
   .intersection-dot { fill: var(--accent); stroke: white; stroke-width: 2; pointer-events: none; }
-
-  @media (max-width: 860px) {
-    .hint { display: none; }
-    .fab { bottom: 90px; }
-  }
 </style>
 </head>
 <body>
 
 <div class="app">
-  <div class="toolbar">
+  <div class="toolbar" id="toolbar">
+    <button class="toggle-btn" id="toggle" title="Collapse Menu">←</button>
     <div>
-      <h1>Edge/Corner Draw</h1>
-      <p style="margin:4px 0 0;font-size:13px;color:var(--text-muted)">Trim & Split Tool</p>
+      <h1>📐 Edge Draw</h1>
+      <p style="margin:4px 0 0;font-size:12px;color:var(--text-muted)">Trim Tool</p>
     </div>
 
-    <div class="controls">
+    <div class="controls" id="toolbar-content">
       <div class="section">
-        <div class="section-title">Canvas Size</div>
+        <div class="section-title">Canvas</div>
         <select id="size">
-          <option value="600x800">600 × 800 (Portrait)</option>
-          <option value="800x600" selected>800 × 600 (Landscape)</option>
-          <option value="1000x1000">1000 × 1000 (Square)</option>
+          <option value="600x800">600 × 800</option>
+          <option value="800x600" selected>800 × 600</option>
         </select>
       </div>
 
       <div class="section">
-        <div class="section-title">Line Width</div>
+        <div class="section-title">Width</div>
         <div class="btn-group">
-          <button id="lw-s" class="small">S</button>
-          <button id="lw-m" class="small active">M</button>
-          <button id="lw-l" class="small">L</button>
+          <button id="lw-s">1</button>
+          <button id="lw-m" class="active">2</button>
+          <button id="lw-l">3</button>
         </div>
       </div>
 
@@ -245,18 +273,15 @@
       </div>
 
       <div class="section">
-        <button id="split" style="width:100%">Split at Intersections</button>
-        <div class="btn-group">
-          <button id="undo">Undo</button>
-          <button id="clear">Clear All</button>
+        <button id="split" style="width:100%">Split</button>
+        <div class="btn-group" style="justify-content: space-between;">
+          <button id="undo">↶</button>
+          <button id="clear">🗑</button>
         </div>
       </div>
 
       <div class="hint">
-        <strong>Tips:</strong><br>
-        • Drag from edges (50px zone) → full lines<br>
-        • Drag from corners → circles<br>
-        • Click "Split" then use Trim to delete segments
+        <strong>Tips:</strong> Drag edges for lines, corners for circles. Split → Trim to edit.
       </div>
     </div>
   </div>
@@ -271,66 +296,429 @@
   </div>
 </div>
 
-<!-- Floating Action Button -->
-<button class="fab" id="fab" title="Toggle Trim Mode">✂</button>
+<!-- FAB for quick trim toggle -->
+<button class="fab" id="fab" title="Toggle Trim">✂</button>
 
 <!-- Status -->
 <div class="status" id="status">
-  <span id="mode-icon">Draw</span>
   <span id="mode-text">Draw Mode</span>
   <span>•</span>
-  <span id="width-text">Width: M</span>
+  <span id="width-text">Width: 2</span>
 </div>
 
 <script>
-  // Fixed SVG namespace declaration (your original had spam)
-  // All your original powerful logic below — only visual parts improved
+(() => {
+  const svg = document.getElementById('svg');
+  const sizeSel = document.getElementById('size');
+  const lwS = document.getElementById('lw-s'), lwM = document.getElementById('lw-m'), lwL = document.getElementById('lw-l');
+  const modeDraw = document.getElementById('mode-draw'), modeTrim = document.getElementById('mode-trim');
+  const status = document.getElementById('status');
+  const modeText = document.getElementById('mode-text');
+  const widthText = document.getElementById('width-text');
+  const splitBtn = document.getElementById('split');
+  const undoBtn = document.getElementById('undo'), clearBtn = document.getElementById('clear');
+  const fab = document.getElementById('fab');
+  const toolbar = document.getElementById('toolbar');
+  const toggleBtn = document.getElementById('toggle');
+  const toolbarContent = document.getElementById('toolbar-content');
 
-  (() => {
-    const svg = document.getElementById('svg');
-    const sizeSel = document.getElementById('size');
-    const status = document.getElementById('status');
-    const modeIcon = document.getElementById('mode-icon');
-    const modeText = document.getElementById('mode-text');
-    const widthText = document.getElementById('width-text');
-    const fab = document.getElementById('fab');
+  let width = 4;
+  let currentMode = 'draw';
+  let history = [];
+  let shapes = [];
+  let pointerDownInfo = null;
+  let ghost = null;
+  const HOTZONE = 50;
+  let trimActive = false;
 
-    let width = 4;
-    let currentMode = 'draw';
-    let trimActive = false;
-    let history = [];
-    let shapes = [];
-    let pointerDownInfo = null;
-    let ghost = null;
-    const HOTZONE = 50;
+  function setCanvasSize(val){
+    const [w,h] = val.split('x').map(Number);
+    svg.setAttribute('width', w);
+    svg.setAttribute('height', h);
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  }
+  setCanvasSize(sizeSel.value);
+  sizeSel.addEventListener('change', e => setCanvasSize(e.target.value));
 
-    // ... [All your original logic here — unchanged except minor refactors for clarity]
-    // I've kept 100% of your functionality — just cleaned up and modernized UI
+  function setWidth(wName, wVal){
+    lwS.classList.remove('active'); lwM.classList.remove('active'); lwL.classList.remove('active');
+    if(wName==='S'){ lwS.classList.add('active'); width=2; }
+    if(wName==='M'){ lwM.classList.add('active'); width=4; }
+    if(wName==='L'){ lwL.classList.add('active'); width=7; }
+    widthText.textContent = `Width: ${wVal}`;
+    updateStatus();
+  }
+  lwS.addEventListener('click', ()=>setWidth('S', '1'));
+  lwM.addEventListener('click', ()=>setWidth('M', '2'));
+  lwL.addEventListener('click', ()=>setWidth('L', '3'));
+  setWidth('M', '2');
 
-    function updateStatus() {
-      const modeStr = currentMode === 'draw' ? 'Draw' : 'Trim';
-      modeIcon.textContent = currentMode === 'draw' ? 'Draw' : 'Trim';
-      modeText.textContent = modeStr + ' Mode';
-      widthText.textContent = 'Width: ' + (width === 2 ? 'S' : width === 4 ? 'M' : 'L');
-      fab.textContent = trimActive ? '✓' : 'Trim';
-      fab.style.background = trimActive ? '#10b981' : '#0066ff';
+  function setMode(m){
+    currentMode = m;
+    modeDraw.classList.toggle('active', m==='draw');
+    modeTrim.classList.toggle('active', m==='trim');
+    trimActive = (m === 'trim');
+    updateStatus();
+    if(trimActive){
+      splitAtIntersectionsInternal();
+    }
+  }
+  modeDraw.addEventListener('click', ()=>setMode('draw'));
+  modeTrim.addEventListener('click', ()=>setMode('trim'));
+
+  fab.addEventListener('click', () => {
+    setMode(trimActive ? 'draw' : 'trim');
+    fab.textContent = trimActive ? '✏️' : '✂';
+  });
+
+  function updateStatus() {
+    modeText.textContent = `${trimActive ? 'Trim' : 'Draw'} Mode`;
+  }
+
+  // Toggle toolbar collapse
+  let collapsed = false;
+  toggleBtn.addEventListener('click', () => {
+    collapsed = !collapsed;
+    toolbar.classList.toggle('collapsed', collapsed);
+    toggleBtn.textContent = collapsed ? '→' : '←';
+  });
+
+  function createGhostFullLineVertical(x){
+    removeGhost();
+    ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
+    ghost.setAttribute('x1', x); ghost.setAttribute('y1', 0); ghost.setAttribute('x2', x); ghost.setAttribute('y2', svg.viewBox.baseVal.height);
+    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
+    svg.appendChild(ghost);
+  }
+  function createGhostFullLineHorizontal(y){
+    removeGhost();
+    ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
+    ghost.setAttribute('x1', 0); ghost.setAttribute('y1', y); ghost.setAttribute('x2', svg.viewBox.baseVal.width); ghost.setAttribute('y2', y);
+    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
+    svg.appendChild(ghost);
+  }
+  function createGhostCircle(cx,cy,r){
+    removeGhost();
+    ghost = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    ghost.setAttribute('cx',cx); ghost.setAttribute('cy',cy); ghost.setAttribute('r',r);
+    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
+    svg.appendChild(ghost);
+  }
+  function removeGhost(){ if(ghost){ghost.remove(); ghost=null;} }
+
+  function addShape(obj){
+    shapes.push(obj);
+    history.push({op:'add', shape:obj});
+  }
+
+  function makeFullVerticalLine(x){
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.classList.add('shape');
+    line.setAttribute('x1',x); line.setAttribute('y1',0); line.setAttribute('x2',x); line.setAttribute('y2',svg.viewBox.baseVal.height);
+    line.setAttribute('stroke-width', width);
+    svg.appendChild(line);
+    addShape({type:'line', el:line, x1:x,y1:0,x2:x,y2:svg.viewBox.baseVal.height, w:width});
+  }
+
+  function makeFullHorizontalLine(y){
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.classList.add('shape');
+    line.setAttribute('x1',0); line.setAttribute('y1',y); line.setAttribute('x2',svg.viewBox.baseVal.width); line.setAttribute('y2',y);
+    line.setAttribute('stroke-width', width);
+    svg.appendChild(line);
+    addShape({type:'line', el:line, x1:0,y1:y,x2:svg.viewBox.baseVal.width,y2:y, w:width});
+  }
+
+  function makeCircle(cx,cy,r){
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.classList.add('shape');
+    c.setAttribute('cx',cx); c.setAttribute('cy',cy); c.setAttribute('r',r);
+    c.setAttribute('stroke-width', width);
+    svg.appendChild(c);
+    addShape({type:'circle', el:c, cx,cy,r, w:width});
+  }
+
+  function svgPoint(evt){
+    const pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return {x:loc.x, y:loc.y};
+  }
+
+  svg.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    svg.setPointerCapture(e.pointerId);
+    if(currentMode !== 'draw'){ return; }
+    const p = svgPoint(e);
+    const vb = svg.viewBox.baseVal;
+    const margin = HOTZONE;
+    const nearLeft = p.x <= margin;
+    const nearRight = p.x >= vb.width - margin;
+    const nearTop = p.y <= margin;
+    const nearBottom = p.y >= vb.height - margin;
+    const nearCorner = (nearLeft||nearRight) && (nearTop||nearBottom);
+    const nearEdge = nearLeft || nearRight || nearTop || nearBottom;
+    pointerDownInfo = {start:p, corner:nearCorner, edge:nearEdge, nearLeft, nearRight, nearTop, nearBottom};
+    if(nearCorner){
+      const cx = nearLeft ? 0 : vb.width;
+      const cy = nearTop ? 0 : vb.height;
+      createGhostCircle(cx, cy, Math.hypot(p.x-cx, p.y-cy));
+    } else if(nearEdge){
+      if(nearLeft || nearRight){
+        createGhostFullLineVertical(p.x);
+        pointerDownInfo.axis = 'vertical';
+      } else {
+        createGhostFullLineHorizontal(p.y);
+        pointerDownInfo.axis = 'horizontal';
+      }
+    } else {
+      pointerDownInfo = null;
+    }
+  }, {passive:false});
+
+  svg.addEventListener('pointermove', (e) => {
+    if(pointerDownInfo) e.preventDefault();
+    const p = svgPoint(e);
+    if(pointerDownInfo && ghost){
+      if(pointerDownInfo.corner){
+        const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
+        const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
+        const r = Math.hypot(p.x-cx, p.y-cy);
+        ghost.setAttribute('r', r);
+      } else if(pointerDownInfo.edge){
+        if(pointerDownInfo.axis === 'vertical'){
+          let x = Math.max(0, Math.min(svg.viewBox.baseVal.width, p.x));
+          ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
+        } else {
+          let y = Math.max(0, Math.min(svg.viewBox.baseVal.height, p.y));
+          ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
+        }
+      }
+    }
+  }, {passive:false});
+
+  svg.addEventListener('pointerup', (e) => {
+    e.preventDefault();
+    svg.releasePointerCapture(e.pointerId);
+    if(!pointerDownInfo || !ghost){ pointerDownInfo=null; removeGhost(); return; }
+    if(pointerDownInfo.corner){
+      const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
+      const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
+      const r = parseFloat(ghost.getAttribute('r'));
+      makeCircle(cx,cy,r);
+    } else if(pointerDownInfo.edge){
+      if(pointerDownInfo.axis === 'vertical'){
+        const x = parseFloat(ghost.getAttribute('x1'));
+        makeFullVerticalLine(x);
+      } else {
+        const y = parseFloat(ghost.getAttribute('y1'));
+        makeFullHorizontalLine(y);
+      }
+    }
+    pointerDownInfo=null;
+    removeGhost();
+  }, {passive:false});
+
+  svg.addEventListener('click', (e) => {
+    if(!trimActive) return;
+    const target = e.target;
+    if(!target || !target.classList?.contains('shape')) return;
+    const shapeObj = shapes.find(s => s.el === target);
+    if(shapeObj){
+      target.remove();
+      shapes = shapes.filter(s => s !== shapeObj);
+      history.push({op:'del', shape: shapeObj});
+    }
+  });
+
+  clearBtn.addEventListener('click', ()=>{ 
+    shapes.forEach(s=>s.el.remove()); 
+    shapes=[]; 
+    history.push({op:'clear'}); 
+  });
+
+  undoBtn.addEventListener('click', ()=>{ 
+    const h = history.pop(); 
+    if(!h) return; 
+    if(h.op==='add'){ 
+      h.shape.el.remove(); 
+      shapes = shapes.filter(s=>s!==h.shape);
+    } else if(h.op==='del'){ 
+      svg.appendChild(h.shape.el); 
+      shapes.push(h.shape); 
+    } 
+  });
+
+  // Intersection helpers
+  function lineLineInter(l1, l2){
+    const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
+    const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
+    const denom = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
+    if(Math.abs(denom) < 1e-6) return null;
+    const xi = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4))/denom;
+    const yi = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4))/denom;
+    function between(a,b,c){ return Math.min(a,b)-1e-6 <= c && c <= Math.max(a,b)+1e-6; }
+    if(between(x1,x2,xi) && between(y1,y2,yi) && between(x3,x4,xi) && between(y3,y4,yi)) return {x:xi,y:yi};
+    return null;
+  }
+  function lineCircleInter(line, circle){
+    const x1=line.x1, y1=line.y1, x2=line.x2, y2=line.y2;
+    const cx=circle.cx, cy=circle.cy, r=circle.r;
+    const dx = x2-x1, dy=y2-y1;
+    const fx = x1-cx, fy=y1-cy;
+    const a = dx*dx+dy*dy;
+    const b = 2*(fx*dx+fy*dy);
+    const c = fx*fx+fy*fy - r*r;
+    let disc = b*b - 4*a*c;
+    if(disc < -1e-6) return [];
+    disc = Math.max(0, disc);
+    const t1 = (-b + Math.sqrt(disc)) / (2*a);
+    const t2 = (-b - Math.sqrt(disc)) / (2*a);
+    const points = [];
+    [t1,t2].forEach(t => {
+      if(t >= -1e-6 && t <= 1+1e-6){
+        points.push({x: x1 + dx*t, y: y1 + dy*t});
+      }
+    });
+    return points;
+  }
+  function circleCircleInter(c1, c2){
+    const x0=c1.cx, y0=c1.cy, r0=c1.r;
+    const x1=c2.cx, y1=c2.cy, r1=c2.r;
+    const dx = x1-x0, dy=y1-y0;
+    const d = Math.hypot(dx,dy);
+    if(d > r0 + r1 + 1e-6) return [];
+    if(d < Math.abs(r0-r1) - 1e-6) return [];
+    if(d < 1e-9 && Math.abs(r0-r1) < 1e-9) return [];
+    const a = (r0*r0 - r1*r1 + d*d) / (2*d);
+    const h = Math.sqrt(Math.max(0, r0*r0 - a*a));
+    const xm = x0 + a*dx/d;
+    const ym = y0 + a*dy/d;
+    const rx = -dy * (h/d);
+    const ry = dx * (h/d);
+    const p1 = {x: xm + rx, y: ym + ry};
+    const p2 = {x: xm - rx, y: ym - ry};
+    if(Math.hypot(p1.x-p2.x,p1.y-p2.y) < 1e-6) return [p1];
+    return [p1,p2];
+  }
+
+  function markIntersection(pt){
+    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3);
+    dot.setAttribute('class','intersection-dot');
+    svg.appendChild(dot);
+    setTimeout(()=>dot.remove(), 2000);
+  }
+
+  function splitAtIntersectionsInternal(){
+    const lines = shapes.filter(s=>s.type==='line').map(s=>s);
+    const circles = shapes.filter(s=>s.type==='circle').map(s=>s);
+    const intersections = [];
+
+    for(let i=0;i<lines.length;i++){
+      for(let j=i+1;j<lines.length;j++){
+        const p = lineLineInter(lines[i], lines[j]);
+        if(p){ intersections.push({p, with:[lines[i],lines[j]]}); markIntersection(p); }
+      }
+    }
+    for(let i=0;i<lines.length;i++){
+      for(let j=0;j<circles.length;j++){
+        const pts = lineCircleInter(lines[i], circles[j]);
+        pts.forEach(p => { intersections.push({p, with:[lines[i],circles[j]]}); markIntersection(p); });
+      }
+    }
+    for(let i=0;i<circles.length;i++){
+      for(let j=i+1;j<circles.length;j++){
+        const pts = circleCircleInter(circles[i], circles[j]);
+        pts.forEach(p => { intersections.push({p, with:[circles[i],circles[j]]}); markIntersection(p); });
+      }
     }
 
-    // Toggle trim with FAB
-    fab.addEventListener('click', () => {
-      trimActive = !trimActive;
-      currentMode = trimActive ? 'trim' : 'draw';
-      updateStatus();
+    const newShapes = [];
+    lines.forEach(l => {
+      const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
+      ptsOnLine.push({x:l.x1,y:l.y1}); ptsOnLine.push({x:l.x2,y:l.y2});
+      const dx = l.x2 - l.x1, dy = l.y2 - l.y1;
+      const params = ptsOnLine.map(p => {
+        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - l.x1) / (dx || 1e-6)) : ((p.y - l.y1)/(dy || 1e-6));
+        return Math.max(0, Math.min(1, t));
+      });
+      const uniq = Array.from(new Set(params.map(t=>t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
+      for(let i=0;i<uniq.length-1;i++){
+        const ta=uniq[i], tb=uniq[i+1];
+        const ax = l.x1 + dx * ta, ay = l.y1 + dy * ta;
+        const bx = l.x1 + dx * tb, by = l.y1 + dy * tb;
+        if(Math.hypot(bx-ax,by-ay) > 2){
+          const seg = document.createElementNS('http://www.w3.org/2000/svg','line');
+          seg.classList.add('shape');
+          seg.setAttribute('x1',ax); seg.setAttribute('y1',ay); seg.setAttribute('x2',bx); seg.setAttribute('y2',by);
+          seg.setAttribute('stroke-width', l.w);
+          svg.appendChild(seg);
+          newShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by, w:l.w});
+        }
+      }
+      l.el.remove();
     });
 
-    // Initialize
-    updateStatus();
-    // ... rest of your script unchanged
-  })();
+    circles.forEach(c => {
+      const N = 120;
+      const pts = [];
+      for(let i=0;i<N;i++){
+        const a = (i/N)*Math.PI*2;
+        pts.push({x: c.cx + c.r*Math.cos(a), y: c.cy + c.r*Math.sin(a), a});
+      }
+      const intsOnC = intersections.filter(it => it.with.includes(c)).map(it => it.p);
+      const idxSet = new Set();
+      pts.forEach((pt, idx) => {
+        intsOnC.forEach(ip => {
+          if(Math.hypot(pt.x-ip.x, pt.y-ip.y) < 6){ idxSet.add(idx); }
+        });
+      });
+      const idxs = Array.from(idxSet).sort((a,b)=>a-b);
+      if(idxs.length === 0){
+        const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        circ.classList.add('shape');
+        circ.setAttribute('cx', c.cx); circ.setAttribute('cy', c.cy); circ.setAttribute('r', c.r);
+        circ.setAttribute('stroke-width', c.w);
+        svg.appendChild(circ);
+        newShapes.push({type:'circle', el:circ, cx:c.cx,cy:c.cy,r:c.r, w:c.w});
+        c.el.remove();
+        return;
+      }
+      const sorted = idxs;
+      for(let s=0;s<sorted.length;s++){
+        const i1 = sorted[s], i2 = sorted[(s+1)%sorted.length];
+        let segPts = [];
+        let i = i1;
+        while(true){
+          segPts.push(pts[i]);
+          if(i === i2) break;
+          i = (i+1)%pts.length;
+        }
+        if(segPts.length > 1){
+          const path = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+          path.classList.add('shape');
+          path.setAttribute('points', segPts.map(p=>`${p.x},${p.y}`).join(' '));
+          path.setAttribute('fill','none');
+          path.setAttribute('stroke-width', c.w);
+          svg.appendChild(path);
+          newShapes.push({type:'polyline', el:path, pts:segPts, w:c.w});
+        }
+      }
+      c.el.remove();
+    });
+
+    shapes = shapes.filter(s => !(s.type==='line' || s.type==='circle'));
+    newShapes.forEach(ns => shapes.push(ns));
+  }
+
+  splitBtn.addEventListener('click', () => {
+    splitAtIntersectionsInternal();
+  });
+
+  fab.textContent = '✂';
+  updateStatus();
+})();
 </script>
-
-<!-- Your full script logic goes here — same as before, just cleaner UI wrapper -->
-<!-- (Due to length, I recommend copying your original script and only replacing the HTML/CSS above) -->
-
 </body>
 </html>
