@@ -55,26 +55,31 @@
     z-index: 10;
     transition: var(--transition);
     overflow-y: auto;
+    position: relative;
   }
   .toolbar.collapsed { width: 60px; }
-  .toolbar-content { transition: opacity 0.2s; }
-  .toolbar.collapsed .toolbar-content { opacity: 0; pointer-events: none; }
+  .toolbar-content { transition: opacity 0.2s, width 0.2s; width: 100%; }
+  .toolbar.collapsed .toolbar-content { opacity: 0; pointer-events: none; width: 0; }
   .toggle-btn {
     position: absolute;
     right: -10px;
     top: 50%;
     transform: translateY(-50%);
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     background: var(--accent);
     color: white;
     border: none;
     border-radius: 50%;
     cursor: pointer;
-    display: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    z-index: 11;
   }
   @media (min-width: 861px) {
-    .toggle-btn { display: block; }
+    .toggle-btn { display: flex; }
   }
 
   @media (max-width: 860px) {
@@ -91,16 +96,46 @@
       border-top: 1px solid var(--panel-border);
       border-radius: var(--radius) var(--radius) 0 0;
       box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
-      gap: 4px;
+      gap: 8px; /* Increased gap to prevent overlap */
+      flex-wrap: wrap;
     }
-    .app { padding-bottom: 70px; } /* Reduced padding */
-    .controls { flex-direction: row; gap: 4px; width: 100%; flex-wrap: wrap; }
-    .section { margin: 0; padding: 0; }
+    .app { padding-bottom: 80px; } /* Adjusted padding */
+    .controls { 
+      flex-direction: row; 
+      gap: 4px; 
+      width: 100%; 
+      justify-content: space-around;
+      flex-wrap: wrap;
+    }
+    .section { 
+      margin: 0; 
+      padding: 0; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center;
+      min-width: 60px;
+    }
     .section-title { display: none; }
-    .btn-group { gap: 2px; }
-    button, select { padding: 6px 8px; font-size: 12px; min-width: 40px; } /* Smaller buttons */
+    .btn-group { 
+      gap: 2px; 
+      flex-direction: row;
+      justify-content: center;
+    }
+    button, select { 
+      padding: 6px 8px; 
+      font-size: 11px; 
+      min-width: 36px; 
+      min-height: 36px;
+      flex-shrink: 0;
+    } /* Smaller buttons, prevent shrink */
+    select { min-width: 80px; }
     .hint { display: none; }
     .toggle-btn { display: none; }
+    /* Force no overlap on very small screens */
+    @media (max-width: 480px) {
+      .toolbar { gap: 4px; padding: 4px; }
+      button, select { padding: 4px 6px; font-size: 10px; min-width: 32px; min-height: 32px; }
+    }
   }
 
   h1 {
@@ -111,7 +146,11 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    opacity: 1;
+    transition: opacity 0.2s;
   }
+  .toolbar.collapsed h1 { opacity: 0; }
+
   .section {
     display: flex;
     flex-direction: column;
@@ -216,7 +255,7 @@
     border: 1px solid var(--panel-border);
   }
   @media (max-width: 860px) {
-    .status { left: 12px; bottom: 80px; font-size: 12px; padding: 6px 12px; }
+    .status { left: 12px; bottom: 90px; font-size: 12px; padding: 6px 12px; }
   }
 
   .hint {
@@ -330,6 +369,7 @@
   let ghost = null;
   const HOTZONE = 50;
   let trimActive = false;
+  let lastMoveTime = 0; // For throttling
 
   function setCanvasSize(val){
     const [w,h] = val.split('x').map(Number);
@@ -375,13 +415,17 @@
     modeText.textContent = `${trimActive ? 'Trim' : 'Draw'} Mode`;
   }
 
-  // Toggle toolbar collapse
+  // Toggle toolbar collapse - Fixed with better transition
   let collapsed = false;
   toggleBtn.addEventListener('click', () => {
     collapsed = !collapsed;
     toolbar.classList.toggle('collapsed', collapsed);
     toggleBtn.textContent = collapsed ? '→' : '←';
+    // Adjust app flex if collapsed
+    document.querySelector('.app').style.paddingLeft = collapsed ? '60px' : '280px';
   });
+  // Initial setup
+  document.querySelector('.app').style.paddingLeft = '280px';
 
   function createGhostFullLineVertical(x){
     removeGhost();
@@ -445,6 +489,31 @@
     return {x:loc.x, y:loc.y};
   }
 
+  // Throttled pointermove for CPU optimization
+  function throttledMove(e) {
+    const now = Date.now();
+    if (now - lastMoveTime < 16) return; // ~60fps throttle
+    lastMoveTime = now;
+    if(pointerDownInfo) e.preventDefault();
+    const p = svgPoint(e);
+    if(pointerDownInfo && ghost){
+      if(pointerDownInfo.corner){
+        const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
+        const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
+        const r = Math.hypot(p.x-cx, p.y-cy);
+        ghost.setAttribute('r', r);
+      } else if(pointerDownInfo.edge){
+        if(pointerDownInfo.axis === 'vertical'){
+          let x = Math.max(0, Math.min(svg.viewBox.baseVal.width, p.x));
+          ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
+        } else {
+          let y = Math.max(0, Math.min(svg.viewBox.baseVal.height, p.y));
+          ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
+        }
+      }
+    }
+  }
+
   svg.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     svg.setPointerCapture(e.pointerId);
@@ -476,26 +545,7 @@
     }
   }, {passive:false});
 
-  svg.addEventListener('pointermove', (e) => {
-    if(pointerDownInfo) e.preventDefault();
-    const p = svgPoint(e);
-    if(pointerDownInfo && ghost){
-      if(pointerDownInfo.corner){
-        const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
-        const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
-        const r = Math.hypot(p.x-cx, p.y-cy);
-        ghost.setAttribute('r', r);
-      } else if(pointerDownInfo.edge){
-        if(pointerDownInfo.axis === 'vertical'){
-          let x = Math.max(0, Math.min(svg.viewBox.baseVal.width, p.x));
-          ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
-        } else {
-          let y = Math.max(0, Math.min(svg.viewBox.baseVal.height, p.y));
-          ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
-        }
-      }
-    }
-  }, {passive:false});
+  svg.addEventListener('pointermove', throttledMove, {passive:false});
 
   svg.addEventListener('pointerup', (e) => {
     e.preventDefault();
@@ -549,7 +599,7 @@
     } 
   });
 
-  // Intersection helpers
+  // Intersection helpers (unchanged)
   function lineLineInter(l1, l2){
     const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
     const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
