@@ -1,617 +1,508 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Edge/Corner Draw — Trim Tool</title>
+<title>Edge/Corner Draw — Trim Tool (Improved)</title>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
 <style>
-  :root {
-    --bg: #f8f9fc;
-    --panel: rgba(255, 255, 255, 0.95);
-    --panel-border: rgba(255, 255, 255, 0.8);
-    --accent: #0066ff;
-    --accent-light: #e6f0ff;
-    --text: #1a1a1a;
-    --text-muted: #666;
-    --shadow: 0 8px 32px rgba(0,0,0,0.08);
-    --radius: 12px;
-    --transition: all 0.2s ease;
+  :root{
+    --bg:#f6f7fb;
+    --panel:rgba(255,255,255,0.98);
+    --panel-border:rgba(0,0,0,0.06);
+    --accent:#0b6bff;
+    --accent-2:#dfeaff;
+    --text:#11131a;
+    --muted:#6c6f7a;
+    --radius:12px;
+    --shadow:0 6px 20px rgba(0,0,0,0.06);
+    --trans:200ms;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0f1117;
-      --panel: rgba(20, 22, 36, 0.95);
-      --panel-border: rgba(40, 44, 74, 0.8);
-      --text: #e0e0ff;
-      --text-muted: #999;
-      --accent-light: #1a2b50;
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0c0f16;
+      --panel:rgba(18,20,30,0.96);
+      --panel-border:rgba(255,255,255,0.04);
+      --text:#e9eefc;
+      --muted:#9aa0b3;
+      --accent-2:#14243f;
     }
   }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;font-family:'Inter',system-ui,-apple-system,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  .app{display:flex;height:100dvh;overflow:hidden;transition:padding-left var(--trans) ease}
 
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    height: 100dvh;
-    overflow: hidden;
-  }
-  .app { display: flex; height: 100dvh; }
-
-  /* Toolbar - Collapsible on Desktop, Compact Bottom on Mobile */
-  .toolbar {
-    width: 280px; /* Reduced width */
-    padding: 16px;
-    background: var(--panel);
-    backdrop-filter: blur(20px);
-    border-right: 1px solid var(--panel-border);
-    display: flex;
-    flex-direction: column;
-    gap: 16px; /* Reduced gap */
-    z-index: 10;
-    transition: var(--transition);
-    overflow-y: auto;
-    position: relative;
-  }
-  .toolbar.collapsed { width: 60px; }
-  .toolbar-content { transition: opacity 0.2s, width 0.2s; width: 100%; }
-  .toolbar.collapsed .toolbar-content { opacity: 0; pointer-events: none; width: 0; }
-  .toggle-btn {
-    position: absolute;
-    right: -10px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 24px;
-    height: 24px;
-    background: var(--accent);
-    color: white;
-    border: none;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    z-index: 11;
-  }
-  @media (min-width: 861px) {
-    .toggle-btn { display: flex; }
-  }
-
-  @media (max-width: 860px) {
-    .toolbar {
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      width: 100%;
-      height: auto;
-      padding: 8px 12px; /* Compact padding */
-      flex-direction: row;
-      align-items: center;
-      justify-content: space-around;
-      border-right: none;
-      border-top: 1px solid var(--panel-border);
-      border-radius: var(--radius) var(--radius) 0 0;
-      box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
-      gap: 8px; /* Increased gap to prevent overlap */
-      flex-wrap: wrap;
-    }
-    .app { padding-bottom: 80px; } /* Adjusted padding */
-    .controls { 
-      flex-direction: row; 
-      gap: 4px; 
-      width: 100%; 
-      justify-content: space-around;
-      flex-wrap: wrap;
-    }
-    .section { 
-      margin: 0; 
-      padding: 0; 
-      display: flex; 
-      flex-direction: column; 
-      align-items: center;
-      min-width: 60px;
-    }
-    .section-title { display: none; }
-    .btn-group { 
-      gap: 2px; 
-      flex-direction: row;
-      justify-content: center;
-    }
-    button, select { 
-      padding: 6px 8px; 
-      font-size: 11px; 
-      min-width: 36px; 
-      min-height: 36px;
-      flex-shrink: 0;
-    } /* Smaller buttons, prevent shrink */
-    select { min-width: 80px; }
-    .hint { display: none; }
-    .toggle-btn { display: none; }
-    /* Force no overlap on very small screens */
-    @media (max-width: 480px) {
-      .toolbar { gap: 4px; padding: 4px; }
-      button, select { padding: 4px 6px; font-size: 10px; min-width: 32px; min-height: 32px; }
-    }
-  }
-
-  h1 {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 0 0 4px 0;
-    color: var(--accent);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    opacity: 1;
-    transition: opacity 0.2s;
-  }
-  .toolbar.collapsed h1 { opacity: 0; }
-
-  .section {
-    display: flex;
-    flex-direction: column;
-    gap: 8px; /* Reduced */
-  }
-  .section-title {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-muted);
-  }
-
-  /* Buttons & Controls - Compact */
-  button, select {
-    padding: 8px 12px; /* Slightly smaller */
-    border: none;
-    border-radius: 8px;
-    background: rgba(255,255,255,0.8);
-    backdrop-filter: blur(10px);
-    font: inherit;
-    font-weight: 500;
-    cursor: pointer;
-    transition: var(--transition);
-    border: 1px solid rgba(0,0,0,0.08);
-    min-height: 36px;
-  }
-  button:hover { background: rgba(255,255,255,0.95); transform: translateY(-1px); }
-  button:active { transform: translateY(0); }
-  button.active {
-    background: var(--accent);
-    color: white;
-    box-shadow: 0 0 0 2px var(--accent-light);
-  }
-  select { background: white; min-width: 120px; }
-
-  .btn-group {
-    display: flex;
-    gap: 4px; /* Reduced gap */
-    flex-wrap: wrap;
-  }
-  .fab {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: white;
-    border: none;
-    font-size: 20px;
+  /* Toolbar */
+  .toolbar{
+    width:260px;
+    padding:14px;
+    background:var(--panel);
+    border-right:1px solid var(--panel-border);
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    z-index:20;
+    transition:width var(--trans), transform var(--trans);
     box-shadow: var(--shadow);
-    z-index: 100;
-    cursor: pointer;
-    transition: var(--transition);
+    position:relative;
+    min-width:60px;
   }
-  .fab:hover { transform: scale(1.05); }
+  .toolbar.collapsed{width:64px}
+  .toolbar .title{display:flex;align-items:center;gap:10px}
+  .toolbar h1{font-size:15px;margin:0;color:var(--accent);font-weight:600}
+  .meta{font-size:12px;color:var(--muted);margin-top:2px}
+
+  .toggle-btn{
+    position:absolute;right:-12px;top:50%;transform:translateY(-50%);
+    width:28px;height:28px;border-radius:14px;border:none;background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;box-shadow:0 6px 18px rgba(11,107,255,0.12)
+  }
+
+  .controls{display:flex;flex-direction:column;gap:10px;transition:opacity var(--trans)}
+  .toolbar.collapsed .controls{opacity:0;pointer-events:none}
+
+  .section{display:flex;flex-direction:column;gap:6px}
+  .section-title{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.6px}
+  .btn-group{display:flex;gap:6px;flex-wrap:wrap}
+  button,select{padding:8px 10px;border-radius:9px;border:1px solid var(--panel-border);background:transparent;font:inherit;cursor:pointer;transition:all var(--trans)}
+  button:hover{transform:translateY(-2px)}
+  button.active{background:var(--accent);color:white;box-shadow:0 6px 18px rgba(11,107,255,0.08)}
+  select{background:white;min-width:120px}
+
+  /* compact icon button */
+  .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:36px;padding:0;border-radius:8px;background:transparent}
+
+  /* FAB */
+  .fab{
+    position:fixed;right:22px;bottom:22px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:white;border:none;font-size:20px;
+    box-shadow:0 10px 30px rgba(11,107,255,0.12);cursor:pointer;z-index:100;transition:transform .12s ease;
+  }
+  .fab:active{transform:scale(.96)}
 
   /* Canvas */
-  .canvas-wrap {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-    background: linear-gradient(135deg, #f0f2f6 0%, #e4e8f0 100%);
-    overflow: hidden;
-  }
-  .svg-frame {
-    display: inline-block;
-    max-width: 100%;
-    max-height: 100%;
-    border-radius: var(--radius);
-    overflow: hidden;
-    box-shadow: var(--shadow);
-  }
-  svg {
-    background: white;
-    display: block;
-    touch-action: none;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-  }
+  .canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:18px;background:linear-gradient(135deg,#eef2fb 0%,#e6eaf7 100%);overflow:hidden}
+  .svg-frame{border-radius:12px;overflow:hidden;box-shadow:var(--shadow);display:inline-block;background:#fff;max-width:100%;max-height:100%}
+  svg{display:block;touch-action:none;user-select:none;-webkit-tap-highlight-color:transparent}
 
-  /* Status & Hints */
-  .status {
-    position: fixed;
-    left: 20px;
-    bottom: 20px;
-    background: var(--panel);
-    backdrop-filter: blur(20px);
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 500;
-    box-shadow: var(--shadow);
-    z-index: 20;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid var(--panel-border);
+  /* Status */
+  .status{
+    position:fixed;left:18px;bottom:22px;background:var(--panel);border-radius:999px;padding:8px 12px;font-weight:600;font-size:13px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.06);display:flex;gap:10px;align-items:center;border:1px solid var(--panel-border);z-index:30;
   }
-  @media (max-width: 860px) {
-    .status { left: 12px; bottom: 90px; font-size: 12px; padding: 6px 12px; }
-  }
+  .hint-inline{font-size:12px;color:var(--muted);font-weight:500}
 
-  .hint {
-    font-size: 12px;
-    color: var(--text-muted);
-    line-height: 1.4;
-    background: rgba(255,255,255,0.6);
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px solid rgba(0,0,0,0.06);
+  /* shapes */
+  .shape{stroke:#111;fill:none;stroke-linecap:round;stroke-linejoin:round;cursor:pointer;transition:stroke 160ms}
+  .shape:hover{stroke:var(--accent)}
+  .ghost{stroke:var(--accent);stroke-dasharray:6 4;opacity:.6;pointer-events:none}
+  .intersection-dot{fill:var(--accent);stroke:white;stroke-width:1.5;pointer-events:none;opacity:0;transition:opacity .2s}
+  .intersection-dot.show{opacity:1}
+  /* small responsive */
+  @media (max-width:860px){
+    .toolbar{position:fixed;left:0;right:0;bottom:0;width:100%;height:auto;padding:8px 12px;border-right:none;border-top:1px solid var(--panel-border);border-radius:12px 12px 0 0;flex-direction:row;align-items:center;justify-content:space-around;gap:8px}
+    .toolbar .controls{flex-direction:row;gap:8px;align-items:center}
+    .toolbar .section-title{display:none}
+    .app{padding-bottom:86px}
+    .toggle-btn{display:none}
+    .status{left:12px;bottom:96px}
+    .fab{right:16px;bottom:96px}
   }
-
-  /* SVG Styles */
-  .shape { stroke: #111; fill: none; stroke-linecap: round; stroke-linejoin: round; cursor: pointer; transition: stroke 0.2s; }
-  .shape:hover { stroke: var(--accent); }
-  .ghost { stroke: var(--accent); stroke-dasharray: 8 6; opacity: 0.5; pointer-events: none; }
-  .intersection-dot { fill: var(--accent); stroke: white; stroke-width: 2; pointer-events: none; }
 </style>
 </head>
 <body>
+<div class="app" id="app">
+  <aside class="toolbar" id="toolbar" aria-label="Tool panel">
+    <button class="toggle-btn" id="toggle" title="Collapse menu" aria-pressed="false" aria-label="Collapse toolbar">←</button>
 
-<div class="app">
-  <div class="toolbar" id="toolbar">
-    <button class="toggle-btn" id="toggle" title="Collapse Menu">←</button>
-    <div>
+    <div class="title">
       <h1>📐 Edge Draw</h1>
-      <p style="margin:4px 0 0;font-size:12px;color:var(--text-muted)">Trim Tool</p>
+      <div style="display:flex;flex-direction:column">
+        <div class="meta">Trim Tool</div>
+        <div style="font-size:11px;color:var(--muted)">Shortcuts: <span style="font-weight:700">T</span>=Trim <span style="color:var(--muted)">•</span> <span style="font-weight:700">D</span>=Draw</div>
+      </div>
     </div>
 
     <div class="controls" id="toolbar-content">
-      <div class="section">
+      <div class="section" role="group" aria-label="Canvas size">
         <div class="section-title">Canvas</div>
-        <select id="size">
+        <select id="size" aria-label="Canvas size">
           <option value="600x800">600 × 800</option>
           <option value="800x600" selected>800 × 600</option>
+          <option value="1200x800">1200 × 800</option>
         </select>
       </div>
 
-      <div class="section">
+      <div class="section" role="group" aria-label="Stroke width">
         <div class="section-title">Width</div>
-        <div class="btn-group">
-          <button id="lw-s">1</button>
-          <button id="lw-m" class="active">2</button>
-          <button id="lw-l">3</button>
+        <div class="btn-group" id="width-group">
+          <button id="lw-s" class="icon-btn" title="Thin" aria-pressed="false">1</button>
+          <button id="lw-m" class="icon-btn active" title="Medium" aria-pressed="true">2</button>
+          <button id="lw-l" class="icon-btn" title="Thick" aria-pressed="false">3</button>
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" role="group" aria-label="Mode">
         <div class="section-title">Mode</div>
         <div class="btn-group">
-          <button id="mode-draw" class="active">Draw</button>
-          <button id="mode-trim">Trim</button>
+          <button id="mode-draw" class="active" title="Draw (D)" aria-pressed="true">✏️ Draw</button>
+          <button id="mode-trim" title="Trim (T)" aria-pressed="false">✂ Trim</button>
         </div>
       </div>
 
-      <div class="section">
-        <button id="split" style="width:100%">Split</button>
-        <div class="btn-group" style="justify-content: space-between;">
-          <button id="undo">↶</button>
-          <button id="clear">🗑</button>
+      <div class="section" role="group" aria-label="Actions">
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="split" style="flex:1" title="Split at intersections (S)" aria-label="Split">Split</button>
+          <button id="undo" class="icon-btn" title="Undo (Z)" aria-label="Undo">↶</button>
+          <button id="clear" class="icon-btn" title="Clear (C)" aria-label="Clear">🗑</button>
         </div>
       </div>
 
-      <div class="hint">
-        <strong>Tips:</strong> Drag edges for lines, corners for circles. Split → Trim to edit.
+      <div class="section hint-inline" style="font-size:12px;color:var(--muted)">
+        Tips: drag edges for straight lines, corners for circles. Use <strong>S</strong> to split intersections.
       </div>
     </div>
-  </div>
+  </aside>
 
-  <div class="canvas-wrap">
-    <div class="svg-frame">
-      <svg id="svg" width="800" height="600" viewBox="0 0 800 600"
-           xmlns="http://www.w3.org/2000/svg"
-           tabindex="0" aria-label="Drawing canvas">
-      </svg>
+  <main class="canvas-wrap" id="canvasWrap">
+    <div class="svg-frame" role="region" aria-label="Drawing area">
+      <svg id="svg" width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" tabindex="0" aria-label="Drawing canvas"></svg>
     </div>
-  </div>
+  </main>
 </div>
 
-<!-- FAB for quick trim toggle -->
-<button class="fab" id="fab" title="Toggle Trim">✂</button>
+<button class="fab" id="fab" title="Toggle Trim" aria-label="Toggle Trim">✂</button>
 
-<!-- Status -->
-<div class="status" id="status">
-  <span id="mode-text">Draw Mode</span>
-  <span>•</span>
-  <span id="width-text">Width: 2</span>
+<div class="status" id="status" role="status">
+  <div id="mode-text">Draw Mode</div>
+  <div style="color:var(--muted)">•</div>
+  <div id="width-text">Width: 2</div>
 </div>
 
 <script>
 (() => {
+  // Elements
   const svg = document.getElementById('svg');
   const sizeSel = document.getElementById('size');
   const lwS = document.getElementById('lw-s'), lwM = document.getElementById('lw-m'), lwL = document.getElementById('lw-l');
   const modeDraw = document.getElementById('mode-draw'), modeTrim = document.getElementById('mode-trim');
-  const status = document.getElementById('status');
-  const modeText = document.getElementById('mode-text');
-  const widthText = document.getElementById('width-text');
-  const splitBtn = document.getElementById('split');
-  const undoBtn = document.getElementById('undo'), clearBtn = document.getElementById('clear');
+  const splitBtn = document.getElementById('split'), undoBtn = document.getElementById('undo'), clearBtn = document.getElementById('clear');
   const fab = document.getElementById('fab');
-  const toolbar = document.getElementById('toolbar');
-  const toggleBtn = document.getElementById('toggle');
-  const toolbarContent = document.getElementById('toolbar-content');
+  const status = document.getElementById('status'), modeText = document.getElementById('mode-text'), widthText = document.getElementById('width-text');
+  const toolbar = document.getElementById('toolbar'), toggleBtn = document.getElementById('toggle');
 
-  let width = 4;
-  let currentMode = 'draw';
-  let history = [];
-  let shapes = [];
-  let pointerDownInfo = null;
-  let ghost = null;
+  // App state
+  let strokeWidth = 4;               // px (visual)
+  let currentMode = 'draw';          // 'draw' or 'trim'
+  let shapes = [];                   // shape objects
+  const history = [];                // history stack
+  let pointerDown = null;            // pointer info during draw
+  let ghost = null;                  // ghost element reference
+  let rafPending = false;            // rAF throttle flag
+  let lastPointer = null;            // last pointer position
   const HOTZONE = 50;
-  let trimActive = false;
-  let lastMoveTime = 0; // For throttling
+  let viewW = 800, viewH = 600;      // cached viewbox dims
 
+  // Performance tuning constants
+  const CIRCLE_SEGMENTS = 64;        // fewer segments => faster split for circles
+  const EPS = 1e-6;
+
+  // helpers: cache viewbox and update on resize
   function setCanvasSize(val){
     const [w,h] = val.split('x').map(Number);
     svg.setAttribute('width', w);
     svg.setAttribute('height', h);
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    viewW = w; viewH = h;
   }
   setCanvasSize(sizeSel.value);
-  sizeSel.addEventListener('change', e => setCanvasSize(e.target.value));
+  sizeSel.addEventListener('change', e => {
+    setCanvasSize(e.target.value);
+  });
 
-  function setWidth(wName, wVal){
-    lwS.classList.remove('active'); lwM.classList.remove('active'); lwL.classList.remove('active');
-    if(wName==='S'){ lwS.classList.add('active'); width=2; }
-    if(wName==='M'){ lwM.classList.add('active'); width=4; }
-    if(wName==='L'){ lwL.classList.add('active'); width=7; }
-    widthText.textContent = `Width: ${wVal}`;
+  // stroke width setters
+  function setWidth(sizeKey){
+    lwS.classList.toggle('active', sizeKey === 'S');
+    lwM.classList.toggle('active', sizeKey === 'M');
+    lwL.classList.toggle('active', sizeKey === 'L');
+    if(sizeKey === 'S'){ strokeWidth = 2; widthText.textContent = 'Width: 1'; }
+    if(sizeKey === 'M'){ strokeWidth = 4; widthText.textContent = 'Width: 2'; }
+    if(sizeKey === 'L'){ strokeWidth = 7; widthText.textContent = 'Width: 3'; }
     updateStatus();
   }
-  lwS.addEventListener('click', ()=>setWidth('S', '1'));
-  lwM.addEventListener('click', ()=>setWidth('M', '2'));
-  lwL.addEventListener('click', ()=>setWidth('L', '3'));
-  setWidth('M', '2');
+  lwS.addEventListener('click', () => setWidth('S'));
+  lwM.addEventListener('click', () => setWidth('M'));
+  lwL.addEventListener('click', () => setWidth('L'));
+  setWidth('M');
 
+  // mode toggle
   function setMode(m){
     currentMode = m;
-    modeDraw.classList.toggle('active', m==='draw');
-    modeTrim.classList.toggle('active', m==='trim');
-    trimActive = (m === 'trim');
-    updateStatus();
-    if(trimActive){
-      splitAtIntersectionsInternal();
+    modeDraw.classList.toggle('active', m === 'draw');
+    modeTrim.classList.toggle('active', m === 'trim');
+    modeText.textContent = (m === 'trim') ? 'Trim Mode' : 'Draw Mode';
+    fab.textContent = (m === 'trim') ? '✏️' : '✂';
+    // when switching to trim, run light split to show intersections (non-destructive)
+    if(m === 'trim'){ // delay small to allow UI to update
+      requestAnimationFrame(() => {
+        // don't modify existing shapes here — mark intersections for quick visual feedback
+        quickMarkIntersections();
+      });
     }
   }
   modeDraw.addEventListener('click', ()=>setMode('draw'));
   modeTrim.addEventListener('click', ()=>setMode('trim'));
+  fab.addEventListener('click', ()=>setMode(currentMode === 'draw' ? 'trim' : 'draw'));
 
-  fab.addEventListener('click', () => {
-    setMode(trimActive ? 'draw' : 'trim');
-    fab.textContent = trimActive ? '✏️' : '✂';
-  });
+  function updateStatus(){ widthText.textContent = `Width: ${strokeWidth === 2?1:strokeWidth ===4?2:3}`; }
 
-  function updateStatus() {
-    modeText.textContent = `${trimActive ? 'Trim' : 'Draw'} Mode`;
-  }
-
-  // Toggle toolbar collapse - Fixed with better transition
-  let collapsed = false;
-  toggleBtn.addEventListener('click', () => {
-    collapsed = !collapsed;
+  // toolbar collapse persisted
+  let collapsed = localStorage.getItem('toolbar-collapsed') === 'true';
+  function applyToolbar(){
     toolbar.classList.toggle('collapsed', collapsed);
     toggleBtn.textContent = collapsed ? '→' : '←';
-    // Adjust app flex if collapsed
-    document.querySelector('.app').style.paddingLeft = collapsed ? '60px' : '280px';
+    toggleBtn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+    document.getElementById('app').style.paddingLeft = collapsed ? '64px' : '260px';
+  }
+  toggleBtn.addEventListener('click', ()=>{
+    collapsed = !collapsed;
+    localStorage.setItem('toolbar-collapsed', collapsed);
+    applyToolbar();
   });
-  // Initial setup
-  document.querySelector('.app').style.paddingLeft = '280px';
+  applyToolbar();
 
-  function createGhostFullLineVertical(x){
-    removeGhost();
-    ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ghost.setAttribute('x1', x); ghost.setAttribute('y1', 0); ghost.setAttribute('x2', x); ghost.setAttribute('y2', svg.viewBox.baseVal.height);
-    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
-    svg.appendChild(ghost);
-  }
-  function createGhostFullLineHorizontal(y){
-    removeGhost();
-    ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ghost.setAttribute('x1', 0); ghost.setAttribute('y1', y); ghost.setAttribute('x2', svg.viewBox.baseVal.width); ghost.setAttribute('y2', y);
-    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
-    svg.appendChild(ghost);
-  }
-  function createGhostCircle(cx,cy,r){
-    removeGhost();
-    ghost = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    ghost.setAttribute('cx',cx); ghost.setAttribute('cy',cy); ghost.setAttribute('r',r);
-    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
-    svg.appendChild(ghost);
-  }
-  function removeGhost(){ if(ghost){ghost.remove(); ghost=null;} }
+  // Utility: create element with ns
+  function ns(tag){ return document.createElementNS('http://www.w3.org/2000/svg', tag); }
 
-  function addShape(obj){
+  // Create ghost helpers (reuse ghost instead of recreating often)
+  function ensureGhost(tag){
+    if(!ghost || ghost.tagName.toLowerCase() !== tag){
+      removeGhost();
+      ghost = ns(tag);
+      ghost.classList.add('ghost');
+      svg.appendChild(ghost);
+    }
+    return ghost;
+  }
+  function removeGhost(){ if(ghost){ ghost.remove(); ghost = null; } }
+
+  // Add shape records
+  function pushShape(obj){
     shapes.push(obj);
     history.push({op:'add', shape:obj});
   }
 
+  // Factory create shapes & register
   function makeFullVerticalLine(x){
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    const line = ns('line');
     line.classList.add('shape');
-    line.setAttribute('x1',x); line.setAttribute('y1',0); line.setAttribute('x2',x); line.setAttribute('y2',svg.viewBox.baseVal.height);
-    line.setAttribute('stroke-width', width);
+    line.setAttribute('x1', x); line.setAttribute('y1', 0); line.setAttribute('x2', x); line.setAttribute('y2', viewH);
+    line.setAttribute('stroke-width', strokeWidth);
     svg.appendChild(line);
-    addShape({type:'line', el:line, x1:x,y1:0,x2:x,y2:svg.viewBox.baseVal.height, w:width});
+    pushShape({type:'line', el:line, x1:x, y1:0, x2:x, y2:viewH, w:strokeWidth});
   }
 
   function makeFullHorizontalLine(y){
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    const line = ns('line');
     line.classList.add('shape');
-    line.setAttribute('x1',0); line.setAttribute('y1',y); line.setAttribute('x2',svg.viewBox.baseVal.width); line.setAttribute('y2',y);
-    line.setAttribute('stroke-width', width);
+    line.setAttribute('x1', 0); line.setAttribute('y1', y); line.setAttribute('x2', viewW); line.setAttribute('y2', y);
+    line.setAttribute('stroke-width', strokeWidth);
     svg.appendChild(line);
-    addShape({type:'line', el:line, x1:0,y1:y,x2:svg.viewBox.baseVal.width,y2:y, w:width});
+    pushShape({type:'line', el:line, x1:0, y1:y, x2:viewW, y2:y, w:strokeWidth});
   }
 
-  function makeCircle(cx,cy,r){
-    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  function makeCircle(cx, cy, r){
+    const c = ns('circle');
     c.classList.add('shape');
-    c.setAttribute('cx',cx); c.setAttribute('cy',cy); c.setAttribute('r',r);
-    c.setAttribute('stroke-width', width);
+    c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r);
+    c.setAttribute('stroke-width', strokeWidth);
     svg.appendChild(c);
-    addShape({type:'circle', el:c, cx,cy,r, w:width});
+    pushShape({type:'circle', el:c, cx, cy, r, w:strokeWidth});
   }
 
+  // Convert client coords to svg coords (fast)
   function svgPoint(evt){
     const pt = svg.createSVGPoint();
     pt.x = evt.clientX; pt.y = evt.clientY;
-    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
-    return {x:loc.x, y:loc.y};
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
   }
 
-  // Throttled pointermove for CPU optimization
-  function throttledMove(e) {
-    const now = Date.now();
-    if (now - lastMoveTime < 16) return; // ~60fps throttle
-    lastMoveTime = now;
-    if(pointerDownInfo) e.preventDefault();
+  // pointer handling using rAF for smoothness and reduced CPU
+  function onPointerDown(e){
+    if(e.button && e.button !== 0) return;
     const p = svgPoint(e);
-    if(pointerDownInfo && ghost){
-      if(pointerDownInfo.corner){
-        const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
-        const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
-        const r = Math.hypot(p.x-cx, p.y-cy);
-        ghost.setAttribute('r', r);
-      } else if(pointerDownInfo.edge){
-        if(pointerDownInfo.axis === 'vertical'){
-          let x = Math.max(0, Math.min(svg.viewBox.baseVal.width, p.x));
-          ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
+    const margin = HOTZONE;
+    const nearLeft = p.x <= margin;
+    const nearRight = p.x >= viewW - margin;
+    const nearTop = p.y <= margin;
+    const nearBottom = p.y >= viewH - margin;
+    const nearCorner = (nearLeft || nearRight) && (nearTop || nearBottom);
+    const nearEdge = nearLeft || nearRight || nearTop || nearBottom;
+    if(currentMode !== 'draw' || !nearEdge) {
+      // only start drawing when in draw mode and near an edge/corner
+      pointerDown = null;
+      return;
+    }
+    pointerDown = {start: p, corner: nearCorner, edge: nearEdge, nearLeft, nearRight, nearTop, nearBottom, axis: null};
+    if(nearCorner){
+      const cx = nearLeft ? 0 : viewW, cy = nearTop ? 0 : viewH;
+      const r = Math.hypot(p.x - cx, p.y - cy);
+      ensureGhost('circle').setAttribute('cx', cx);
+      ghost.setAttribute('cy', cy);
+      ghost.setAttribute('r', r);
+      ghost.setAttribute('stroke-width', strokeWidth);
+    } else if(nearEdge){
+      if(nearLeft || nearRight){
+        pointerDown.axis = 'vertical';
+        ensureGhost('line');
+        ghost.setAttribute('x1', p.x); ghost.setAttribute('x2', p.x);
+        ghost.setAttribute('y1', 0); ghost.setAttribute('y2', viewH);
+        ghost.setAttribute('stroke-width', strokeWidth);
+      } else {
+        pointerDown.axis = 'horizontal';
+        ensureGhost('line');
+        ghost.setAttribute('y1', p.y); ghost.setAttribute('y2', p.y);
+        ghost.setAttribute('x1', 0); ghost.setAttribute('x2', viewW);
+        ghost.setAttribute('stroke-width', strokeWidth);
+      }
+    } else {
+      pointerDown = null;
+    }
+    svg.setPointerCapture(e.pointerId);
+    lastPointer = p;
+  }
+
+  function onPointerMove(e){
+    lastPointer = svgPoint(e);
+    // schedule an rAF update (single in-flight)
+    if(!rafPending){
+      rafPending = true;
+      requestAnimationFrame(processPointerMove);
+    }
+  }
+
+  function processPointerMove(){
+    rafPending = false;
+    if(!pointerDown || !ghost) return;
+    const p = lastPointer;
+    if(pointerDown.corner){
+      const cx = pointerDown.nearLeft ? 0 : viewW;
+      const cy = pointerDown.nearTop ? 0 : viewH;
+      const r = Math.hypot(p.x - cx, p.y - cy);
+      ghost.setAttribute('r', Math.max(0, r));
+    } else if(pointerDown.edge){
+      if(pointerDown.axis === 'vertical'){
+        const x = Math.max(0, Math.min(viewW, p.x));
+        ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
+      } else {
+        const y = Math.max(0, Math.min(viewH, p.y));
+        ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
+      }
+    }
+  }
+
+  function onPointerUp(e){
+    if(pointerDown && ghost){
+      if(pointerDown.corner){
+        const cx = pointerDown.nearLeft ? 0 : viewW;
+        const cy = pointerDown.nearTop ? 0 : viewH;
+        const r = parseFloat(ghost.getAttribute('r') || 0);
+        if(r > 1) makeCircle(cx, cy, r);
+      } else if(pointerDown.edge){
+        if(pointerDown.axis === 'vertical'){
+          const x = parseFloat(ghost.getAttribute('x1'));
+          makeFullVerticalLine(x);
         } else {
-          let y = Math.max(0, Math.min(svg.viewBox.baseVal.height, p.y));
-          ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
+          const y = parseFloat(ghost.getAttribute('y1'));
+          makeFullHorizontalLine(y);
         }
       }
     }
+    pointerDown = null;
+    removeGhost();
+    try{ svg.releasePointerCapture(e.pointerId);}catch(e){}
   }
 
-  svg.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    svg.setPointerCapture(e.pointerId);
-    if(currentMode !== 'draw'){ return; }
-    const p = svgPoint(e);
-    const vb = svg.viewBox.baseVal;
-    const margin = HOTZONE;
-    const nearLeft = p.x <= margin;
-    const nearRight = p.x >= vb.width - margin;
-    const nearTop = p.y <= margin;
-    const nearBottom = p.y >= vb.height - margin;
-    const nearCorner = (nearLeft||nearRight) && (nearTop||nearBottom);
-    const nearEdge = nearLeft || nearRight || nearTop || nearBottom;
-    pointerDownInfo = {start:p, corner:nearCorner, edge:nearEdge, nearLeft, nearRight, nearTop, nearBottom};
-    if(nearCorner){
-      const cx = nearLeft ? 0 : vb.width;
-      const cy = nearTop ? 0 : vb.height;
-      createGhostCircle(cx, cy, Math.hypot(p.x-cx, p.y-cy));
-    } else if(nearEdge){
-      if(nearLeft || nearRight){
-        createGhostFullLineVertical(p.x);
-        pointerDownInfo.axis = 'vertical';
-      } else {
-        createGhostFullLineHorizontal(p.y);
-        pointerDownInfo.axis = 'horizontal';
-      }
-    } else {
-      pointerDownInfo = null;
-    }
-  }, {passive:false});
+  // Attach pointer listeners to svg
+  svg.addEventListener('pointerdown', onPointerDown, {passive:true});
+  svg.addEventListener('pointermove', onPointerMove, {passive:true});
+  svg.addEventListener('pointerup', onPointerUp, {passive:true});
+  svg.addEventListener('pointercancel', onPointerUp, {passive:true});
 
-  svg.addEventListener('pointermove', throttledMove, {passive:false});
-
-  svg.addEventListener('pointerup', (e) => {
-    e.preventDefault();
-    svg.releasePointerCapture(e.pointerId);
-    if(!pointerDownInfo || !ghost){ pointerDownInfo=null; removeGhost(); return; }
-    if(pointerDownInfo.corner){
-      const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
-      const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
-      const r = parseFloat(ghost.getAttribute('r'));
-      makeCircle(cx,cy,r);
-    } else if(pointerDownInfo.edge){
-      if(pointerDownInfo.axis === 'vertical'){
-        const x = parseFloat(ghost.getAttribute('x1'));
-        makeFullVerticalLine(x);
-      } else {
-        const y = parseFloat(ghost.getAttribute('y1'));
-        makeFullHorizontalLine(y);
-      }
-    }
-    pointerDownInfo=null;
-    removeGhost();
-  }, {passive:false});
-
+  // click delete when in trim mode (works with shapes)
   svg.addEventListener('click', (e) => {
-    if(!trimActive) return;
-    const target = e.target;
-    if(!target || !target.classList?.contains('shape')) return;
-    const shapeObj = shapes.find(s => s.el === target);
+    if(currentMode !== 'trim') return;
+    const t = e.target;
+    if(!t || !t.classList?.contains('shape')) return;
+    const shapeObj = shapes.find(s => s.el === t);
     if(shapeObj){
-      target.remove();
+      t.remove();
       shapes = shapes.filter(s => s !== shapeObj);
       history.push({op:'del', shape: shapeObj});
     }
   });
 
-  clearBtn.addEventListener('click', ()=>{ 
-    shapes.forEach(s=>s.el.remove()); 
-    shapes=[]; 
-    history.push({op:'clear'}); 
-  });
+  // basic undo/clear
+  function clearAll(){
+    if(shapes.length === 0) return;
+    // push clear snapshot to history so we can undo clear
+    const snapshot = shapes.slice();
+    history.push({op:'clear', shapes: snapshot});
+    shapes.forEach(s => s.el.remove());
+    shapes = [];
+  }
+  clearBtn.addEventListener('click', clearAll);
 
-  undoBtn.addEventListener('click', ()=>{ 
-    const h = history.pop(); 
-    if(!h) return; 
-    if(h.op==='add'){ 
-      h.shape.el.remove(); 
-      shapes = shapes.filter(s=>s!==h.shape);
-    } else if(h.op==='del'){ 
-      svg.appendChild(h.shape.el); 
-      shapes.push(h.shape); 
-    } 
-  });
+  function undo(){
+    const h = history.pop();
+    if(!h) return;
+    if(h.op === 'add'){
+      h.shape.el.remove();
+      shapes = shapes.filter(s => s !== h.shape);
+    } else if(h.op === 'del'){
+      svg.appendChild(h.shape.el);
+      shapes.push(h.shape);
+    } else if(h.op === 'clear'){
+      // restore snapshot
+      h.shapes.forEach(s => { svg.appendChild(s.el); shapes.push(s); });
+    }
+  }
+  undoBtn.addEventListener('click', undo);
 
-  // Intersection helpers (unchanged)
+  // Intersection math helpers (kept but optimized with bbox early-reject)
+  function bboxOverlap(aMinX, aMinY, aMaxX, aMaxY, bMinX, bMinY, bMaxX, bMaxY){
+    return !(aMaxX < bMinX || aMinX > bMaxX || aMaxY < bMinY || aMinY > bMaxY);
+  }
+
   function lineLineInter(l1, l2){
+    // quick bbox reject
+    const aMinX = Math.min(l1.x1,l1.x2), aMaxX = Math.max(l1.x1,l1.x2);
+    const aMinY = Math.min(l1.y1,l1.y2), aMaxY = Math.max(l1.y1,l1.y2);
+    const bMinX = Math.min(l2.x1,l2.x2), bMaxX = Math.max(l2.x1,l2.x2);
+    const bMinY = Math.min(l2.y1,l2.y2), bMaxY = Math.max(l2.y1,l2.y2);
+    if(!bboxOverlap(aMinX,aMinY,aMaxX,aMaxY,bMinX,bMinY,bMaxX,bMaxY)) return null;
+
     const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
     const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
     const denom = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
-    if(Math.abs(denom) < 1e-6) return null;
+    if(Math.abs(denom) < EPS) return null;
     const xi = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4))/denom;
     const yi = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4))/denom;
     function between(a,b,c){ return Math.min(a,b)-1e-6 <= c && c <= Math.max(a,b)+1e-6; }
     if(between(x1,x2,xi) && between(y1,y2,yi) && between(x3,x4,xi) && between(y3,y4,yi)) return {x:xi,y:yi};
     return null;
   }
+
   function lineCircleInter(line, circle){
+    // bbox quick reject
+    const minX = Math.min(line.x1,line.x2) - circle.r, maxX = Math.max(line.x1,line.x2) + circle.r;
+    const minY = Math.min(line.y1,line.y2) - circle.r, maxY = Math.max(line.y1,line.y2) + circle.r;
+    if(circle.cx < minX || circle.cx > maxX || circle.cy < minY || circle.cy > maxY) {
+      // don't early return too eagerly, but helps common cases
+    }
     const x1=line.x1, y1=line.y1, x2=line.x2, y2=line.y2;
     const cx=circle.cx, cy=circle.cy, r=circle.r;
     const dx = x2-x1, dy=y2-y1;
@@ -620,7 +511,7 @@
     const b = 2*(fx*dx+fy*dy);
     const c = fx*fx+fy*fy - r*r;
     let disc = b*b - 4*a*c;
-    if(disc < -1e-6) return [];
+    if(disc < -EPS) return [];
     disc = Math.max(0, disc);
     const t1 = (-b + Math.sqrt(disc)) / (2*a);
     const t2 = (-b - Math.sqrt(disc)) / (2*a);
@@ -632,14 +523,15 @@
     });
     return points;
   }
+
   function circleCircleInter(c1, c2){
     const x0=c1.cx, y0=c1.cy, r0=c1.r;
     const x1=c2.cx, y1=c2.cy, r1=c2.r;
     const dx = x1-x0, dy=y1-y0;
     const d = Math.hypot(dx,dy);
-    if(d > r0 + r1 + 1e-6) return [];
-    if(d < Math.abs(r0-r1) - 1e-6) return [];
-    if(d < 1e-9 && Math.abs(r0-r1) < 1e-9) return [];
+    if(d > r0 + r1 + EPS) return [];
+    if(d < Math.abs(r0-r1) - EPS) return [];
+    if(d < EPS && Math.abs(r0-r1) < EPS) return [];
     const a = (r0*r0 - r1*r1 + d*d) / (2*d);
     const h = Math.sqrt(Math.max(0, r0*r0 - a*a));
     const xm = x0 + a*dx/d;
@@ -648,126 +540,196 @@
     const ry = dx * (h/d);
     const p1 = {x: xm + rx, y: ym + ry};
     const p2 = {x: xm - rx, y: ym - ry};
-    if(Math.hypot(p1.x-p2.x,p1.y-p2.y) < 1e-6) return [p1];
+    if(Math.hypot(p1.x-p2.x,p1.y-p2.y) < EPS) return [p1];
     return [p1,p2];
   }
 
+  // show a temporary intersection dot (fade and remove)
   function markIntersection(pt){
-    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    const dot = ns('circle');
     dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3);
-    dot.setAttribute('class','intersection-dot');
+    dot.classList.add('intersection-dot');
     svg.appendChild(dot);
-    setTimeout(()=>dot.remove(), 2000);
+    // trigger show class in next frame for CSS transition
+    requestAnimationFrame(()=>dot.classList.add('show'));
+    setTimeout(()=>{ dot.classList.remove('show'); setTimeout(()=>dot.remove(), 300); }, 900);
   }
 
-  function splitAtIntersectionsInternal(){
-    const lines = shapes.filter(s=>s.type==='line').map(s=>s);
-    const circles = shapes.filter(s=>s.type==='circle').map(s=>s);
-    const intersections = [];
-
+  // Quick mark intersections (non-destructive) used when switching mode -> trim
+  function quickMarkIntersections(){
+    // small cheap scan for intersections and mark them
+    const lines = shapes.filter(s=>s.type==='line');
+    const circles = shapes.filter(s=>s.type==='circle');
+    // line-line
     for(let i=0;i<lines.length;i++){
       for(let j=i+1;j<lines.length;j++){
         const p = lineLineInter(lines[i], lines[j]);
-        if(p){ intersections.push({p, with:[lines[i],lines[j]]}); markIntersection(p); }
+        if(p) markIntersection(p);
+      }
+    }
+    // line-circle
+    for(let i=0;i<lines.length;i++){
+      for(let j=0;j<circles.length;j++){
+        const pts = lineCircleInter(lines[i], circles[j]);
+        pts.forEach(pt => markIntersection(pt));
+      }
+    }
+    // circle-circle
+    for(let i=0;i<circles.length;i++){
+      for(let j=i+1;j<circles.length;j++){
+        const pts = circleCircleInter(circles[i], circles[j]);
+        pts.forEach(pt => markIntersection(pt));
+      }
+    }
+  }
+
+  // Split routine optimized (batch DOM updates)
+  function splitAtIntersectionsInternal(){
+    if(shapes.length === 0) return;
+    // extract current primitives
+    const lines = shapes.filter(s=>s.type==='line').map(s => ({...s}));
+    const circles = shapes.filter(s=>s.type==='circle').map(s => ({...s}));
+    const intersections = [];
+
+    // gather intersections
+    for(let i=0;i<lines.length;i++){
+      for(let j=i+1;j<lines.length;j++){
+        const p = lineLineInter(lines[i], lines[j]);
+        if(p){ intersections.push({p, with:[lines[i], lines[j]]}); }
       }
     }
     for(let i=0;i<lines.length;i++){
       for(let j=0;j<circles.length;j++){
         const pts = lineCircleInter(lines[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[lines[i],circles[j]]}); markIntersection(p); });
+        pts.forEach(p => { intersections.push({p, with:[lines[i], circles[j]]}); });
       }
     }
     for(let i=0;i<circles.length;i++){
       for(let j=i+1;j<circles.length;j++){
         const pts = circleCircleInter(circles[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[circles[i],circles[j]]}); markIntersection(p); });
+        pts.forEach(p => { intersections.push({p, with:[circles[i], circles[j]]}); });
       }
     }
 
+    // We'll construct new shapes in fragment and swap
+    const frag = document.createDocumentFragment();
     const newShapes = [];
+
+    // process lines -> segments between unique t parameters
     lines.forEach(l => {
       const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
-      ptsOnLine.push({x:l.x1,y:l.y1}); ptsOnLine.push({x:l.x2,y:l.y2});
+      ptsOnLine.push({x:l.x1, y:l.y1}); ptsOnLine.push({x:l.x2, y:l.y2});
       const dx = l.x2 - l.x1, dy = l.y2 - l.y1;
       const params = ptsOnLine.map(p => {
-        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - l.x1) / (dx || 1e-6)) : ((p.y - l.y1)/(dy || 1e-6));
+        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - l.x1) / (dx || 1e-6)) : ((p.y - l.y1) / (dy || 1e-6));
         return Math.max(0, Math.min(1, t));
       });
-      const uniq = Array.from(new Set(params.map(t=>t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
+      const uniq = Array.from(new Set(params.map(t => t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
       for(let i=0;i<uniq.length-1;i++){
-        const ta=uniq[i], tb=uniq[i+1];
+        const ta = uniq[i], tb = uniq[i+1];
         const ax = l.x1 + dx * ta, ay = l.y1 + dy * ta;
         const bx = l.x1 + dx * tb, by = l.y1 + dy * tb;
-        if(Math.hypot(bx-ax,by-ay) > 2){
-          const seg = document.createElementNS('http://www.w3.org/2000/svg','line');
+        if(Math.hypot(bx-ax, by-ay) > 2){
+          const seg = ns('line');
           seg.classList.add('shape');
-          seg.setAttribute('x1',ax); seg.setAttribute('y1',ay); seg.setAttribute('x2',bx); seg.setAttribute('y2',by);
+          seg.setAttribute('x1', ax); seg.setAttribute('y1', ay); seg.setAttribute('x2', bx); seg.setAttribute('y2', by);
           seg.setAttribute('stroke-width', l.w);
-          svg.appendChild(seg);
+          frag.appendChild(seg);
           newShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by, w:l.w});
         }
       }
-      l.el.remove();
+      // remove original element
+      if(l.el && l.el.parentNode) l.el.remove();
     });
 
+    // process circles -> approximate with polylines between intersections
     circles.forEach(c => {
-      const N = 120;
+      // compute sampled circle points
+      const N = Math.max(32, Math.min(CIRCLE_SEGMENTS, Math.round(CIRCLE_SEGMENTS * (c.r / Math.max(1, Math.min(viewW, viewH))))));
       const pts = [];
       for(let i=0;i<N;i++){
-        const a = (i/N)*Math.PI*2;
+        const a = (i/N) * Math.PI * 2;
         pts.push({x: c.cx + c.r*Math.cos(a), y: c.cy + c.r*Math.sin(a), a});
       }
       const intsOnC = intersections.filter(it => it.with.includes(c)).map(it => it.p);
+      // find indices near intersection points
       const idxSet = new Set();
       pts.forEach((pt, idx) => {
         intsOnC.forEach(ip => {
-          if(Math.hypot(pt.x-ip.x, pt.y-ip.y) < 6){ idxSet.add(idx); }
+          if(Math.hypot(pt.x - ip.x, pt.y - ip.y) < Math.max(4, c.r * 0.02)) idxSet.add(idx);
         });
       });
       const idxs = Array.from(idxSet).sort((a,b)=>a-b);
       if(idxs.length === 0){
-        const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        // keep full circle
+        const circ = ns('circle');
         circ.classList.add('shape');
         circ.setAttribute('cx', c.cx); circ.setAttribute('cy', c.cy); circ.setAttribute('r', c.r);
         circ.setAttribute('stroke-width', c.w);
-        svg.appendChild(circ);
+        frag.appendChild(circ);
         newShapes.push({type:'circle', el:circ, cx:c.cx,cy:c.cy,r:c.r, w:c.w});
-        c.el.remove();
+        if(c.el && c.el.parentNode) c.el.remove();
         return;
       }
-      const sorted = idxs;
-      for(let s=0;s<sorted.length;s++){
-        const i1 = sorted[s], i2 = sorted[(s+1)%sorted.length];
-        let segPts = [];
+      // build segments between intersection indices
+      for(let s=0;s<idxs.length;s++){
+        const i1 = idxs[s], i2 = idxs[(s+1)%idxs.length];
         let i = i1;
+        const segPts = [];
         while(true){
           segPts.push(pts[i]);
           if(i === i2) break;
-          i = (i+1)%pts.length;
+          i = (i+1) % pts.length;
         }
         if(segPts.length > 1){
-          const path = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-          path.classList.add('shape');
-          path.setAttribute('points', segPts.map(p=>`${p.x},${p.y}`).join(' '));
-          path.setAttribute('fill','none');
-          path.setAttribute('stroke-width', c.w);
-          svg.appendChild(path);
-          newShapes.push({type:'polyline', el:path, pts:segPts, w:c.w});
+          const poly = ns('polyline');
+          poly.classList.add('shape');
+          poly.setAttribute('points', segPts.map(p=>`${p.x},${p.y}`).join(' '));
+          poly.setAttribute('fill','none');
+          poly.setAttribute('stroke-width', c.w);
+          frag.appendChild(poly);
+          newShapes.push({type:'polyline', el:poly, pts:segPts, w:c.w});
         }
       }
-      c.el.remove();
+      if(c.el && c.el.parentNode) c.el.remove();
     });
 
-    shapes = shapes.filter(s => !(s.type==='line' || s.type==='circle'));
+    // append frag once
+    svg.appendChild(frag);
+
+    // replace shapes array: remove old lines/circles and append new shapes
+    shapes = shapes.filter(s => !(s.type === 'line' || s.type === 'circle'));
     newShapes.forEach(ns => shapes.push(ns));
+
+    // optional: mark intersections visually
+    intersections.forEach(it => markIntersection(it.p));
+    // push a history op for split (not undoing geometry inside this function currently)
+    history.push({op:'split', created: newShapes});
   }
 
-  splitBtn.addEventListener('click', () => {
-    splitAtIntersectionsInternal();
+  splitBtn.addEventListener('click', splitAtIntersectionsInternal);
+
+  // keyboard shortcuts
+  window.addEventListener('keydown', (e) => {
+    if(e.key === 't' || e.key === 'T'){ setMode('trim'); }
+    if(e.key === 'd' || e.key === 'D'){ setMode('draw'); }
+    if(e.key === 'z' || e.key === 'Z'){ undo(); }
+    if(e.key === 'c' || e.key === 'C'){ clearAll(); }
+    if(e.key === 's' || e.key === 'S'){ splitAtIntersectionsInternal(); }
   });
 
-  fab.textContent = '✂';
+  // clicking outside toolbar collapses if on mobile (nice touch)
+  document.addEventListener('click', (ev) => {
+    if(window.innerWidth <= 860 && !toolbar.contains(ev.target) && !ev.target.closest('.fab')){
+      collapsed = true; applyToolbar();
+    }
+  });
+
+  // initial status
   updateStatus();
+
+  // Expose some functions for debugging in console (optional)
+  window._edgeDraw = {shapes, splitAtIntersectionsInternal, clearAll, undo, setMode, setWidth};
 })();
 </script>
 </body>
