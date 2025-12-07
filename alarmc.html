@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Alarm App — Responsive (notifications & sound)</title>
+<title>Alarm App — Day-of-month + Responsive (notifications & sound)</title>
 <style>
   :root{
     --accent:#c92b2b;
@@ -44,7 +44,7 @@
   .hint{flex:1;color:#444;font-size:13px;padding-left:12px;min-width:160px}
 
   /* alarm list container */
-  .alarms{display:flex;flex-direction:column;gap:14px;max-width:1100px;margin:0 auto;width:100%}
+  .alarms{display:flex;flex-direction:column;gap:14px;max-width:1200px;margin:0 auto;width:100%}
 
   /* alarm row: responsive grid that collapses */
   .alarm{
@@ -57,13 +57,14 @@
     background:transparent;
   }
 
-  /* default (large screens): 7 columns */
+  /* default (large screens): columns include dayOfMonth column before hour */
   .alarm.large {
-    grid-template-columns: 140px 84px 84px 1fr 140px 72px 72px;
+    grid-template-columns: 140px 84px 84px 84px 1fr 140px 72px 72px;
+    /* columns: type, dayOfMonth, hour, minute, label, timeleft, delete, dup */
   }
   .alarm .box{height:var(--box-h);border:2px solid var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;padding:6px;background:transparent}
   .alarm input[type="text"]{height:40px;padding:8px;border:none;outline:none;width:100%;font-size:14px}
-  .alarm select{width:100%;height:40px;border:none;outline:none;padding:6px;font-size:14px}
+  .alarm select, .alarm input[type="datetime-local"]{width:100%;height:40px;border:none;outline:none;padding:6px;font-size:14px;background:transparent}
 
   /* extra row content (days/datetime) spans full width */
   .extra{grid-column:1/-1;display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px}
@@ -74,14 +75,11 @@
 
   .del-btn{border:2px solid var(--accent);background:transparent;padding:10px;border-radius:8px;cursor:pointer;min-width:64px}
 
-  /* Small screens: stack logically */
-  @media (max-width:880px){
-    .alarm{grid-template-columns: 1fr 72px 72px; padding:10px}
-    .alarm .box{height:48px}
+  /* Small screens: rearrange columns */
+  @media (max-width:980px){
+    .alarm.large { grid-template-columns: 1fr 72px 72px 72px; } /* label, hour, min, actions */
     .alarm .label-box{grid-column:1/-1}
-    .alarm .timeleft-box{text-align:center}
     .extra{justify-content:flex-start}
-    .controls{align-items:flex-start}
     .hint{display:none}
   }
   /* Very small screens: single column per alarm */
@@ -108,7 +106,7 @@
       <button id="saveAllBtn">Save All</button>
       <button id="enableAlertsBtn">Enable Alerts</button>
     </div>
-    <div class="hint">Responsive: works on phones, tablets, and desktop. Alerts = browser notifications + beep.</div>
+    <div class="hint">Added: Day-of-month dropdown (before Hour). Monthly repeat supported. Alerts = notifications + beep.</div>
   </div>
 
   <div class="alarms" id="alarmsContainer"></div>
@@ -117,19 +115,18 @@
 <footer>code: prasann</footer>
 
 <script>
-/* Responsive Alarm App with Notifications & Sound
-   - Client-only, stores alarms in localStorage
-   - Responsive layout: rows collapse on small screens
-   - Notifications require user gesture (Enable Alerts)
+/* Alarm App with Day-of-month dropdown, responsive CSS fixes, notifications & sound
+   - storage: localStorage
+   - repeatType: 'weekly' | 'onetime' | 'monthly'
+   - monthly uses dayOfMonth (1..31)
 */
 
-/* storage & model */
-const STORAGE_KEY = 'alarms_v1_responsive';
+const STORAGE_KEY = 'alarms_v1_dom';
 function uid(){ return 'a'+Math.random().toString(36).slice(2,9) }
 function loadAlarms(){ try{ const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : [] }catch(e){ return [] } }
 function saveAlarms(list){ localStorage.setItem(STORAGE_KEY, JSON.stringify(list)) }
 
-/* helper: next occurrence for weekly or onetime */
+/* helpers to compute next occurrence */
 function nearestWeeklyOccurrenceFromNow(weekdays, hour, minute){
   const now = new Date()
   for(let add=0; add<14; add++){
@@ -142,19 +139,39 @@ function nearestWeeklyOccurrenceFromNow(weekdays, hour, minute){
   }
   return null
 }
+
+function nearestMonthlyOccurrenceFromNow(dayOfMonth, hour, minute){
+  if(!dayOfMonth) return null
+  const now = new Date()
+  // search up to 12 months
+  for(let add=0; add<12; add++){
+    const year = now.getFullYear() + Math.floor((now.getMonth()+add)/12)
+    const month = (now.getMonth()+add) % 12
+    // find the target day in that month (if dayOfMonth > daysInMonth, skip)
+    const daysInMonth = new Date(year, month+1, 0).getDate()
+    if(dayOfMonth > daysInMonth) continue
+    const cand = new Date(year, month, dayOfMonth, hour, minute, 0, 0)
+    if(cand > now) return cand
+  }
+  return null
+}
+
 function nearestOccurrence(alarm){
   const now = new Date()
   if(alarm.repeatType === 'onetime'){
     if(!alarm.dateISO) return null
     const d = new Date(alarm.dateISO)
     return d > now ? d : null
+  } else if(alarm.repeatType === 'monthly'){
+    return nearestMonthlyOccurrenceFromNow(alarm.dayOfMonth, alarm.hour, alarm.minute)
   } else {
     return nearestWeeklyOccurrenceFromNow(alarm.weekdays || [], alarm.hour, alarm.minute)
   }
 }
 
-/* UI rendering - responsive-friendly structure */
+/* UI rendering */
 const container = document.getElementById('alarmsContainer')
+
 function render(){
   container.innerHTML = ''
   const list = loadAlarms()
@@ -163,88 +180,101 @@ function render(){
     row.className = 'alarm large'
     row.dataset.id = alarm.id
 
-    // Type/select box (first column)
+    // 1) repeat type box
     const typeBox = document.createElement('div'); typeBox.className='box'
     typeBox.innerHTML = `<div style="display:flex;flex-direction:column;gap:6px;align-items:center;width:100%">
       <label style="font-size:12px;color:var(--accent-dark)">Type</label>
       <select data-role="repeatType">
         <option value="weekly">Weekly</option>
         <option value="onetime">One-time</option>
+        <option value="monthly">Monthly</option>
       </select>
     </div>`
     row.appendChild(typeBox)
 
-    // hour
+    // 2) Day-of-month dropdown (appears for monthly; placed before hour)
+    const domBox = document.createElement('div'); domBox.className='box'
+    const domSelect = document.createElement('select'); domSelect.dataset.role='dayOfMonth'
+    const optNone = document.createElement('option'); optNone.value=''; optNone.innerText='—'
+    domSelect.appendChild(optNone)
+    for(let d=1; d<=31; d++){ const o=document.createElement('option'); o.value=d; o.innerText=d; domSelect.appendChild(o) }
+    domSelect.value = alarm.dayOfMonth || ''
+    domBox.appendChild(domSelect); row.appendChild(domBox)
+
+    // 3) hour
     const hrBox = document.createElement('div'); hrBox.className='box'
     const hrSel = document.createElement('select'); hrSel.dataset.role='hour'
-    for(let h=0; h<24; h++){ const o=document.createElement('option'); o.value=h; o.innerText = String(h).padStart(2,'0'); hrSel.appendChild(o) }
+    for(let h=0; h<24; h++){ const o=document.createElement('option'); o.value=h; o.innerText=String(h).padStart(2,'0'); hrSel.appendChild(o) }
     hrSel.value = alarm.hour; hrBox.appendChild(hrSel); row.appendChild(hrBox)
 
-    // minute
+    // 4) minute
     const minBox = document.createElement('div'); minBox.className='box'
     const minSel = document.createElement('select'); minSel.dataset.role='minute'
     for(let m=0; m<60; m++){ const o=document.createElement('option'); o.value=m; o.innerText=String(m).padStart(2,'0'); minSel.appendChild(o) }
     minSel.value = alarm.minute; minBox.appendChild(minSel); row.appendChild(minBox)
 
-    // label (this should be wide)
+    // 5) label (wide)
     const labelBox = document.createElement('div'); labelBox.className='box label-box'
     const txt = document.createElement('input'); txt.type='text'; txt.value = alarm.label || ''; txt.dataset.role='label'; txt.style.width='100%'
     labelBox.appendChild(txt); row.appendChild(labelBox)
 
-    // time-left
+    // 6) time-left
     const tlBox = document.createElement('div'); tlBox.className='box timeleft-box'
     const span = document.createElement('div'); span.dataset.role='timeleft'; span.style.textAlign='center'
     tlBox.appendChild(span); row.appendChild(tlBox)
 
-    // delete
+    // 7) delete
     const dbox = document.createElement('div'); dbox.className='box'
     const del = document.createElement('button'); del.className='del-btn'; del.innerText='Delete'; del.onclick = ()=> deleteAlarm(alarm.id)
     dbox.appendChild(del); row.appendChild(dbox)
 
-    // duplicate
+    // 8) duplicate
     const dupbox = document.createElement('div'); dupbox.className='box'
     const dup = document.createElement('button'); dup.className='del-btn'; dup.innerText='Dup'; dup.onclick = ()=> duplicateAlarm(alarm.id)
     dupbox.appendChild(dup); row.appendChild(dupbox)
 
-    // extra controls row (days + datetime) spans full width
+    // extra row: either weekly toggles (for weekly), or datetime input (for onetime). For monthly we show a small helper note.
     const extra = document.createElement('div'); extra.className='extra'
-    // weekdays toggles
+    // weekly toggles
     const days = document.createElement('div'); days.className='days'
     const dayNames = ['S','M','T','W','T','F','S']
     dayNames.forEach((dn, idx)=>{
       const d = document.createElement('div'); d.className='day-toggle'; d.innerText = dn
       if(alarm.weekdays && alarm.weekdays.includes(idx)) d.classList.add('on')
       d.onclick = ()=>{
-        const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id)
-        if(!a.weekdays) a.weekdays = []
-        if(a.weekdays.includes(idx)) a.weekdays = a.weekdays.filter(x=>x!==idx)
-        else a.weekdays.push(idx)
-        saveAlarms(list); render()
+        const cur = loadAlarms(); const a = cur.find(x=>x.id===alarm.id); if(!a.weekdays) a.weekdays=[]
+        if(a.weekdays.includes(idx)) a.weekdays = a.weekdays.filter(x=>x!==idx); else a.weekdays.push(idx)
+        saveAlarms(cur); render()
       }
       days.appendChild(d)
     })
     extra.appendChild(days)
 
-    // date input for one-time alarms
+    // date input
     const dateWrap = document.createElement('div'); dateWrap.style.display='flex'; dateWrap.style.alignItems='center'; dateWrap.style.gap='8px'
     const dateIn = document.createElement('input'); dateIn.type='datetime-local'; dateIn.dataset.role='dateISO'
     dateIn.value = alarm.dateISO ? alarm.dateISO.slice(0,16) : ''
-    dateIn.onchange = (e)=>{
-      const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id); a.dateISO = new Date(e.target.value).toISOString(); saveAlarms(list); render()
-    }
+    dateIn.onchange = (e)=>{ const cur = loadAlarms(); const a = cur.find(x=>x.id===alarm.id); a.dateISO = new Date(e.target.value).toISOString(); saveAlarms(cur); render() }
     dateWrap.appendChild(dateIn)
     extra.appendChild(dateWrap)
 
+    // monthly helper note
+    const monthlyNote = document.createElement('div'); monthlyNote.style.alignSelf='center'; monthlyNote.style.color='var(--accent-dark)'; monthlyNote.style.fontSize='13px'
+    monthlyNote.innerText = alarm.repeatType === 'monthly' ? `Monthly on ${alarm.dayOfMonth || '—'} at ${String(alarm.hour).padStart(2,'0')}:${String(alarm.minute).padStart(2,'0')}` : ''
+    extra.appendChild(monthlyNote)
+
     row.appendChild(extra)
 
-    // handlers for selects and text
+    // wire handlers
     const selRepeat = row.querySelector('[data-role="repeatType"]')
     selRepeat.value = alarm.repeatType || 'weekly'
-    selRepeat.onchange = (e)=>{ const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id); a.repeatType = e.target.value; saveAlarms(list); render() }
+    selRepeat.onchange = (e)=>{ const cur = loadAlarms(); const a = cur.find(x=>x.id===alarm.id); a.repeatType = e.target.value; saveAlarms(cur); render() }
 
-    hrSel.onchange = (e)=>{ const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id); a.hour = Number(e.target.value); saveAlarms(list); render() }
-    minSel.onchange = (e)=>{ const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id); a.minute = Number(e.target.value); saveAlarms(list); render() }
-    txt.onchange = (e)=>{ const list = loadAlarms(); const a = list.find(x=>x.id===alarm.id); a.label = e.target.value; saveAlarms(list) }
+    domSelect.onchange = (e)=>{ const cur = loadAlarms(); const a = cur.find(x=>x.id===alarm.id); a.dayOfMonth = e.target.value ? Number(e.target.value) : null; saveAlarms(cur); render() }
+
+    hrSel.onchange = (e)=>{ const cur = loadAlarms(); const a = cur.find(x=>x.id===alarm.id); a.hour = Number(e.target.value); saveAlarms(cur); render() }
+    minSel.onchange = (e)=>{ const cur = loadAlarms(); const a = cur.find(x=>x.id===alarm.id); a.minute = Number(e.target.value); saveAlarms(cur); render() }
+    txt.onchange = (e)=>{ const cur = loadAlarms(); const a = cur.find(x=>x.id===alarm.id); a.label = e.target.value; saveAlarms(cur) }
 
     container.appendChild(row)
   })
@@ -252,7 +282,7 @@ function render(){
   updateCountdowns()
 }
 
-/* update countdown displays */
+/* countdown formatting */
 function timeLeftText(target){
   if(!target) return '—'
   const diff = Math.max(0, Math.floor((target - new Date())/1000))
@@ -286,6 +316,7 @@ function addNewAlarm(){
     id: uid(),
     repeatType: 'weekly',
     weekdays: [d.getDay()],
+    dayOfMonth: null,
     hour: d.getHours(),
     minute: (d.getMinutes()+1)%60,
     label: 'Alarm',
@@ -297,7 +328,7 @@ function addNewAlarm(){
 function deleteAlarm(id){ let list = loadAlarms(); list = list.filter(a=>a.id!==id); saveAlarms(list); render() }
 function duplicateAlarm(id){ const list = loadAlarms(); const src = list.find(a=>a.id===id); if(!src) return; const copy = JSON.parse(JSON.stringify(src)); copy.id = uid(); copy.createdAt = (new Date()).toISOString(); copy.lastTriggered = null; list.unshift(copy); saveAlarms(list); render() }
 
-/* notifications & beep */
+/* notifications & sound (same robust logic) */
 let audioCtx = null
 function playBeep(durationSec = 0.8){
   try{
@@ -324,11 +355,11 @@ function showNotification(alarm, body){
   } else { alert(`${alarm.label || 'Alarm'}\n${body}`) }
 }
 
-/* check for due alarms and trigger once per occurrence */
+/* trigger logic (monthly supported) */
 function checkAndTriggerAlarms(){
   const list = loadAlarms()
   const now = new Date()
-  let modified = false
+  let changed = false
   list.forEach(alarm=>{
     const target = nearestOccurrence(alarm)
     if(!target) return
@@ -337,19 +368,20 @@ function checkAndTriggerAlarms(){
     if(diffSec <= 0){
       if(alarm.lastTriggered !== targetISO){
         const pretty = alarm.repeatType==='onetime' ? `One-time at ${new Date(alarm.dateISO).toLocaleString()}` : 
-          `Repeats ${alarm.weekdays ? alarm.weekdays.map(i=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]).join(',') : 'days'} at ${String(alarm.hour).padStart(2,'0')}:${String(alarm.minute).padStart(2,'0')}`
+          alarm.repeatType==='monthly' ? `Monthly on ${alarm.dayOfMonth} at ${String(alarm.hour).padStart(2,'0')}:${String(alarm.minute).padStart(2,'0')}` :
+          `Weekly ${alarm.weekdays ? alarm.weekdays.map(i=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][i]).join(',') : 'days'} at ${String(alarm.hour).padStart(2,'0')}:${String(alarm.minute).padStart(2,'0')}`
         showNotification(alarm, pretty)
         playBeep(1.0)
         if(navigator.vibrate) navigator.vibrate([250,100,250])
         alarm.lastTriggered = targetISO
-        modified = true
+        changed = true
       }
     }
   })
-  if(modified) saveAlarms(list)
+  if(changed) saveAlarms(list)
 }
 
-/* enable alerts button (user gesture) */
+/* enable alerts button (user gesture to permit audio) */
 const enableBtn = document.getElementById('enableAlertsBtn')
 enableBtn.addEventListener('click', async ()=>{
   if('Notification' in window){
@@ -365,11 +397,12 @@ enableBtn.addEventListener('click', async ()=>{
 document.getElementById('newAlarmBtn').addEventListener('click', addNewAlarm)
 document.getElementById('saveAllBtn').addEventListener('click', ()=>{ alert('Alarms saved locally') })
 
-if(loadAlarms().length===0){
+if(loadAlarms().length === 0){
   const now = new Date()
   const sample = [
-    { id: uid(), repeatType:'weekly', weekdays:[now.getDay()], hour: now.getHours(), minute:(now.getMinutes()+1)%60, label:'Sample 1', createdAt:(new Date()).toISOString(), lastTriggered:null },
-    { id: uid(), repeatType:'onetime', dateISO: new Date(now.getTime()+65000).toISOString(), hour: now.getHours(), minute:(now.getMinutes()+1)%60, label:'One-time soon', createdAt:(new Date()).toISOString(), lastTriggered:null }
+    { id: uid(), repeatType:'weekly', weekdays:[now.getDay()], dayOfMonth:null, hour: now.getHours(), minute:(now.getMinutes()+1)%60, label:'Sample weekly', createdAt:(new Date()).toISOString(), lastTriggered:null },
+    { id: uid(), repeatType:'monthly', weekdays:[], dayOfMonth: now.getDate(), hour: now.getHours(), minute:(now.getMinutes()+2)%60, label:'Sample monthly', createdAt:(new Date()).toISOString(), lastTriggered:null },
+    { id: uid(), repeatType:'onetime', weekdays:[], dayOfMonth:null, dateISO: new Date(now.getTime()+65000).toISOString(), hour: now.getHours(), minute:(now.getMinutes()+1)%60, label:'One-time soon', createdAt:(new Date()).toISOString(), lastTriggered:null }
   ]
   saveAlarms(sample)
 }
