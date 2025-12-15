@@ -1,988 +1,422 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Edge/Corner Draw — Trim Tool (Fixed trim & mobile menu)</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg:#f6f7fb;
-    --panel:rgba(255,255,255,0.98);
-    --panel-border:rgba(0,0,0,0.06);
-    --accent:#0b6bff;
-    --accent-2:#dfeaff;
-    --text:#11131a;
-    --muted:#6c6f7a;
-    --radius:12px;
-    --shadow:0 6px 20px rgba(0,0,0,0.06);
-    --trans:200ms;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{
-      --bg:#0c0f16;
-      --panel:rgba(18,20,30,0.96);
-      --panel-border:rgba(255,255,255,0.04);
-      --text:#e9eefc;
-      --muted:#9aa0b3;
-      --accent-2:#14243f;
+  <meta charset="UTF-8">
+  <title>GeoSteps – HTML Prototype</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      height: 100vh;
+      background: #111;
+      color: #f5f5f5;
     }
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%;margin:0;font-family:'Inter',system-ui,-apple-system,Arial,sans-serif;background:var(--bg);color:var(--text)}
-  .app{display:flex;height:100dvh;overflow:hidden;transition:padding-left var(--trans) ease}
+    #sidebar {
+      width: 320px;
+      padding: 16px;
+      background: #181818;
+      border-right: 2px solid #333;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-sizing: border-box;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0 0 4px;
+    }
+    h2 {
+      font-size: 16px;
+      margin: 8px 0 4px;
+    }
+    button {
+      padding: 6px 10px;
+      margin-right: 4px;
+      margin-bottom: 4px;
+      background: #2d6bff;
+      border: none;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button.secondary {
+      background: #444;
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    #canvasContainer {
+      flex: 1;
+      position: relative;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      background: #111;
+      border: 1px solid #444;
+      touch-action: none;
+    }
+    #feedback {
+      min-height: 48px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 14px;
+      background: #202020;
+    }
+    #feedback.good { border-left: 4px solid #2ecc71; }
+    #feedback.bad { border-left: 4px solid #e74c3c; }
+    #feedback.neutral { border-left: 4px solid #888; }
 
-  /* Toolbar */
-  .toolbar{
-    width:260px;
-    padding:14px;
-    background:var(--panel);
-    border-right:1px solid var(--panel-border);
-    display:flex;
-    flex-direction:column;
-    gap:12px;
-    z-index:20;
-    transition:width var(--trans), transform var(--trans);
-    box-shadow: var(--shadow);
-    position:relative;
-    min-width:60px;
-  }
-  .toolbar.collapsed{width:64px}
-  .toolbar .title{display:flex;align-items:center;gap:10px}
-  .toolbar h1{font-size:15px;margin:0;color:var(--accent);font-weight:600}
-  .meta{font-size:12px;color:var(--muted);margin-top:2px}
+    #infoPanel {
+      font-size: 13px;
+      background: #151515;
+      padding: 6px 8px;
+      border-radius: 4px;
+      white-space: pre-line;
+    }
 
-  .toggle-btn{
-    position:absolute;right:-12px;top:50%;transform:translateY(-50%);
-    width:28px;height:28px;border-radius:14px;border:none;background:var(--accent);color:#fff;
-    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;box-shadow:0 6px 18px rgba(11,107,255,0.12)
-  }
-
-  .controls{display:flex;flex-direction:column;gap:10px;transition:opacity var(--trans)}
-  .toolbar.collapsed .controls{opacity:0;pointer-events:none}
-
-  .section{display:flex;flex-direction:column;gap:6px}
-  .section-title{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.6px}
-  .btn-group{display:flex;gap:6px;flex-wrap:wrap}
-  button,select{padding:8px 10px;border-radius:9px;border:1px solid var(--panel-border);background:transparent;font:inherit;cursor:pointer;transition:all var(--trans)}
-  button:hover{transform:translateY(-2px)}
-  button.active{background:var(--accent);color:white;box-shadow:0 6px 18px rgba(11,107,255,0.08)}
-  select{background:white;min-width:120px}
-
-  /* compact icon button */
-  .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:36px;padding:0;border-radius:8px;background:transparent}
-
-  /* FAB */
-  .fab{
-    position:fixed;right:22px;bottom:22px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:white;border:none;font-size:20px;
-    box-shadow:0 10px 30px rgba(11,107,255,0.12);cursor:pointer;z-index:100;transition:transform .12s ease;
-  }
-  .fab:active{transform:scale(.96)}
-
-  /* Canvas */
-  .canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:18px;background:linear-gradient(135deg,#eef2fb 0%,#e6eaf7 100%);overflow:hidden}
-  .svg-frame{border-radius:12px;overflow:hidden;box-shadow:var(--shadow);display:inline-block;background:#fff;max-width:100%;max-height:100%}
-  svg{display:block;touch-action:none;user-select:none;-webkit-tap-highlight-color:transparent}
-
-  /* Status */
-  .status{
-    position:fixed;left:18px;bottom:22px;background:var(--panel);border-radius:999px;padding:8px 12px;font-weight:600;font-size:13px;
-    box-shadow:0 6px 18px rgba(0,0,0,0.06);display:flex;gap:10px;align-items:center;border:1px solid var(--panel-border);z-index:30;
-  }
-  .hint-inline{font-size:12px;color:var(--muted);font-weight:500}
-
-  /* shapes */
-  .shape{stroke:#111;fill:none;stroke-linecap:round;stroke-linejoin:round;cursor:pointer;transition:stroke 160ms}
-  .shape:hover{stroke:var(--accent)}
-  .ghost{stroke:var(--accent);stroke-dasharray:6 4;opacity:.6;pointer-events:none}
-  .intersection-dot{fill:var(--accent);stroke:white;stroke-width:1.5;pointer-events:none;opacity:0;transition:opacity .2s}
-  .intersection-dot.show{opacity:1}
-
-  /* responsive */
-  @media (max-width:860px){
-    .toolbar{position:fixed;left:0;right:0;bottom:0;width:100%;height:auto;padding:8px 12px;border-right:none;border-top:1px solid var(--panel-border);border-radius:12px 12px 0 0;flex-direction:row;align-items:center;justify-content:space-around;gap:8px}
-    .toolbar .controls{flex-direction:row;gap:8px;align-items:center}
-    .toolbar .section-title{display:none}
-    .app{padding-bottom:86px}
-    /* ensure toggle is usable on mobile — show it */
-    .toggle-btn{display:flex;left:12px;right:auto;top:auto;bottom:84px;transform:none;z-index:60}
-    .status{left:12px;bottom:96px}
-    .fab{right:16px;bottom:96px}
-  }
-</style>
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      margin: 2px 2px 0 0;
+      border-radius: 3px;
+      font-size: 11px;
+      background: #333;
+      color: #ddd;
+    }
+  </style>
 </head>
 <body>
-<div class="app" id="app">
-  <aside class="toolbar" id="toolbar" aria-label="Tool panel">
-    <button class="toggle-btn" id="toggle" title="Collapse menu" aria-pressed="false" aria-label="Collapse toolbar">←</button>
 
-    <div class="title">
-      <h1>📐 Edge Draw</h1>
-      <div style="display:flex;flex-direction:column">
-        <div class="meta">Trim Tool</div>
-        <div style="font-size:11px;color:var(--muted)">Shortcuts: <span style="font-weight:700">T</span>=Trim <span style="color:var(--muted)">•</span> <span style="font-weight:700">D</span>=Draw</div>
-      </div>
+<div id="sidebar">
+  <div>
+    <h1>GeoSteps – Ramp Demo</h1>
+    <div class="badge">Prototype</div>
+    <div class="badge">Offline</div>
+  </div>
+
+  <div>
+    <h2>Scenario</h2>
+    <p style="font-size:14px; line-height:1.4;">
+      Design a ramp with a slope of <b>1:2</b> (rise:run).<br>
+      Place the <b>bottom point on the floor</b> and drag the top point so that:
+      <br>• Horizontal distance = 200 units
+      <br>• Vertical rise = 100 units
+      <br>Try to get close, then press <b>Check</b>.
+    </p>
+  </div>
+
+  <div>
+    <h2>Tools</h2>
+    <button id="resetBtn">Reset ramp</button>
+    <button id="snapBtn" class="secondary">Toggle snap (grid)</button>
+    <button id="hintBtn" class="secondary">Hint</button>
+    <button id="ttsBtn" class="secondary">Speak</button>
+  </div>
+
+  <div>
+    <h2>Check</h2>
+    <button id="checkBtn">Check construction</button>
+    <div id="feedback" class="neutral">
+      Move the blue points to form your ramp, then press “Check construction”.
     </div>
+  </div>
 
-    <div class="controls" id="toolbar-content">
-      <div class="section" role="group" aria-label="Canvas size">
-        <div class="section-title">Canvas</div>
-        <select id="size" aria-label="Canvas size">
-          <option value="600x800">600 × 800</option>
-          <option value="800x600" selected>800 × 600</option>
-          <option value="1200x800">1200 × 800</option>
-        </select>
-      </div>
-
-      <div class="section" role="group" aria-label="Stroke width">
-        <div class="section-title">Width</div>
-        <div class="btn-group" id="width-group">
-          <button id="lw-s" class="icon-btn" title="Thin" aria-pressed="false">1</button>
-          <button id="lw-m" class="icon-btn active" title="Medium" aria-pressed="true">2</button>
-          <button id="lw-l" class="icon-btn" title="Thick" aria-pressed="false">3</button>
-        </div>
-      </div>
-
-      <div class="section" role="group" aria-label="Mode">
-        <div class="section-title">Mode</div>
-        <div class="btn-group">
-          <button id="mode-draw" class="active" title="Draw (D)" aria-pressed="true">✏️ Draw</button>
-          <button id="mode-trim" title="Trim (T)" aria-pressed="false">✂ Trim</button>
-        </div>
-      </div>
-
-      <div class="section" role="group" aria-label="Actions">
-        <div style="display:flex;gap:8px;align-items:center">
-          <button id="split" style="flex:1" title="Split at intersections (S)" aria-label="Split">Split</button>
-          <button id="undo" class="icon-btn" title="Undo (Z)" aria-label="Undo">↶</button>
-          <button id="clear" class="icon-btn" title="Clear (C)" aria-label="Clear">🗑</button>
-        </div>
-      </div>
-
-      <div class="section hint-inline" style="font-size:12px;color:var(--muted)">
-        Tips: drag edges for straight lines, corners for circles. Use <strong>S</strong> to split intersections.
-      </div>
+  <div>
+    <h2>Measurements</h2>
+    <div id="infoPanel">
+      Bottom: (–, –)
+      Top: (–, –)
+      Horizontal (run): –
+      Vertical (rise): –
+      Slope (rise/run): –
+      Length: –
     </div>
-  </aside>
-
-  <main class="canvas-wrap" id="canvasWrap">
-    <div class="svg-frame" role="region" aria-label="Drawing area">
-      <svg id="svg" width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg" tabindex="0" aria-label="Drawing canvas"></svg>
-    </div>
-  </main>
+  </div>
 </div>
 
-<button class="fab" id="fab" title="Toggle Trim" aria-label="Toggle Trim">✂</button>
-
-<div class="status" id="status" role="status">
-  <div id="mode-text">Draw Mode</div>
-  <div style="color:var(--muted)">•</div>
-  <div id="width-text">Width: 2</div>
+<div id="canvasContainer">
+  <canvas id="geoCanvas" width="800" height="600" aria-label="Geometry canvas"></canvas>
 </div>
 
 <script>
-(() => {
-  // Elements
-  const svg = document.getElementById('svg');
-  const sizeSel = document.getElementById('size');
-  const lwS = document.getElementById('lw-s'), lwM = document.getElementById('lw-m'), lwL = document.getElementById('lw-l');
-  const modeDraw = document.getElementById('mode-draw'), modeTrim = document.getElementById('mode-trim');
-  const splitBtn = document.getElementById('split'), undoBtn = document.getElementById('undo'), clearBtn = document.getElementById('clear');
-  const fab = document.getElementById('fab');
-  const status = document.getElementById('status'), modeText = document.getElementById('mode-text'), widthText = document.getElementById('width-text');
-  const toolbar = document.getElementById('toolbar'), toggleBtn = document.getElementById('toggle');
+  // ===== basic canvas setup =====
+  const canvas = document.getElementById('geoCanvas');
+  const ctx = canvas.getContext('2d');
 
-  // App state
-  let strokeWidth = 4;
-  let currentMode = 'draw';
-  let shapes = [];
-  const history = [];
-  let pointerDown = null;
-  let ghost = null;
-  let rafPending = false;
-  let lastPointer = null;
-  const HOTZONE = 50;
-  let viewW = 800, viewH = 600;
+  const snapBtn = document.getElementById('snapBtn');
+  const checkBtn = document.getElementById('checkBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const hintBtn = document.getElementById('hintBtn');
+  const ttsBtn = document.getElementById('ttsBtn');
+  const feedback = document.getElementById('feedback');
+  const infoPanel = document.getElementById('infoPanel');
 
-  const CIRCLE_SEGMENTS = 64;
-  const EPS = 1e-6;
+  let snapToGrid = true;
 
-  function setCanvasSize(val){
-    const [w,h] = val.split('x').map(Number);
-    svg.setAttribute('width', w);
-    svg.setAttribute('height', h);
-    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    viewW = w; viewH = h;
+  // world → screen (simple)
+  const origin = { x: 100, y: 500 };   // "floor" line
+  const unit = 1;                      // 1 world unit = 1 px for now
+
+  // ramp points
+  let bottom = { x: origin.x, y: origin.y };
+  let top =   { x: origin.x + 150, y: origin.y - 80 };
+
+  const TARGET_RUN = 200;
+  const TARGET_RISE = 100;
+  const TOL = 10; // tolerance in units/pixels
+
+  function drawGrid() {
+    ctx.save();
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1;
+
+    const step = 20;
+    for (let x = 0; x <= canvas.width; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= canvas.height; y += step) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
-  setCanvasSize(sizeSel.value);
-  sizeSel.addEventListener('change', e => setCanvasSize(e.target.value));
 
-  function setWidth(sizeKey){
-    lwS.classList.toggle('active', sizeKey === 'S');
-    lwM.classList.toggle('active', sizeKey === 'M');
-    lwL.classList.toggle('active', sizeKey === 'L');
-    if(sizeKey === 'S'){ strokeWidth = 2; widthText.textContent = 'Width: 1'; }
-    if(sizeKey === 'M'){ strokeWidth = 4; widthText.textContent = 'Width: 2'; }
-    if(sizeKey === 'L'){ strokeWidth = 7; widthText.textContent = 'Width: 3'; }
-    updateStatus();
-  }
-  lwS.addEventListener('click', () => setWidth('S'));
-  lwM.addEventListener('click', () => setWidth('M'));
-  lwL.addEventListener('click', () => setWidth('L'));
-  setWidth('M');
+  function drawFloor() {
+    ctx.save();
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, origin.y);
+    ctx.lineTo(canvas.width, origin.y);
+    ctx.stroke();
+    ctx.restore();
 
-  function setMode(m){
-    currentMode = m;
-    modeDraw.classList.toggle('active', m === 'draw');
-    modeTrim.classList.toggle('active', m === 'trim');
-    modeText.textContent = (m === 'trim') ? 'Trim Mode' : 'Draw Mode';
-    fab.textContent = (m === 'trim') ? '✏️' : '✂';
-    if(m === 'trim'){ requestAnimationFrame(()=>quickMarkIntersections()); }
+    ctx.save();
+    ctx.fillStyle = '#777';
+    ctx.font = '14px system-ui';
+    ctx.fillText('Floor line (y = 0)', 10, origin.y - 6);
+    ctx.restore();
   }
-  modeDraw.addEventListener('click', ()=>setMode('draw'));
-  modeTrim.addEventListener('click', ()=>setMode('trim'));
-  fab.addEventListener('click', ()=>{ 
-    // toggle draw/trim
-    setMode(currentMode === 'draw' ? 'trim' : 'draw');
-    // also on small screens toggle toolbar visible if collapsed
-    if(window.innerWidth <= 860) {
-      collapsed = false; applyToolbar();
+
+  function drawRamp() {
+    // ramp line
+    ctx.save();
+    ctx.strokeStyle = '#2d6bff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(bottom.x, bottom.y);
+    ctx.lineTo(top.x, top.y);
+    ctx.stroke();
+    ctx.restore();
+
+    // points
+    drawPoint(bottom, 'Bottom', '#1abc9c');
+    drawPoint(top, 'Top', '#e67e22');
+  }
+
+  function drawPoint(p, label, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = '#ddd';
+    ctx.font = '13px system-ui';
+    ctx.fillText(label, p.x + 10, p.y - 8);
+    ctx.restore();
+  }
+
+  function distance(a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  function updateInfo() {
+    const run = (top.x - bottom.x);       // horizontal
+    const rise = (bottom.y - top.y);      // vertical (positive upwards)
+    const len = distance(bottom, top);
+
+    const slope = run !== 0 ? (rise / run) : NaN;
+
+    const fmt = (v) => Number.isFinite(v) ? v.toFixed(1) : '–';
+
+    infoPanel.textContent =
+      `Bottom: (${bottom.x.toFixed(0)}, ${bottom.y.toFixed(0)})\n` +
+      `Top: (${top.x.toFixed(0)}, ${top.y.toFixed(0)})\n` +
+      `Horizontal (run): ${fmt(run)}\n` +
+      `Vertical (rise): ${fmt(rise)}\n` +
+      `Slope (rise/run): ${fmt(slope)}\n` +
+      `Length: ${fmt(len)}`;
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawGrid();
+    drawFloor();
+    drawRamp();
+    updateInfo();
+  }
+
+  // ===== dragging logic =====
+  let dragging = null;
+
+  function hitTestPoint(p, x, y) {
+    const r = 10;
+    return distance(p, { x, y }) <= r;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (hitTestPoint(bottom, x, y)) {
+      dragging = 'bottom';
+    } else if (hitTestPoint(top, x, y)) {
+      dragging = 'top';
     }
   });
 
-  function updateStatus(){ widthText.textContent = `Width: ${strokeWidth === 2?1:strokeWidth ===4?2:3}`; }
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
 
-  let collapsed = localStorage.getItem('toolbar-collapsed') === 'true';
-  function applyToolbar(){
-    toolbar.classList.toggle('collapsed', collapsed);
-    toggleBtn.textContent = collapsed ? '→' : '←';
-    toggleBtn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
-    document.getElementById('app').style.paddingLeft = collapsed ? '64px' : '260px';
-  }
-  toggleBtn.addEventListener('click', ()=>{
-    collapsed = !collapsed;
-    localStorage.setItem('toolbar-collapsed', collapsed);
-    applyToolbar();
-  });
-  applyToolbar();
+    const rect = canvas.getBoundingClientRect();
+    let x = e.clientX - rect.left;
+    let y = e.clientY - rect.top;
 
-  function ns(tag){ return document.createElementNS('http://www.w3.org/2000/svg', tag); }
-  function ensureGhost(tag){
-    if(!ghost || ghost.tagName.toLowerCase() !== tag){
-      removeGhost();
-      ghost = ns(tag);
-      ghost.classList.add('ghost');
-      svg.appendChild(ghost);
+    if (snapToGrid) {
+      const step = 10;
+      x = Math.round(x / step) * step;
+      y = Math.round(y / step) * step;
     }
-    return ghost;
-  }
-  function removeGhost(){ if(ghost){ ghost.remove(); ghost = null; } }
 
-  function pushShape(obj){
-    shapes.push(obj);
-    history.push({op:'add', shape:obj});
-  }
+    if (dragging === 'bottom') {
+      // keep bottom on floor (y = origin.y)
+      bottom.x = x;
+      bottom.y = origin.y;
+    } else if (dragging === 'top') {
+      top.x = x;
+      top.y = y;
+    }
 
-  function makeFullVerticalLine(x){
-    const line = ns('line');
-    line.classList.add('shape');
-    line.setAttribute('x1', x); line.setAttribute('y1', 0); line.setAttribute('x2', x); line.setAttribute('y2', viewH);
-    line.setAttribute('stroke-width', strokeWidth);
-    svg.appendChild(line);
-    pushShape({type:'line', el:line, x1:x, y1:0, x2:x, y2:viewH, w:strokeWidth});
-  }
+    render();
+  });
 
-  function makeFullHorizontalLine(y){
-    const line = ns('line');
-    line.classList.add('shape');
-    line.setAttribute('x1', 0); line.setAttribute('y1', y); line.setAttribute('x2', viewW); line.setAttribute('y2', y);
-    line.setAttribute('stroke-width', strokeWidth);
-    svg.appendChild(line);
-    pushShape({type:'line', el:line, x1:0, y1:y, x2:viewW, y2:y, w:strokeWidth});
-  }
+  canvas.addEventListener('pointerup', () => {
+    dragging = null;
+  });
 
-  function makeCircle(cx, cy, r){
-    const c = ns('circle');
-    c.classList.add('shape');
-    c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', r);
-    c.setAttribute('stroke-width', strokeWidth);
-    svg.appendChild(c);
-    pushShape({type:'circle', el:c, cx, cy, r, w:strokeWidth});
+  canvas.addEventListener('pointerleave', () => {
+    dragging = null;
+  });
+
+  // ===== checks and hints =====
+  function setFeedback(text, type) {
+    feedback.textContent = text;
+    feedback.className = type;
   }
 
-  function svgPoint(evt){
-    const pt = svg.createSVGPoint();
-    pt.x = evt.clientX; pt.y = evt.clientY;
-    return pt.matrixTransform(svg.getScreenCTM().inverse());
-  }
+  function checkConstruction() {
+    const run = top.x - bottom.x;
+    const rise = bottom.y - top.y;
+    const slope = run !== 0 ? rise / run : NaN;
 
-  // pointer handling
-  function onPointerDown(e){
-    if(e.button && e.button !== 0) return;
-    const p = svgPoint(e);
-    const margin = HOTZONE;
-    const nearLeft = p.x <= margin;
-    const nearRight = p.x >= viewW - margin;
-    const nearTop = p.y <= margin;
-    const nearBottom = p.y >= viewH - margin;
-    const nearCorner = (nearLeft || nearRight) && (nearTop || nearBottom);
-    const nearEdge = nearLeft || nearRight || nearTop || nearBottom;
-    if(currentMode !== 'draw' || !nearEdge) { pointerDown = null; return; }
-    pointerDown = {start: p, corner: nearCorner, edge: nearEdge, nearLeft, nearRight, nearTop, nearBottom, axis: null};
-    if(nearCorner){
-      const cx = nearLeft ? 0 : viewW, cy = nearTop ? 0 : viewH;
-      const r = Math.hypot(p.x - cx, p.y - cy);
-      ensureGhost('circle').setAttribute('cx', cx);
-      ghost.setAttribute('cy', cy);
-      ghost.setAttribute('r', r);
-      ghost.setAttribute('stroke-width', strokeWidth);
-    } else if(nearEdge){
-      if(nearLeft || nearRight){
-        pointerDown.axis = 'vertical';
-        ensureGhost('line');
-        ghost.setAttribute('x1', p.x); ghost.setAttribute('x2', p.x);
-        ghost.setAttribute('y1', 0); ghost.setAttribute('y2', viewH);
-        ghost.setAttribute('stroke-width', strokeWidth);
-      } else {
-        pointerDown.axis = 'horizontal';
-        ensureGhost('line');
-        ghost.setAttribute('y1', p.y); ghost.setAttribute('y2', p.y);
-        ghost.setAttribute('x1', 0); ghost.setAttribute('x2', viewW);
-        ghost.setAttribute('stroke-width', strokeWidth);
-      }
+    const runOk = Math.abs(run - TARGET_RUN) <= TOL;
+    const riseOk = Math.abs(rise - TARGET_RISE) <= TOL;
+    const slopeOk = Math.abs(slope - (TARGET_RISE / TARGET_RUN)) <= 0.05;
+
+    if (runOk && riseOk && slopeOk) {
+      setFeedback(
+        'Nice! Your ramp is close to a 1:2 slope.\n' +
+        'You matched the target rise and run within the allowed tolerance.',
+        'good'
+      );
     } else {
-      pointerDown = null;
-    }
-    try{ svg.setPointerCapture(e.pointerId);}catch(e){}
-    lastPointer = p;
-  }
-
-  function onPointerMove(e){
-    lastPointer = svgPoint(e);
-    if(!rafPending){
-      rafPending = true;
-      requestAnimationFrame(processPointerMove);
+      let msg = 'Not quite there yet.\n';
+      if (!runOk) msg += `• Horizontal run should be about ${TARGET_RUN} units.\n`;
+      if (!riseOk) msg += `• Vertical rise should be about ${TARGET_RISE} units.\n`;
+      if (!slopeOk) msg += '• Check that rise ÷ run is close to 0.5 (1:2).\n';
+      setFeedback(msg.trim(), 'bad');
     }
   }
 
-  function processPointerMove(){
-    rafPending = false;
-    if(!pointerDown || !ghost) return;
-    const p = lastPointer;
-    if(pointerDown.corner){
-      const cx = pointerDown.nearLeft ? 0 : viewW;
-      const cy = pointerDown.nearTop ? 0 : viewH;
-      const r = Math.hypot(p.x - cx, p.y - cy);
-      ghost.setAttribute('r', Math.max(0, r));
-    } else if(pointerDown.edge){
-      if(pointerDown.axis === 'vertical'){
-        const x = Math.max(0, Math.min(viewW, p.x));
-        ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
-      } else {
-        const y = Math.max(0, Math.min(viewH, p.y));
-        ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
-      }
-    }
+  function showHint() {
+    setFeedback(
+      'Hint: Start by fixing the bottom point on the floor line.\n' +
+      'Then drag the top point so that the horizontal distance is about 200 units.\n' +
+      'Finally, adjust its height to get a rise of about 100 units.',
+      'neutral'
+    );
   }
 
-  function onPointerUp(e){
-    if(pointerDown && ghost){
-      if(pointerDown.corner){
-        const cx = pointerDown.nearLeft ? 0 : viewW;
-        const cy = pointerDown.nearTop ? 0 : viewH;
-        const r = parseFloat(ghost.getAttribute('r') || 0);
-        if(r > 1) makeCircle(cx, cy, r);
-      } else if(pointerDown.edge){
-        if(pointerDown.axis === 'vertical'){
-          const x = parseFloat(ghost.getAttribute('x1'));
-          makeFullVerticalLine(x);
-        } else {
-          const y = parseFloat(ghost.getAttribute('y1'));
-          makeFullHorizontalLine(y);
-        }
-      }
-    }
-    pointerDown = null;
-    removeGhost();
-    try{ svg.releasePointerCapture(e.pointerId);}catch(e){}
+  function resetRamp() {
+    bottom = { x: origin.x, y: origin.y };
+    top =   { x: origin.x + 150, y: origin.y - 80 };
+    setFeedback(
+      'Ramp reset. Drag the points again to match rise 100 and run 200.',
+      'neutral'
+    );
+    render();
   }
 
-  svg.addEventListener('pointerdown', onPointerDown, {passive:true});
-  svg.addEventListener('pointermove', onPointerMove, {passive:true});
-  svg.addEventListener('pointerup', onPointerUp, {passive:true});
-  svg.addEventListener('pointercancel', onPointerUp, {passive:true});
-
-  // OLD simple delete handler removed. Replace with trim behavior:
-  svg.addEventListener('click', (e) => {
-    if(currentMode !== 'trim') return;
-    const target = e.target;
-    if(!target || !target.classList?.contains('shape')) return;
-    const shapeObj = shapes.find(s => s.el === target);
-    if(!shapeObj) return;
-
-    // compute click point
-    const p = svgPoint(e);
-
-    // shape trimming functions
-    function replaceShape(oldShape, newShapeObjs){
-      // remove old element
-      try{ if(oldShape.el && oldShape.el.parentNode) oldShape.el.remove(); } catch(err){}
-      // append new elements (fragment)
-      const frag = document.createDocumentFragment();
-      newShapeObjs.forEach(ns => {
-        frag.appendChild(ns.el);
-        shapes.push(ns);
-        history.push({op:'add', shape:ns});
-      });
-      svg.appendChild(frag);
-      // remove old from shapes array
-      shapes = shapes.filter(s => s !== oldShape);
-      history.push({op:'del', shape: oldShape});
-    }
-
-    // helper: find intersection points on this shape with other shapes
-    function gatherIntersectionsForShape(s){
-      const result = [];
-      shapes.forEach(other => {
-        if(other === s) return;
-        if(s.type === 'line'){
-          if(other.type === 'line'){
-            const pt = lineLineInter(s, other);
-            if(pt) result.push(pt);
-          } else if(other.type === 'circle'){
-            const pts = lineCircleInter(s, other);
-            pts.forEach(x=>result.push(x));
-          } else if(other.type === 'polyline'){
-            // check each segment of polyline
-            for(let i=0;i<other.pts.length-1;i++){
-              const seg = {x1: other.pts[i].x, y1: other.pts[i].y, x2: other.pts[i+1].x, y2: other.pts[i+1].y};
-              const pt = lineLineInter(s, seg);
-              if(pt) result.push(pt);
-            }
-          }
-        } else if(s.type === 'circle'){
-          if(other.type === 'line'){
-            const pts = lineCircleInter(other, s); // line/circle intersection symmetric
-            pts.forEach(x=>result.push(x));
-          } else if(other.type === 'circle'){
-            const pts = circleCircleInter(s, other);
-            pts.forEach(x=>result.push(x));
-          } else if(other.type === 'polyline'){
-            // check polyline segments
-            for(let i=0;i<other.pts.length-1;i++){
-              const seg = {x1: other.pts[i].x, y1: other.pts[i].y, x2: other.pts[i+1].x, y2: other.pts[i+1].y};
-              const pts = lineCircleInter(seg, s);
-              pts.forEach(x=>result.push(x));
-            }
-          }
-        } else if(s.type === 'polyline'){
-          // treat polyline as collection of segments
-          for(let i=0;i<s.pts.length-1;i++){
-            const seg = {x1:s.pts[i].x,y1:s.pts[i].y,x2:s.pts[i+1].x,y2:s.pts[i+1].y};
-            // check with other shape
-            if(other.type === 'line'){
-              const pt = lineLineInter(seg, other);
-              if(pt) result.push(pt);
-            } else if(other.type === 'circle'){
-              const pts = lineCircleInter(seg, other);
-              pts.forEach(x=>result.push(x));
-            } else if(other.type === 'polyline'){
-              for(let j=0;j<other.pts.length-1;j++){
-                const seg2 = {x1:other.pts[j].x,y1:other.pts[j].y,x2:other.pts[j+1].x,y2:other.pts[j+1].y};
-                const pt = lineLineInter(seg, seg2);
-                if(pt) result.push(pt);
-              }
-            }
-          }
-        }
-      });
-      // deduplicate by coordinates (6dp)
-      const uniq = {};
-      result.forEach(pt => {
-        const k = `${pt.x.toFixed(6)}|${pt.y.toFixed(6)}`;
-        uniq[k] = pt;
-      });
-      return Object.values(uniq);
-    }
-
-    // param along line (0..1)
-    function paramOnLine(line, pt){
-      const dx = line.x2 - line.x1, dy = line.y2 - line.y1;
-      if(Math.abs(dx) > Math.abs(dy)) return ((pt.x - line.x1) / (dx || 1e-9));
-      return ((pt.y - line.y1) / (dy || 1e-9));
-    }
-
-    // find interval containing click (on line)
-    if(shapeObj.type === 'line'){
-      const inters = gatherIntersectionsForShape(shapeObj);
-      // include endpoints
-      inters.push({x: shapeObj.x1, y: shapeObj.y1});
-      inters.push({x: shapeObj.x2, y: shapeObj.y2});
-      // compute t for each, unique+sorted
-      const dx = shapeObj.x2 - shapeObj.x1, dy = shapeObj.y2 - shapeObj.y1;
-      let ts = inters.map(p => {
-        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - shapeObj.x1) / (dx || 1e-9)) : ((p.y - shapeObj.y1) / (dy || 1e-9));
-        return Math.max(0, Math.min(1, t));
-      });
-      ts = Array.from(new Set(ts.map(t=>t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
-      // find t_click
-      const tClick = Math.max(0, Math.min(1, paramOnLine(shapeObj, p)));
-      // find interval [ta,tb] such that tClick in (ta,tb)
-      let idx = -1;
-      for(let i=0;i<ts.length-1;i++){
-        if(tClick >= ts[i]-1e-6 && tClick <= ts[i+1]+1e-6){ idx = i; break; }
-      }
-      if(idx === -1){
-        // fallback: delete entire (as old behavior) if not found — but we avoid this unless nothing else
-        shapeObj.el.remove();
-        shapes = shapes.filter(s => s !== shapeObj);
-        history.push({op:'del', shape: shapeObj});
-        return;
-      }
-      // create remaining segments excluding the clicked segment
-      const fragShapes = [];
-      for(let i=0;i<ts.length-1;i++){
-        if(i === idx) continue; // remove this segment
-        const ta = ts[i], tb = ts[i+1];
-        const ax = shapeObj.x1 + dx * ta, ay = shapeObj.y1 + dy * ta;
-        const bx = shapeObj.x1 + dx * tb, by = shapeObj.y1 + dy * tb;
-        if(Math.hypot(bx-ax, by-ay) > 1.5){
-          const seg = ns('line');
-          seg.classList.add('shape');
-          seg.setAttribute('x1', ax); seg.setAttribute('y1', ay); seg.setAttribute('x2', bx); seg.setAttribute('y2', by);
-          seg.setAttribute('stroke-width', shapeObj.w || strokeWidth);
-          fragShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by,w:shapeObj.w || strokeWidth});
-        }
-      }
-      replaceShape(shapeObj, fragShapes);
+  // ===== TTS support =====
+  function speakScenario() {
+    if (!('speechSynthesis' in window)) {
+      setFeedback('Text-to-speech not supported in this browser.', 'bad');
       return;
     }
+    const text =
+      'Scenario. Design a ramp with a one to two slope. ' +
+      'Place the bottom point on the floor line, ' +
+      'then drag the top point so that the horizontal distance is about 200 units, ' +
+      'and the vertical rise is about 100 units. ' +
+      'When you think it is correct, press Check Construction.';
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1;
+    utter.pitch = 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utter);
+  }
 
-    // polyline trimming: remove the polyline segment that contains clicked point
-    if(shapeObj.type === 'polyline'){
-      // find closest segment index
-      const pts = shapeObj.pts;
-      let bestSeg = -1, bestDist = Infinity, projT = 0;
-      for(let i=0;i<pts.length-1;i++){
-        const a = pts[i], b = pts[i+1];
-        const vx = b.x - a.x, vy = b.y - a.y;
-        const wx = p.x - a.x, wy = p.y - a.y;
-        const denom = vx*vx + vy*vy;
-        const t = denom === 0 ? 0 : Math.max(0, Math.min(1, (wx*vx + wy*vy) / denom));
-        const cx = a.x + vx * t, cy = a.y + vy * t;
-        const d = Math.hypot(cx - p.x, cy - p.y);
-        if(d < bestDist){ bestDist = d; bestSeg = i; projT = t; }
-      }
-      if(bestSeg === -1){
-        // fallback delete whole element
-        shapeObj.el.remove();
-        shapes = shapes.filter(s => s !== shapeObj);
-        history.push({op:'del', shape: shapeObj});
-        return;
-      }
-      // gather intersection indices on polyline (via gatherIntersectionsForShape)
-      const inters = gatherIntersectionsForShape(shapeObj);
-      // convert intersection points to indices along pts by nearest point index
-      const idxSet = new Set();
-      pts.forEach((pt, idx) => {
-        inters.forEach(ip => {
-          if(Math.hypot(pt.x - ip.x, pt.y - ip.y) < 6) idxSet.add(idx);
-        });
-      });
-      // ensure endpoints included
-      idxSet.add(0); idxSet.add(pts.length - 1);
-      const idxs = Array.from(idxSet).sort((a,b)=>a-b);
-      // find which pair of adjacent indices contains the clicked segment best
-      // locate the segment index (bestSeg) and remove the chunk that includes it
-      let removeRange = null;
-      for(let i=0;i<idxs.length-1;i++){
-        const sIdx = idxs[i], eIdx = idxs[i+1];
-        if(bestSeg >= sIdx && bestSeg < eIdx){
-          removeRange = [sIdx, eIdx];
-          break;
-        }
-      }
-      if(!removeRange){
-        // fallback: delete
-        shapeObj.el.remove();
-        shapes = shapes.filter(s => s !== shapeObj);
-        history.push({op:'del', shape: shapeObj});
-        return;
-      }
-      // build remaining polylines excluding removeRange segment
-      const newObjs = [];
-      // part before removeRange
-      if(removeRange[0] > 0){
-        const partPts = pts.slice(0, removeRange[0]+1);
-        if(partPts.length > 1){
-          const poly = ns('polyline');
-          poly.classList.add('shape');
-          poly.setAttribute('points', partPts.map(q => `${q.x},${q.y}`).join(' '));
-          poly.setAttribute('fill','none');
-          poly.setAttribute('stroke-width', shapeObj.w || strokeWidth);
-          newObjs.push({type:'polyline', el:poly, pts:partPts, w:shapeObj.w || strokeWidth});
-        }
-      }
-      // part after removeRange
-      if(removeRange[1] < pts.length - 1){
-        const partPts = pts.slice(removeRange[1], pts.length);
-        if(partPts.length > 1){
-          const poly = ns('polyline');
-          poly.classList.add('shape');
-          poly.setAttribute('points', partPts.map(q => `${q.x},${q.y}`).join(' '));
-          poly.setAttribute('fill','none');
-          poly.setAttribute('stroke-width', shapeObj.w || strokeWidth);
-          newObjs.push({type:'polyline', el:poly, pts:partPts, w:shapeObj.w || strokeWidth});
-        }
-      }
-      replaceShape(shapeObj, newObjs);
-      return;
-    }
-
-    // circle trimming: remove the arc segment containing click
-    if(shapeObj.type === 'circle'){
-      const inters = gatherIntersectionsForShape(shapeObj);
-      // sample circle to indexes for arc mapping
-      const N = Math.max(32, Math.min(CIRCLE_SEGMENTS, Math.round(CIRCLE_SEGMENTS * (shapeObj.r / Math.max(1, Math.min(viewW, viewH))))));
-      const pts = [];
-      for(let i=0;i<N;i++){
-        const a = (i/N) * Math.PI * 2;
-        pts.push({x: shapeObj.cx + shapeObj.r*Math.cos(a), y: shapeObj.cy + shapeObj.r*Math.sin(a), a, i});
-      }
-      // find index of point closest to click
-      let bestI = 0, bestD = Infinity;
-      for(let i=0;i<pts.length;i++){
-        const d = Math.hypot(pts[i].x - p.x, pts[i].y - p.y);
-        if(d < bestD){ bestD = d; bestI = i; }
-      }
-      // find indices near intersections
-      const idxSet = new Set();
-      pts.forEach((pt, idx) => {
-        inters.forEach(ip => {
-          if(Math.hypot(pt.x - ip.x, pt.y - ip.y) < Math.max(4, shapeObj.r * 0.02)) idxSet.add(idx);
-        });
-      });
-      // if no intersections, remove entire circle (fallback)
-      if(idxSet.size === 0){
-        shapeObj.el.remove();
-        shapes = shapes.filter(s => s !== shapeObj);
-        history.push({op:'del', shape: shapeObj});
-        return;
-      }
-      const idxs = Array.from(idxSet).sort((a,b)=>a-b);
-      // find pair that surrounds bestI (walk through)
-      let removeStart = -1, removeEnd = -1;
-      for(let k=0;k<idxs.length;k++){
-        const a = idxs[k], b = idxs[(k+1)%idxs.length];
-        let inRange = false;
-        if(a < b){
-          inRange = (bestI >= a && bestI <= b);
-        } else { // wrap
-          inRange = (bestI >= a || bestI <= b);
-        }
-        if(inRange){
-          removeStart = a; removeEnd = b;
-          break;
-        }
-      }
-      if(removeStart === -1){
-        // fallback delete
-        shapeObj.el.remove();
-        shapes = shapes.filter(s => s !== shapeObj);
-        history.push({op:'del', shape: shapeObj});
-        return;
-      }
-      // build arcs for the rest
-      const newObjs = [];
-      // walk indices and skip arc between removeStart..removeEnd
-      let i = removeEnd;
-      const buildArc = (startIdx, endIdx) => {
-        // gather points from startIdx -> endIdx (inclusive)
-        const arcPts = [];
-        let j = startIdx;
-        while(true){
-          arcPts.push(pts[j]);
-          if(j === endIdx) break;
-          j = (j+1) % pts.length;
-        }
-        if(arcPts.length > 1){
-          const poly = ns('polyline');
-          poly.classList.add('shape');
-          poly.setAttribute('points', arcPts.map(q=>`${q.x},${q.y}`).join(' '));
-          poly.setAttribute('fill','none');
-          poly.setAttribute('stroke-width', shapeObj.w || strokeWidth);
-          newObjs.push({type:'polyline', el:poly, pts:arcPts, w:shapeObj.w || strokeWidth});
-        }
-      };
-      // If removeStart < removeEnd (no wrap): remaining arcs are [removeEnd..removeStart] with wrap
-      // We'll build from removeEnd to removeStart (wrap)
-      let start = removeEnd;
-      let end = (removeStart - 1 + pts.length) % pts.length;
-      if(start !== ((end + 1) % pts.length)){
-        // ensure we don't accidentally create zero-length
-        buildArc(start, end);
-      }
-      replaceShape(shapeObj, newObjs);
-      return;
-    }
-
-    // fallback: if shape type unknown, delete it (old behavior fallback)
-    shapeObj.el.remove();
-    shapes = shapes.filter(s => s !== shapeObj);
-    history.push({op:'del', shape: shapeObj});
+  // ===== UI wiring =====
+  snapBtn.addEventListener('click', () => {
+    snapToGrid = !snapToGrid;
+    snapBtn.textContent = snapToGrid ? 'Toggle snap (grid: ON)' : 'Toggle snap (grid: OFF)';
   });
 
-  // clear, undo
-  function clearAll(){
-    if(shapes.length === 0) return;
-    const snapshot = shapes.slice();
-    history.push({op:'clear', shapes: snapshot});
-    shapes.forEach(s => s.el.remove());
-    shapes = [];
-  }
-  clearBtn.addEventListener('click', clearAll);
+  checkBtn.addEventListener('click', checkConstruction);
+  resetBtn.addEventListener('click', resetRamp);
+  hintBtn.addEventListener('click', showHint);
+  ttsBtn.addEventListener('click', speakScenario);
 
-  function undo(){
-    const h = history.pop();
-    if(!h) return;
-    if(h.op === 'add'){
-      h.shape.el.remove();
-      shapes = shapes.filter(s => s !== h.shape);
-    } else if(h.op === 'del'){
-      svg.appendChild(h.shape.el);
-      shapes.push(h.shape);
-    } else if(h.op === 'clear'){
-      h.shapes.forEach(s => { svg.appendChild(s.el); shapes.push(s); });
-    } else if(h.op === 'split'){
-      // note: split history not fully undo-friendly in this code path
-    }
-  }
-  undoBtn.addEventListener('click', undo);
-
-  // Intersection helpers
-  function bboxOverlap(aMinX, aMinY, aMaxX, aMaxY, bMinX, bMinY, bMaxX, bMaxY){
-    return !(aMaxX < bMinX || aMinX > bMaxX || aMaxY < bMinY || aMinY > bMaxY);
-  }
-
-  function lineLineInter(l1, l2){
-    const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
-    const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
-    const denom = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
-    if(Math.abs(denom) < EPS) return null;
-    const xi = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4))/denom;
-    const yi = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4))/denom;
-    function between(a,b,c){ return Math.min(a,b)-1e-6 <= c && c <= Math.max(a,b)+1e-6; }
-    if(between(x1,x2,xi) && between(y1,y2,yi) && between(x3,x4,xi) && between(y3,y4,yi)) return {x:xi,y:yi};
-    return null;
-  }
-
-  function lineCircleInter(line, circle){
-    const x1=line.x1, y1=line.y1, x2=line.x2, y2=line.y2;
-    const cx=circle.cx, cy=circle.cy, r=circle.r;
-    const dx = x2-x1, dy=y2-y1;
-    const fx = x1-cx, fy=y1-cy;
-    const a = dx*dx+dy*dy;
-    const b = 2*(fx*dx+fy*dy);
-    const c = fx*fx+fy*fy - r*r;
-    let disc = b*b - 4*a*c;
-    if(disc < -EPS) return [];
-    disc = Math.max(0, disc);
-    const t1 = (-b + Math.sqrt(disc)) / (2*a);
-    const t2 = (-b - Math.sqrt(disc)) / (2*a);
-    const points = [];
-    [t1,t2].forEach(t => {
-      if(t >= -1e-6 && t <= 1+1e-6){
-        points.push({x: x1 + dx*t, y: y1 + dy*t});
-      }
-    });
-    return points;
-  }
-
-  function circleCircleInter(c1, c2){
-    const x0=c1.cx, y0=c1.cy, r0=c1.r;
-    const x1=c2.cx, y1=c2.cy, r1=c2.r;
-    const dx = x1-x0, dy=y1-y0;
-    const d = Math.hypot(dx,dy);
-    if(d > r0 + r1 + EPS) return [];
-    if(d < Math.abs(r0-r1) - EPS) return [];
-    if(d < EPS && Math.abs(r0-r1) < EPS) return [];
-    const a = (r0*r0 - r1*r1 + d*d) / (2*d);
-    const h = Math.sqrt(Math.max(0, r0*r0 - a*a));
-    const xm = x0 + a*dx/d;
-    const ym = y0 + a*dy/d;
-    const rx = -dy * (h/d);
-    const ry = dx * (h/d);
-    const p1 = {x: xm + rx, y: ym + ry};
-    const p2 = {x: xm - rx, y: ym - ry};
-    if(Math.hypot(p1.x-p2.x,p1.y-p2.y) < EPS) return [p1];
-    return [p1,p2];
-  }
-
-  function markIntersection(pt){
-    const dot = ns('circle');
-    dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3);
-    dot.classList.add('intersection-dot');
-    svg.appendChild(dot);
-    requestAnimationFrame(()=>dot.classList.add('show'));
-    setTimeout(()=>{ dot.classList.remove('show'); setTimeout(()=>dot.remove(), 300); }, 900);
-  }
-
-  function quickMarkIntersections(){
-    const lines = shapes.filter(s=>s.type==='line');
-    const circles = shapes.filter(s=>s.type==='circle');
-    for(let i=0;i<lines.length;i++){
-      for(let j=i+1;j<lines.length;j++){
-        const p = lineLineInter(lines[i], lines[j]);
-        if(p) markIntersection(p);
-      }
-    }
-    for(let i=0;i<lines.length;i++){
-      for(let j=0;j<circles.length;j++){
-        const pts = lineCircleInter(lines[i], circles[j]);
-        pts.forEach(pt => markIntersection(pt));
-      }
-    }
-    for(let i=0;i<circles.length;i++){
-      for(let j=i+1;j<circles.length;j++){
-        const pts = circleCircleInter(circles[i], circles[j]);
-        pts.forEach(pt => markIntersection(pt));
-      }
-    }
-  }
-
-  function splitAtIntersectionsInternal(){
-    if(shapes.length === 0) return;
-    const lines = shapes.filter(s=>s.type==='line').map(s=>s);
-    const circles = shapes.filter(s=>s.type==='circle').map(s=>s);
-    const intersections = [];
-    for(let i=0;i<lines.length;i++){
-      for(let j=i+1;j<lines.length;j++){
-        const p = lineLineInter(lines[i], lines[j]);
-        if(p){ intersections.push({p, with:[lines[i],lines[j]]}); }
-      }
-    }
-    for(let i=0;i<lines.length;i++){
-      for(let j=0;j<circles.length;j++){
-        const pts = lineCircleInter(lines[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[lines[i],circles[j]]}); });
-      }
-    }
-    for(let i=0;i<circles.length;i++){
-      for(let j=i+1;j<circles.length;j++){
-        const pts = circleCircleInter(circles[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[circles[i],circles[j]]}); });
-      }
-    }
-    const newShapes = [];
-    const frag = document.createDocumentFragment();
-    lines.forEach(l => {
-      const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
-      ptsOnLine.push({x:l.x1,y:l.y1}); ptsOnLine.push({x:l.x2,y:l.y2});
-      const dx = l.x2 - l.x1, dy = l.y2 - l.y1;
-      const params = ptsOnLine.map(p => {
-        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - l.x1) / (dx || 1e-6)) : ((p.y - l.y1)/(dy || 1e-6));
-        return Math.max(0, Math.min(1, t));
-      });
-      const uniq = Array.from(new Set(params.map(t=>t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
-      for(let i=0;i<uniq.length-1;i++){
-        const ta=uniq[i], tb=uniq[i+1];
-        const ax = l.x1 + dx * ta, ay = l.y1 + dy * ta;
-        const bx = l.x1 + dx * tb, by = l.y1 + dy * tb;
-        if(Math.hypot(bx-ax,by-ay) > 2){
-          const seg = ns('line');
-          seg.classList.add('shape');
-          seg.setAttribute('x1',ax); seg.setAttribute('y1',ay); seg.setAttribute('x2',bx); seg.setAttribute('y2',by);
-          seg.setAttribute('stroke-width', l.w);
-          frag.appendChild(seg);
-          newShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by, w:l.w});
-        }
-      }
-      if(l.el && l.el.parentNode) l.el.remove();
-    });
-
-    circles.forEach(c => {
-      const N = 120;
-      const pts = [];
-      for(let i=0;i<N;i++){
-        const a = (i/N)*Math.PI*2;
-        pts.push({x: c.cx + c.r*Math.cos(a), y: c.cy + c.r*Math.sin(a), a});
-      }
-      const intsOnC = intersections.filter(it => it.with.includes(c)).map(it => it.p);
-      const idxSet = new Set();
-      pts.forEach((pt, idx) => {
-        intsOnC.forEach(ip => {
-          if(Math.hypot(pt.x-ip.x, pt.y-ip.y) < 6){ idxSet.add(idx); }
-        });
-      });
-      const idxs = Array.from(idxSet).sort((a,b)=>a-b);
-      if(idxs.length === 0){
-        const circ = ns('circle');
-        circ.classList.add('shape');
-        circ.setAttribute('cx', c.cx); circ.setAttribute('cy', c.cy); circ.setAttribute('r', c.r);
-        circ.setAttribute('stroke-width', c.w);
-        frag.appendChild(circ);
-        newShapes.push({type:'circle', el:circ, cx:c.cx,cy:c.cy,r:c.r, w:c.w});
-        if(c.el && c.el.parentNode) c.el.remove();
-        return;
-      }
-      const sorted = idxs;
-      for(let s=0;s<sorted.length;s++){
-        const i1 = sorted[s], i2 = sorted[(s+1)%sorted.length];
-        let segPts = [];
-        let i = i1;
-        while(true){
-          segPts.push(pts[i]);
-          if(i === i2) break;
-          i = (i+1)%pts.length;
-        }
-        if(segPts.length > 1){
-          const path = ns('polyline');
-          path.classList.add('shape');
-          path.setAttribute('points', segPts.map(p=>`${p.x},${p.y}`).join(' '));
-          path.setAttribute('fill','none');
-          path.setAttribute('stroke-width', c.w);
-          frag.appendChild(path);
-          newShapes.push({type:'polyline', el:path, pts:segPts, w:c.w});
-        }
-      }
-      if(c.el && c.el.parentNode) c.el.remove();
-    });
-
-    svg.appendChild(frag);
-    shapes = shapes.filter(s => !(s.type==='line' || s.type==='circle'));
-    newShapes.forEach(ns => shapes.push(ns));
-    intersections.forEach(it => markIntersection(it.p));
-    history.push({op:'split', created: newShapes});
-  }
-
-  splitBtn.addEventListener('click', splitAtIntersectionsInternal);
-
-  // keyboard shortcuts
+  // keyboard shortcuts (basic)
   window.addEventListener('keydown', (e) => {
-    if(e.key === 't' || e.key === 'T'){ setMode('trim'); }
-    if(e.key === 'd' || e.key === 'D'){ setMode('draw'); }
-    if(e.key === 'z' || e.key === 'Z'){ undo(); }
-    if(e.key === 'c' || e.key === 'C'){ clearAll(); }
-    if(e.key === 's' || e.key === 'S'){ splitAtIntersectionsInternal(); }
+    if (e.key === 'h') showHint();
+    if (e.key === 'c') checkConstruction();
+    if (e.key === 'r') resetRamp();
   });
 
-  // small-screen convenience: tapping FAB toggles toolbar when collapsed
-  fab.addEventListener('dblclick', ()=>{ collapsed = !collapsed; applyToolbar(); });
-
-  // convenience: clicking outside toolbar on small screens collapses
-  document.addEventListener('click', (ev) => {
-    if(window.innerWidth <= 860 && !toolbar.contains(ev.target) && !ev.target.closest('.fab')){
-      collapsed = true; applyToolbar();
-    }
-  });
-
-  updateStatus();
-
-  // expose some functions for debugging
-  window._edgeDraw = {shapes, splitAtIntersectionsInternal, clearAll, undo, setMode, setWidth};
-})();
+  // initial render
+  render();
 </script>
+
 </body>
 </html>
