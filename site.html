@@ -8,39 +8,46 @@
 <style>
 html, body {
   margin: 0;
-  padding: 0;
   height: 100%;
-  font-family: system-ui, sans-serif;
   background: #0f1220;
   color: #fff;
+  font-family: system-ui, sans-serif;
 }
 
-#menu, #toolbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  z-index: 10;
+canvas {
+  display: block;
 }
 
+/* MENU */
 #menu {
-  top: 40%;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  background: #0f1220;
+  z-index: 10;
 }
 
 #menu button {
   padding: 14px 22px;
-  font-size: 16px;
   border-radius: 10px;
   border: none;
   background: #3a6cff;
   color: #fff;
-  cursor: pointer;
+  font-size: 16px;
 }
 
+/* TOOLBAR */
 #toolbar {
-  bottom: 10px;
+  position: fixed;
+  bottom: 120px;
+  left: 0;
+  right: 0;
+  display: none;
+  justify-content: center;
+  gap: 8px;
 }
 
 #toolbar button {
@@ -49,30 +56,80 @@ html, body {
   border: none;
   background: #222;
   color: #fff;
-  cursor: pointer;
 }
 
-canvas {
-  display: block;
+/* MOBILE KEYS */
+#keys {
+  position: fixed;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  display: none;
+  justify-content: center;
+  gap: 30px;
+}
+
+.keypad, .rotatepad {
+  display: grid;
+  gap: 6px;
+}
+
+.keypad {
+  grid-template-columns: repeat(3, 60px);
+}
+
+.rotatepad {
+  grid-template-columns: repeat(2, 60px);
+}
+
+.key {
+  height: 50px;
+  border-radius: 10px;
+  background: #333;
+  color: #fff;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
 }
 </style>
 </head>
 
 <body>
 
-<!-- LEVEL SELECTION -->
 <div id="menu">
   <button onclick="start('easy')">Easy</button>
   <button onclick="start('medium')">Medium</button>
   <button onclick="start('hard')">Hard</button>
 </div>
 
-<!-- TOOLBAR -->
-<div id="toolbar" style="display:none">
+<div id="toolbar">
   <button onclick="restart()">Restart</button>
   <button onclick="undo()">Undo</button>
   <button onclick="redo()">Redo</button>
   <button onclick="hint()">Hint</button>
+</div>
+
+<div id="keys">
+  <div class="keypad">
+    <div></div>
+    <div class="key" onclick="cmd('w')">W</div>
+    <div></div>
+
+    <div class="key" onclick="cmd('a')">A</div>
+    <div class="key">⬤</div>
+    <div class="key" onclick="cmd('d')">D</div>
+
+    <div></div>
+    <div class="key" onclick="cmd('z')">Z</div>
+    <div></div>
+  </div>
+
+  <div class="rotatepad">
+    <div class="key" onclick="cmd('p')">P ↻</div>
+    <div class="key" onclick="cmd('m')">M ↺</div>
+  </div>
 </div>
 
 <canvas id="c"></canvas>
@@ -81,28 +138,27 @@ canvas {
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-const CM = 37.8;           // 1 cm in pixels
-const ANGLE_STEP = 5;      // degrees
+const CM = 37.8;
+const ANGLE = 5;
 
 let cx, cy;
 let angle = 0;
 let history = [];
 let redoStack = [];
-let level = "easy";
 
 function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
   cx = canvas.width / 2;
   cy = canvas.height / 2;
   redraw();
 }
-window.addEventListener("resize", resize);
+addEventListener("resize", resize);
 
-function start(lvl) {
-  level = lvl;
+function start(level) {
   document.getElementById("menu").style.display = "none";
   document.getElementById("toolbar").style.display = "flex";
+  document.getElementById("keys").style.display = "flex";
   resize();
 }
 
@@ -113,70 +169,67 @@ function restart() {
   redraw();
 }
 
-function drawLine(x1, y1, x2, y2) {
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.strokeStyle = "#00ffcc";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-}
-
-function redraw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  let x = cx, y = cy;
-
-  history.forEach(step => {
-    let rad = step.angle * Math.PI / 180;
-    let nx = x + Math.cos(rad) * step.len;
-    let ny = y + Math.sin(rad) * step.len;
-    drawLine(x, y, nx, ny);
-    x = nx; y = ny;
-  });
-
-  // center point
-  ctx.fillStyle = "#ff3366";
-  ctx.beginPath();
-  ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function addStep(len, ang) {
-  history.push({ len, angle: ang });
+function step(len, ang) {
+  history.push({ len, ang });
   redoStack = [];
   redraw();
 }
 
+function redraw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  let x = cx, y = cy;
+
+  history.forEach(s => {
+    let r = s.ang * Math.PI / 180;
+    let nx = x + Math.cos(r) * s.len;
+    let ny = y + Math.sin(r) * s.len;
+    ctx.beginPath();
+    ctx.moveTo(x,y);
+    ctx.lineTo(nx,ny);
+    ctx.strokeStyle = "#00ffcc";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    x = nx; y = ny;
+  });
+
+  ctx.fillStyle = "#ff3366";
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI*2);
+  ctx.fill();
+}
+
 function undo() {
-  if (history.length) {
+  if(history.length){
     redoStack.push(history.pop());
     redraw();
   }
 }
 
 function redo() {
-  if (redoStack.length) {
+  if(redoStack.length){
     history.push(redoStack.pop());
     redraw();
   }
 }
 
 function hint() {
-  alert("Use A D W Z to draw\nP / M to rotate by 5°");
+  alert("A D W Z = 1cm\nP/M = rotate 5°");
 }
 
-document.addEventListener("keydown", e => {
-  if (!document.getElementById("toolbar").style.display) return;
-
-  switch (e.key.toLowerCase()) {
-    case "a": addStep(CM, 180 + angle); break;
-    case "d": addStep(CM, 0 + angle); break;
-    case "w": addStep(CM, -90 + angle); break;
-    case "z": addStep(CM, 90 + angle); break;
-    case "p": angle += ANGLE_STEP; break;
-    case "m": angle -= ANGLE_STEP; break;
+/* COMMAND HANDLER */
+function cmd(k){
+  switch(k){
+    case "a": step(CM, 180 + angle); break;
+    case "d": step(CM, angle); break;
+    case "w": step(CM, -90 + angle); break;
+    case "z": step(CM, 90 + angle); break;
+    case "p": angle += ANGLE; break;
+    case "m": angle -= ANGLE; break;
   }
-});
+}
+
+/* DESKTOP KEYBOARD */
+addEventListener("keydown", e => cmd(e.key.toLowerCase()));
 </script>
 
 </body>
