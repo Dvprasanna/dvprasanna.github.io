@@ -2,96 +2,79 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Keyboard Drawing Trainer</title>
+<title>Drawing Task Trainer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
-html, body {
-  margin: 0;
-  height: 100%;
-  background: #0f1220;
-  color: #fff;
-  font-family: system-ui, sans-serif;
+:root{
+  --topbar-h: 90px;
+  --keypad-h: 190px;
+}
+html,body{
+  margin:0;height:100%;background:#0f1220;color:#fff;
+  font-family:system-ui,sans-serif;overflow:hidden;
 }
 
-canvas {
-  display: block;
-}
-
-/* MENU */
-#menu {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  align-items: center;
-  background: #0f1220;
-  z-index: 10;
-}
-
-#menu button {
-  padding: 14px 22px;
-  border-radius: 10px;
-  border: none;
-  background: #3a6cff;
-  color: #fff;
-  font-size: 16px;
+/* TOP PANEL */
+#top {
+  position:fixed;top:env(safe-area-inset-top);
+  left:0;right:0;height:var(--topbar-h);
+  background:#151833;z-index:10;
+  display:none;flex-direction:column;
+  justify-content:center;align-items:center;
+  gap:4px;font-size:14px;
 }
 
 /* TOOLBAR */
-#toolbar {
-  position: fixed;
-  bottom: 120px;
-  left: 0;
-  right: 0;
-  display: none;
-  justify-content: center;
-  gap: 8px;
+#toolbar{
+  display:flex;gap:6px;
+}
+#toolbar button{
+  padding:6px 10px;border-radius:6px;
+  border:none;background:#2b2f55;color:#fff;
 }
 
-#toolbar button {
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: none;
-  background: #222;
-  color: #fff;
+/* MENU */
+#menu{
+  position:fixed;inset:0;
+  display:flex;gap:12px;
+  justify-content:center;align-items:center;
+  background:#0f1220;z-index:20;
+}
+#menu button{
+  padding:14px 22px;border-radius:10px;
+  border:none;background:#3a6cff;color:#fff;
 }
 
-/* MOBILE KEYS */
-#keys {
-  position: fixed;
-  bottom: 10px;
-  left: 0;
-  right: 0;
-  display: none;
-  justify-content: center;
-  gap: 30px;
+/* CANVAS */
+canvas{
+  position:fixed;
+  top:calc(var(--topbar-h) + env(safe-area-inset-top));
+  bottom:calc(var(--keypad-h) + env(safe-area-inset-bottom));
+  left:0;right:0;
 }
 
-.keypad, .rotatepad {
-  display: grid;
-  gap: 6px;
+/* KEYS */
+#keys{
+  position:fixed;bottom:env(safe-area-inset-bottom);
+  left:0;right:0;height:var(--keypad-h);
+  display:none;justify-content:center;gap:26px;
+  background:#11142c;
 }
-
-.keypad {
-  grid-template-columns: repeat(3, 60px);
+.keypad{
+  display:grid;
+  grid-template-columns:repeat(3,60px);
+  gap:6px;
 }
-
-.rotatepad {
-  grid-template-columns: repeat(2, 60px);
+.rotatepad{
+  display:grid;
+  grid-template-columns:repeat(2,60px);
+  gap:6px;
 }
-
-.key {
-  height: 50px;
-  border-radius: 10px;
-  background: #333;
-  color: #fff;
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  user-select: none;
+.key{
+  height:50px;border-radius:10px;
+  background:#2b2f55;
+  display:flex;align-items:center;justify-content:center;
 }
 </style>
 </head>
@@ -104,28 +87,23 @@ canvas {
   <button onclick="start('hard')">Hard</button>
 </div>
 
-<div id="toolbar">
-  <button onclick="restart()">Restart</button>
-  <button onclick="undo()">Undo</button>
-  <button onclick="redo()">Redo</button>
-  <button onclick="hint()">Hint</button>
+<div id="top">
+  <div id="taskText"></div>
+  <div id="progress"></div>
+  <div id="toolbar">
+    <button onclick="restart()">Restart</button>
+    <button onclick="undo()">Undo</button>
+    <button onclick="redo()">Redo</button>
+    <button onclick="hint()">Hint</button>
+  </div>
 </div>
 
 <div id="keys">
   <div class="keypad">
-    <div></div>
-    <div class="key" onclick="cmd('w')">W</div>
-    <div></div>
-
-    <div class="key" onclick="cmd('a')">A</div>
-    <div class="key">⬤</div>
-    <div class="key" onclick="cmd('d')">D</div>
-
-    <div></div>
-    <div class="key" onclick="cmd('z')">Z</div>
-    <div></div>
+    <div></div><div class="key" onclick="cmd('w')">W</div><div></div>
+    <div class="key" onclick="cmd('a')">A</div><div class="key">⬤</div><div class="key" onclick="cmd('d')">D</div>
+    <div></div><div class="key" onclick="cmd('z')">Z</div><div></div>
   </div>
-
   <div class="rotatepad">
     <div class="key" onclick="cmd('p')">P ↻</div>
     <div class="key" onclick="cmd('m')">M ↺</div>
@@ -135,101 +113,130 @@ canvas {
 <canvas id="c"></canvas>
 
 <script>
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
+const c=document.getElementById("c"),ctx=c.getContext("2d");
+const CM=37.8, STEP=5;
 
-const CM = 37.8;
-const ANGLE = 5;
+let cx,cy,angle=0;
+let hist=[],redoStack=[];
+let level,tasks=[],taskIndex=0;
 
-let cx, cy;
-let angle = 0;
-let history = [];
-let redoStack = [];
+const TASKS={
+ easy:[
+  {txt:"Draw 3 cm on +X axis", ang:0, cm:3},
+  {txt:"Draw 2 cm on -X axis", ang:180, cm:2},
+  {txt:"Draw 4 cm on +Y axis", ang:-90, cm:4},
+  {txt:"Draw 1 cm on -Y axis", ang:90, cm:1},
+  {txt:"Draw 5 cm on +X axis", ang:0, cm:5},
+  {txt:"Draw 2 cm on +Y axis", ang:-90, cm:2},
+  {txt:"Draw 3 cm on -X axis", ang:180, cm:3},
+  {txt:"Draw 1 cm on +X axis", ang:0, cm:1},
+  {txt:"Draw 4 cm on -Y axis", ang:90, cm:4},
+  {txt:"Draw 2 cm on +X axis", ang:0, cm:2}
+ ],
+ medium:[
+  {txt:"Draw 3 cm at 45°", ang:45, cm:3},
+  {txt:"Draw 2 cm at -45°", ang:-45, cm:2},
+  {txt:"Draw 4 cm at 90°", ang:90, cm:4},
+  {txt:"Draw 1 cm at 135°", ang:135, cm:1},
+  {txt:"Draw 5 cm at 0°", ang:0, cm:5},
+  {txt:"Draw 2 cm at 30°", ang:30, cm:2},
+  {txt:"Draw 3 cm at -60°", ang:-60, cm:3},
+  {txt:"Draw 1 cm at 120°", ang:120, cm:1},
+  {txt:"Draw 4 cm at -90°", ang:-90, cm:4},
+  {txt:"Draw 2 cm at 150°", ang:150, cm:2}
+ ],
+ hard:[
+  {txt:"Draw 5 cm at 25°", ang:25, cm:5},
+  {txt:"Draw 3 cm at -70°", ang:-70, cm:3},
+  {txt:"Draw 4 cm at 110°", ang:110, cm:4},
+  {txt:"Draw 2 cm at -155°", ang:-155, cm:2},
+  {txt:"Draw 6 cm at 10°", ang:10, cm:6},
+  {txt:"Draw 3 cm at 85°", ang:85, cm:3},
+  {txt:"Draw 5 cm at -120°", ang:-120, cm:5},
+  {txt:"Draw 2 cm at 170°", ang:170, cm:2},
+  {txt:"Draw 4 cm at -30°", ang:-30, cm:4},
+  {txt:"Draw 3 cm at 60°", ang:60, cm:3}
+ ]
+};
 
-function resize() {
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
-  cx = canvas.width / 2;
-  cy = canvas.height / 2;
+function resize(){
+  c.width=c.clientWidth;
+  c.height=c.clientHeight;
+  cx=c.width/2;cy=c.height/2;
   redraw();
 }
-addEventListener("resize", resize);
+addEventListener("resize",resize);
 
-function start(level) {
-  document.getElementById("menu").style.display = "none";
-  document.getElementById("toolbar").style.display = "flex";
-  document.getElementById("keys").style.display = "flex";
-  resize();
+function start(l){
+  level=l;
+  tasks=[...TASKS[l]];
+  taskIndex=0;
+  menu.style.display="none";
+  top.style.display="flex";
+  keys.style.display="flex";
+  restart();
 }
 
-function restart() {
-  history = [];
-  redoStack = [];
-  angle = 0;
+function restart(){
+  hist=[];redoStack=[];angle=0;
+  updateTask();resize();
+}
+
+function updateTask(){
+  taskText.textContent=tasks[taskIndex].txt;
+  progress.textContent=`Task ${taskIndex+1} / 10`;
+}
+
+function step(len,ang){
+  hist.push({len,ang});
+  redoStack=[];
   redraw();
+  checkTask();
 }
 
-function step(len, ang) {
-  history.push({ len, ang });
-  redoStack = [];
-  redraw();
-}
-
-function redraw() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  let x = cx, y = cy;
-
-  history.forEach(s => {
-    let r = s.ang * Math.PI / 180;
-    let nx = x + Math.cos(r) * s.len;
-    let ny = y + Math.sin(r) * s.len;
-    ctx.beginPath();
-    ctx.moveTo(x,y);
-    ctx.lineTo(nx,ny);
-    ctx.strokeStyle = "#00ffcc";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    x = nx; y = ny;
+function redraw(){
+  ctx.clearRect(0,0,c.width,c.height);
+  let x=cx,y=cy;
+  hist.forEach(s=>{
+    let r=s.ang*Math.PI/180;
+    let nx=x+Math.cos(r)*s.len;
+    let ny=y+Math.sin(r)*s.len;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(nx,ny);
+    ctx.strokeStyle="#00ffcc";ctx.lineWidth=2;ctx.stroke();
+    x=nx;y=ny;
   });
-
-  ctx.fillStyle = "#ff3366";
-  ctx.beginPath();
-  ctx.arc(cx, cy, 4, 0, Math.PI*2);
-  ctx.fill();
 }
 
-function undo() {
-  if(history.length){
-    redoStack.push(history.pop());
-    redraw();
+function checkTask(){
+  const t=tasks[taskIndex];
+  if(!t)return;
+  let total=hist.reduce((a,b)=>a+b.len,0)/CM;
+  let last=hist[hist.length-1];
+  if(Math.abs(total-t.cm)<0.2 && Math.abs((last.ang%360)-t.ang)<5){
+    taskIndex++;
+    if(taskIndex<tasks.length){
+      hist=[];angle=0;
+      updateTask();redraw();
+    }else{
+      alert("🎉 Stage completed!");
+    }
   }
 }
 
-function redo() {
-  if(redoStack.length){
-    history.push(redoStack.pop());
-    redraw();
-  }
-}
+function undo(){if(hist.length){redoStack.push(hist.pop());redraw();}}
+function redo(){if(redoStack.length){hist.push(redoStack.pop());redraw();}}
+function hint(){alert(taskText.textContent);}
 
-function hint() {
-  alert("A D W Z = 1cm\nP/M = rotate 5°");
-}
-
-/* COMMAND HANDLER */
 function cmd(k){
-  switch(k){
-    case "a": step(CM, 180 + angle); break;
-    case "d": step(CM, angle); break;
-    case "w": step(CM, -90 + angle); break;
-    case "z": step(CM, 90 + angle); break;
-    case "p": angle += ANGLE; break;
-    case "m": angle -= ANGLE; break;
-  }
+  if(k==="a")step(CM,180+angle);
+  if(k==="d")step(CM,angle);
+  if(k==="w")step(CM,-90+angle);
+  if(k==="z")step(CM,90+angle);
+  if(k==="p")angle+=STEP;
+  if(k==="m")angle-=STEP;
 }
 
-/* DESKTOP KEYBOARD */
-addEventListener("keydown", e => cmd(e.key.toLowerCase()));
+addEventListener("keydown",e=>cmd(e.key.toLowerCase()));
 </script>
 
 </body>
