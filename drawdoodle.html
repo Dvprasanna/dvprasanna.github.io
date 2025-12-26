@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draw and Guess Game - AI Guesses Your Doodle</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@latest"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #f0f0f0; }
+        h1 { color: #333; }
+        canvas { border: 2px solid #333; background: white; cursor: crosshair; }
+        #controls { margin: 20px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; cursor: pointer; }
+        #guesses { margin-top: 20px; font-size: 18px; min-height: 50px; }
+        #status { font-style: italic; color: #666; }
+    </style>
+</head>
+<body>
+    <h1>Draw and Guess Game</h1>
+    <p>Draw something on the canvas. The AI will try to guess what it is!</p>
+    <p>To help the AI learn better, first add some examples by selecting a class, drawing, and clicking "Add Example".</p>
+    
+    <canvas id="canvas" width="280" height="280"></canvas>
+    
+    <div id="controls">
+        <select id="classSelect">
+            <option value="apple">Apple</option>
+            <option value="banana">Banana</option>
+            <option value="cat">Cat</option>
+            <option value="dog">Dog</option>
+            <option value="house">House</option>
+            <option value="tree">Tree</option>
+            <option value="car">Car</option>
+            <option value="sun">Sun</option>
+            <!-- Add more classes if you want -->
+        </select>
+        <button id="addExample">Add Example to Selected Class</button>
+        <button id="clear">Clear Canvas</button>
+        <button id="predict">Guess My Drawing!</button>
+    </div>
+    
+    <div id="guesses"></div>
+    <div id="status">Status: Ready</div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const clearBtn = document.getElementById('clear');
+        const addBtn = document.getElementById('addExample');
+        const predictBtn = document.getElementById('predict');
+        const classSelect = document.getElementById('classSelect');
+        const guessesDiv = document.getElementById('guesses');
+        const statusDiv = document.getElementById('status');
+
+        let isDrawing = false;
+        let classifier;
+
+        // Initialize KNN classifier
+        async function init() {
+            statusDiv.textContent = 'Loading TensorFlow.js...';
+            classifier = knnClassifier.create();
+            statusDiv.textContent = 'Ready! Start by adding examples to classes.';
+            setupDrawing();
+        }
+
+        function setupDrawing() {
+            ctx.lineWidth = 10;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'black';
+
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing);
+
+            // Touch support for mobile
+            canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(e.touches[0]); });
+            canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e.touches[0]); });
+            canvas.addEventListener('touchend', stopDrawing);
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            ctx.beginPath();
+            ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+            ctx.stroke();
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        clearBtn.onclick = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            guessesDiv.innerHTML = '';
+        };
+
+        addBtn.onclick = async () => {
+            const imgData = getImageData();
+            const classId = classSelect.value;
+            classifier.addExample(imgData, classId);
+            statusDiv.textContent = `Added example to "${classId}". Total examples: ${await classifier.getNumExamples() || 0}`;
+        };
+
+        predictBtn.onclick = async () => {
+            if (classifier.getNumClasses() === 0) {
+                guessesDiv.textContent = 'No classes trained yet! Add some examples first.';
+                return;
+            }
+            const imgData = getImageData();
+            const result = await classifier.predictClass(imgData);
+            guessesDiv.innerHTML = `<strong>AI Guess:</strong> ${result.label} (confidence: ${(result.confidences[result.label] * 100).toFixed(2)}%)<br>`;
+            if (result.confidences) {
+                const top3 = Object.entries(result.confidences)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3);
+                guessesDiv.innerHTML += '<strong>Top guesses:</strong><br>';
+                top3.forEach(([label, conf]) => {
+                    guessesDiv.innerHTML += `${label}: ${(conf * 100).toFixed(2)}%<br>`;
+                });
+            }
+        };
+
+        function getImageData() {
+            // Resize to 28x28 grayscale for better classification (like MNIST style)
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 28;
+            tempCanvas.height = 28;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(canvas, 0, 0, 28, 28);
+            const data = tempCtx.getImageData(0, 0, 28, 28).data;
+            
+            // Convert to grayscale tensor
+            const imgArray = new Float32Array(784);
+            for (let i = 0; i < data.length; i += 4) {
+                const avg = (data[i] + data[i+1] + data[i+2]) / 3;
+                imgArray[i / 4] = (255 - avg) / 255;  // Invert and normalize
+            }
+            return tf.tensor([imgArray]);
+        }
+
+        init();
+    </script>
+</body>
+</html>
