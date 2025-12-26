@@ -3,24 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Draw and Guess Game - Remembers Your Training!</title>
+    <title>Draw and Guess Game - Mouse & Touch Fixed</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@latest"></script>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; background: #f0f0f0; margin: 0; padding: 10px; touch-action: none; }
-        h1 { color: #333; }
-        canvas { border: 2px solid #333; background: white; touch-action: none; max-width: 100%; height: auto; }
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            background: #f0f0f0; 
+            margin: 0;
+            padding: 10px;
+        }
+        h1 { color: #333; margin: 20px 0 10px; }
+        p { max-width: 600px; margin: 0 auto 20px; }
+        canvas { 
+            border: 3px solid #333; 
+            background: white; 
+            touch-action: none; /* Only on canvas - prevents scrolling while drawing with finger */
+            max-width: 100%; 
+            height: auto; 
+            cursor: crosshair;
+        }
         #controls { margin: 20px; }
-        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
-        #guesses { margin-top: 20px; font-size: 18px; min-height: 50px; }
-        #status { font-style: italic; color: #666; }
+        button, select { 
+            padding: 12px 20px; 
+            margin: 8px; 
+            font-size: 16px; 
+            min-width: 140px;
+        }
+        #guesses { 
+            margin: 30px auto; 
+            font-size: 20px; 
+            min-height: 80px; 
+            max-width: 600px;
+            background: #fff;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #status { font-style: italic; color: #666; margin: 10px; }
     </style>
 </head>
 <body>
     <h1>Draw and Guess Game</h1>
-    <p>Draw with your finger! This version <strong>remembers</strong> your training even if you close the browser.</p>
+    <p>Works great with <strong>wireless mouse</strong> or finger! Training is saved automatically.</p>
     
-    <canvas id="canvas" width="280" height="280"></canvas>
+    <canvas id="canvas" width="400" height="400"></canvas>
+    <!-- Larger canvas (400x400) for better mouse precision -->
     
     <div id="controls">
         <select id="classSelect">
@@ -32,11 +61,14 @@
             <option value="tree">Tree</option>
             <option value="car">Car</option>
             <option value="sun">Sun</option>
+            <option value="smile">Smile Face</option>
+            <option value="heart">Heart</option>
         </select>
+        <br>
         <button id="addExample">Add Example</button>
         <button id="clear">Clear Canvas</button>
         <button id="predict">Guess My Drawing!</button>
-        <button id="resetTraining">Reset All Training (Forget Everything)</button>
+        <button id="resetTraining">Reset All Training</button>
     </div>
     
     <div id="guesses"></div>
@@ -50,23 +82,28 @@
         let classifier = knnClassifier.create();
         let isDrawing = false;
 
-        // LocalStorage key
         const STORAGE_KEY = 'drawGuessKnnData';
 
         async function init() {
             setupDrawing();
             await loadFromLocalStorage();
-            statusDiv.textContent = 'Ready! Training data loaded if any existed.';
+            statusDiv.textContent = 'Ready! Use your wireless mouse to draw.';
         }
 
         function getEventPos(e) {
             const rect = canvas.getBoundingClientRect();
-            const touch = e.touches ? e.touches[0] : e;
-            return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+            // Handle both mouse and touch events uniformly
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
         }
 
         function startDrawing(e) {
-            e.preventDefault();
+            // For touch, prevent scrolling/zoom
+            if (e.touches) e.preventDefault();
             isDrawing = true;
             const pos = getEventPos(e);
             ctx.beginPath();
@@ -74,28 +111,30 @@
         }
 
         function draw(e) {
-            e.preventDefault();
             if (!isDrawing) return;
+            // Prevent default only for touch to avoid scrolling
+            if (e.touches) e.preventDefault();
             const pos = getEventPos(e);
             ctx.lineTo(pos.x, pos.y);
             ctx.stroke();
         }
 
         function stopDrawing(e) {
-            if (e) e.preventDefault();
             isDrawing = false;
         }
 
         function setupDrawing() {
-            ctx.lineWidth = 10;
+            ctx.lineWidth = 12;  // Nice thickness for mouse drawing
             ctx.lineCap = 'round';
             ctx.strokeStyle = 'black';
 
+            // Mouse events
             canvas.addEventListener('mousedown', startDrawing);
             canvas.addEventListener('mousemove', draw);
             canvas.addEventListener('mouseup', stopDrawing);
             canvas.addEventListener('mouseout', stopDrawing);
 
+            // Touch events (still work perfectly on phones)
             canvas.addEventListener('touchstart', startDrawing);
             canvas.addEventListener('touchmove', draw);
             canvas.addEventListener('touchend', stopDrawing);
@@ -118,11 +157,77 @@
 
         document.getElementById('predict').onclick = async () => {
             if (classifier.getNumClasses() === 0) {
-                guessesDiv.textContent = 'No training yet! Add examples first.';
+                guessesDiv.textContent = 'No training yet! Add some examples first.';
                 return;
             }
             const imgData = getImageData();
             const result = await classifier.predictClass(imgData);
-            guessesDiv.innerHTML = `<strong>Best guess:</strong> ${result.label} (${(result.confidences[result.label] * 100).toFixed(1)}%)<br><br><strong>Top 3:</strong><br>`;
+            guessesDiv.innerHTML = `<strong>Best Guess:</strong> ${result.label} (${(result.confidences[result.label] * 100).toFixed(1)}%)<br><br><strong>Top 3:</strong><br>`;
             Object.entries(result.confidences)
                 .sort((a, b) => b[1] - a[1])
+                .slice(0, 3)
+                .forEach(([label, conf]) => {
+                    guessesDiv.innerHTML += `${label}: ${(conf * 100).toFixed(1)}%<br>`;
+                });
+        };
+
+        document.getElementById('resetTraining').onclick = async () => {
+            if (confirm('Delete all training data permanently?')) {
+                classifier.clearAllExamples();
+                localStorage.removeItem(STORAGE_KEY);
+                statusDiv.textContent = 'All training cleared.';
+                guessesDiv.innerHTML = '';
+            }
+        };
+
+        function getImageData() {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 28;
+            tempCanvas.height = 28;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(canvas, 0, 0, 28, 28);
+            const data = tempCtx.getImageData(0, 0, 28, 28).data;
+            const imgArray = new Float32Array(784);
+            for (let i = 0; i < data.length; i += 4) {
+                const avg = (data[i] + data[i+1] + data[i+2]) / 3;
+                imgArray[i / 4] = (255 - avg) / 255;
+            }
+            return tf.tensor([imgArray]);
+        }
+
+        async function saveToLocalStorage() {
+            const dataset = classifier.getClassifierDataset();
+            const json = {};
+            Object.keys(dataset).forEach(classId => {
+                json[classId] = Array.from(dataset[classId].dataSync());
+            });
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(json));
+        }
+
+        async function loadFromLocalStorage() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) {
+                statusDiv.textContent = 'No saved training found. Start adding examples!';
+                return;
+            }
+            try {
+                const json = JSON.parse(saved);
+                const dataset = {};
+                Object.keys(json).forEach(classId => {
+                    const tensor = tf.tensor(json[classId], [Math.floor(json[classId].length / 784), 784]);
+                    dataset[classId] = tensor;
+                });
+                classifier.setClassifierDataset(dataset);
+                const numClasses = Object.keys(dataset).length;
+                const numExamples = await classifier.getNumExamples();
+                statusDiv.textContent = `Loaded ${numClasses} classes with ${numExamples} examples total. Ready to draw!`;
+            } catch (e) {
+                console.error('Load failed', e);
+                statusDiv.textContent = 'Error loading saved data.';
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
