@@ -3,37 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Draw and Guess Game - AI Guesses Your Doodle</title>
+    <title>Draw and Guess Game - Remembers Your Training!</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@latest"></script>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            text-align: center; 
-            background: #f0f0f0; 
-            margin: 0;
-            padding: 10px;
-            touch-action: none; /* Helps prevent scrolling issues on touch */
-        }
+        body { font-family: Arial, sans-serif; text-align: center; background: #f0f0f0; margin: 0; padding: 10px; touch-action: none; }
         h1 { color: #333; }
-        canvas { 
-            border: 2px solid #333; 
-            background: white; 
-            cursor: crosshair; 
-            touch-action: none;
-            max-width: 100%;
-            height: auto;
-        }
+        canvas { border: 2px solid #333; background: white; touch-action: none; max-width: 100%; height: auto; }
         #controls { margin: 20px; }
-        button { padding: 10px 20px; margin: 10px; font-size: 16px; cursor: pointer; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
         #guesses { margin-top: 20px; font-size: 18px; min-height: 50px; }
         #status { font-style: italic; color: #666; }
     </style>
 </head>
 <body>
     <h1>Draw and Guess Game</h1>
-    <p>Draw with your finger on iPhone! The AI will try to guess what it is.</p>
-    <p>To train: Select a class, draw, tap "Add Example". Add several for better accuracy.</p>
+    <p>Draw with your finger! This version <strong>remembers</strong> your training even if you close the browser.</p>
     
     <canvas id="canvas" width="280" height="280"></canvas>
     
@@ -47,43 +32,37 @@
             <option value="tree">Tree</option>
             <option value="car">Car</option>
             <option value="sun">Sun</option>
-            <!-- Add more if you like -->
         </select>
         <button id="addExample">Add Example</button>
         <button id="clear">Clear Canvas</button>
         <button id="predict">Guess My Drawing!</button>
+        <button id="resetTraining">Reset All Training (Forget Everything)</button>
     </div>
     
     <div id="guesses"></div>
-    <div id="status">Status: Ready</div>
+    <div id="status">Status: Loading...</div>
 
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        const clearBtn = document.getElementById('clear');
-        const addBtn = document.getElementById('addExample');
-        const predictBtn = document.getElementById('predict');
-        const classSelect = document.getElementById('classSelect');
         const guessesDiv = document.getElementById('guesses');
         const statusDiv = document.getElementById('status');
-
+        let classifier = knnClassifier.create();
         let isDrawing = false;
-        let classifier;
+
+        // LocalStorage key
+        const STORAGE_KEY = 'drawGuessKnnData';
 
         async function init() {
-            statusDiv.textContent = 'Loading TensorFlow.js...';
-            classifier = knnClassifier.create();
-            statusDiv.textContent = 'Ready! Draw with your finger.';
             setupDrawing();
+            await loadFromLocalStorage();
+            statusDiv.textContent = 'Ready! Training data loaded if any existed.';
         }
 
         function getEventPos(e) {
             const rect = canvas.getBoundingClientRect();
             const touch = e.touches ? e.touches[0] : e;
-            return {
-                x: touch.clientX - rect.left,
-                y: touch.clientY - rect.top
-            };
+            return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
         }
 
         function startDrawing(e) {
@@ -112,66 +91,38 @@
             ctx.lineCap = 'round';
             ctx.strokeStyle = 'black';
 
-            // Mouse events (for desktop)
             canvas.addEventListener('mousedown', startDrawing);
             canvas.addEventListener('mousemove', draw);
             canvas.addEventListener('mouseup', stopDrawing);
             canvas.addEventListener('mouseout', stopDrawing);
 
-            // Touch events (for iPhone/mobile)
             canvas.addEventListener('touchstart', startDrawing);
             canvas.addEventListener('touchmove', draw);
             canvas.addEventListener('touchend', stopDrawing);
             canvas.addEventListener('touchcancel', stopDrawing);
         }
 
-        clearBtn.onclick = () => {
+        document.getElementById('clear').onclick = () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             guessesDiv.innerHTML = '';
         };
 
-        addBtn.onclick = async () => {
+        document.getElementById('addExample').onclick = async () => {
             const imgData = getImageData();
-            const classId = classSelect.value;
+            const classId = document.getElementById('classSelect').value;
             classifier.addExample(imgData, classId);
-            const num = await classifier.getNumExamples() || 0;
-            statusDiv.textContent = `Added to "${classId}". Total examples: ${num}`;
+            await saveToLocalStorage();
+            const num = await classifier.getNumExamples();
+            statusDiv.textContent = `Added "${classId}". Total examples: ${num}`;
         };
 
-        predictBtn.onclick = async () => {
+        document.getElementById('predict').onclick = async () => {
             if (classifier.getNumClasses() === 0) {
-                guessesDiv.textContent = 'Train some classes first!';
+                guessesDiv.textContent = 'No training yet! Add examples first.';
                 return;
             }
             const imgData = getImageData();
             const result = await classifier.predictClass(imgData);
-            guessesDiv.innerHTML = `<strong>AI Guess:</strong> ${result.label} (confidence: ${(result.confidences[result.label] * 100).toFixed(2)}%)<br>`;
-            const top3 = Object.entries(result.confidences)
+            guessesDiv.innerHTML = `<strong>Best guess:</strong> ${result.label} (${(result.confidences[result.label] * 100).toFixed(1)}%)<br><br><strong>Top 3:</strong><br>`;
+            Object.entries(result.confidences)
                 .sort((a, b) => b[1] - a[1])
-                .slice(0, 3);
-            guessesDiv.innerHTML += '<strong>Top guesses:</strong><br>';
-            top3.forEach(([label, conf]) => {
-                guessesDiv.innerHTML += `${label}: ${(conf * 100).toFixed(2)}%<br>`;
-            });
-        };
-
-        function getImageData() {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = 28;
-            tempCanvas.height = 28;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(canvas, 0, 0, 28, 28);
-            const data = tempCtx.getImageData(0, 0, 28, 28).data;
-            
-            const imgArray = new Float32Array(784);
-            for (let i = 0; i < data.length; i += 4) {
-                const avg = (data[i] + data[i+1] + data[i+2]) / 3;
-                imgArray[i / 4] = (255 - avg) / 255;
-            }
-            return tf.tensor([imgArray]);
-        }
-
-        init();
-    </script>
-</body>
-</html>
