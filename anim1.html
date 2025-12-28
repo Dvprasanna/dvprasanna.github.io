@@ -2,42 +2,26 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>anim1 – Professional Scissor Animation</title>
+<title>anim1 – Professional Scissor Animator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body {
-  margin: 0;
-  background: #c0c0c0;
-  font-family: sans-serif;
-}
-canvas {
-  display: block;
-  margin: auto;
-  background: #f5f5f5;
-  touch-action: none;
-}
-.controls {
-  text-align: center;
-  padding: 8px;
-  background: #ddd;
-}
-button {
-  margin: 4px;
-  padding: 6px 12px;
-}
+body { margin:0; background:#bfbfbf; font-family:sans-serif; }
+canvas { display:block; margin:auto; background:#f6f6f6; touch-action:none; }
+.controls { text-align:center; padding:8px; background:#ddd; }
+button { margin:4px; padding:6px 12px; }
 </style>
 </head>
 <body>
 
 <div class="controls">
-  <button id="rectBtn">1. Draw Rect</button>
-  <button id="moveBtn">2. Movement</button>
+  <button id="rectBtn">1. Rect</button>
+  <button id="moveBtn">2. Move</button>
   <button id="animBtn">Anim</button>
   <button id="dirBtn">Dir: CW</button>
   <button id="resetBtn">Reset</button>
 </div>
 
-<canvas id="c" width="400" height="260"></canvas>
+<canvas id="c" width="420" height="260"></canvas>
 
 <script>
 /* ================= CORE ================= */
@@ -46,55 +30,50 @@ const ctx = canvas.getContext("2d");
 const TAU = Math.PI * 2;
 
 /* ================= STATIC SCISSOR ================= */
-// V-shaped, non-degenerate
-const baseScissor = [
-  { a:{x:200,y:130}, b:{x:320,y:90} },
-  { a:{x:200,y:130}, b:{x:80,y:170} }
+const BASE_SCISSOR = [
+  { a:{x:210,y:130}, b:{x:340,y:90} },   // blade A
+  { a:{x:210,y:130}, b:{x:80,y:170} }    // blade B
 ];
-let scissor = structuredClone(baseScissor);
+
+let scissor = structuredClone(BASE_SCISSOR);
 
 /* ================= STATE ================= */
-const State = { IDLE:0, RECT:1, MOVE:2 };
-let state = State.IDLE;
-
-/* Rectangle (4-point model) */
-let rectPts = [];
+let rectPoints = [];
 let rect = null;
 
-/* Motion roles */
-let pivot = null;
-let startRef = null;
-let endRef = null;
+let pivot = null;       // 🔴 geometry
+let startRef = null;    // 🟡 geometry
+let endRef = null;      // 🟢 anywhere
 
-/* Animation */
 let animating = false;
 let t = 0;
-let timeDir = 1;       // reflection (open / close)
-let rotationDir = 1;   // CW / CCW
+let timeDir = 1;        // open / close
+let rotationDir = 1;    // CW / CCW
 
 /* ================= MATH ================= */
-function pos(e){
+const pos = e => {
   const r = canvas.getBoundingClientRect();
   const p = e.touches ? e.touches[0] : e;
   return { x:p.clientX - r.left, y:p.clientY - r.top };
-}
-function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
-function angle(a,b){ return Math.atan2(b.y-a.y, b.x-a.x); }
-function norm(a){ return (a % TAU + TAU) % TAU; }
+};
+
+const dist = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
+const angle = (a,b) => Math.atan2(b.y-a.y,b.x-a.x);
+const norm = a => (a % TAU + TAU) % TAU;
 
 function lerpAngle(a0,a1,t,dir){
   a0 = norm(a0); a1 = norm(a1);
   let d = a1 - a0;
-  if(dir===1 && d<0) d+=TAU;
-  if(dir===-1 && d>0) d-=TAU;
-  return a0 + d*t;
+  if(dir === 1 && d < 0) d += TAU;
+  if(dir === -1 && d > 0) d -= TAU;
+  return a0 + d * t;
 }
 
 function rotate(p,c,a){
   const dx=p.x-c.x, dy=p.y-c.y;
   return {
-    x: c.x + dx*Math.cos(a) - dy*Math.sin(a),
-    y: c.y + dx*Math.sin(a) + dy*Math.cos(a)
+    x:c.x + dx*Math.cos(a) - dy*Math.sin(a),
+    y:c.y + dx*Math.sin(a) + dy*Math.cos(a)
   };
 }
 
@@ -116,7 +95,6 @@ function dot(p,col,r=5){
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Rectangle (only after 4th click)
   if(rect){
     ctx.save();
     ctx.translate(rect.x,rect.y);
@@ -126,9 +104,8 @@ function draw(){
     ctx.restore();
   }
 
-  // Scissor
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = "#111";
+  ctx.lineWidth=6;
+  ctx.strokeStyle="#111";
   scissor.forEach(l=>{
     ctx.beginPath();
     ctx.moveTo(l.a.x,l.a.y);
@@ -136,36 +113,31 @@ function draw(){
     ctx.stroke();
   });
 
-  // Role markers
   if(pivot) dot(pivot,"red");
   if(startRef) dot(startRef,"yellow");
   if(endRef) dot(endRef,"lime");
 
-  // Rect click points preview
-  ctx.fillStyle="#333";
-  rectPts.forEach(p=>dot(p,"#333",4));
+  rectPoints.forEach(p=>dot(p,"#333",4));
 }
 
 /* ================= LOOP ================= */
 function loop(){
-  if(animating && rect && pivot && startRef && endRef){
-    t += 0.02 * timeDir;
+  if(animating && pivot && startRef && endRef){
+    t += 0.015 * timeDir;
 
     if(t >= 1){ t = 1; timeDir = -1; }
     if(t <= 0){ t = 0; timeDir = 1; }
 
-    const startAngle = angle(pivot, startRef);
-    const endAngle   = angle(pivot, endRef);
+    const aStart = angle(pivot,startRef);
+    const aEnd   = angle(pivot,endRef);
 
-    const curAngle =
-      lerpAngle(startAngle, endAngle, t, rotationDir);
+    const cur = lerpAngle(aStart,aEnd,t,rotationDir);
+    const delta = cur - aStart;
 
-    const delta = curAngle - startAngle;
-
-    scissor = structuredClone(baseScissor);
+    scissor = structuredClone(BASE_SCISSOR);
     scissor.forEach(seg=>{
-      if(insideRect(seg.b, rect)){
-        seg.b = rotate(seg.b, pivot, delta);
+      if(!rect || insideRect(seg.b,rect)){
+        seg.b = rotate(seg.b,pivot,delta);
       }
     });
   }
@@ -179,11 +151,11 @@ loop();
 canvas.addEventListener("pointerdown",e=>{
   const m = pos(e);
 
-  // Rectangle mode
-  if(state === State.RECT){
-    rectPts.push(m);
-    if(rectPts.length === 4){
-      const [R1,R2,R3] = rectPts;
+  // rectangle definition
+  if(rectPoints.length < 4){
+    rectPoints.push(m);
+    if(rectPoints.length === 4){
+      const [R1,R2,R3] = rectPoints;
       const ang = angle(R1,R2);
       const dx = R3.x-R1.x, dy = R3.y-R1.y;
       rect = {
@@ -193,52 +165,44 @@ canvas.addEventListener("pointerdown",e=>{
         h:dx*Math.sin(-ang)+dy*Math.cos(-ang),
         angle:ang
       };
-      state = State.IDLE;
     }
     return;
   }
 
-  // Movement mode
-  if(state === State.MOVE){
-    if(!pivot){
-      pivot = nearestPoint(m);
-      return;
-    }
-    if(!startRef){
-      startRef = nearestPoint(m);
-      return;
-    }
-    if(!endRef && rect && insideRect(m,rect)){
-      endRef = { ...m };
-    }
+  // role picking
+  if(!pivot){
+    pivot = nearestPoint(m);
+    return;
+  }
+  if(!startRef){
+    startRef = nearestPoint(m);
+    return;
+  }
+  if(!endRef){
+    endRef = { ...m }; // anywhere
   }
 });
 
 function nearestPoint(m){
   let pts=[];
-  baseScissor.forEach(l=>pts.push(l.a,l.b));
+  BASE_SCISSOR.forEach(l=>pts.push(l.a,l.b));
   pts.sort((a,b)=>dist(a,m)-dist(b,m));
   return { ...pts[0] };
 }
 
 /* ================= UI ================= */
 rectBtn.onclick=()=>{
-  rectPts=[]; rect=null;
+  rectPoints=[]; rect=null;
   pivot=startRef=endRef=null;
   animating=false;
-  state=State.RECT;
 };
 
 moveBtn.onclick=()=>{
   pivot=startRef=endRef=null;
-  animating=false;
-  state=State.MOVE;
 };
 
 animBtn.onclick=()=>{
-  if(rect && pivot && startRef && endRef){
-    t=0;
-    timeDir=1;
+  if(pivot && startRef && endRef){
     animating=true;
   }
 };
@@ -249,11 +213,11 @@ dirBtn.onclick=()=>{
 };
 
 resetBtn.onclick=()=>{
-  scissor = structuredClone(baseScissor);
-  rectPts=[]; rect=null;
+  scissor = structuredClone(BASE_SCISSOR);
+  rectPoints=[]; rect=null;
   pivot=startRef=endRef=null;
   animating=false;
-  state=State.IDLE;
+  t=0; timeDir=1;
 };
 </script>
 
