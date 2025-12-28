@@ -17,6 +17,7 @@ button { margin:4px; padding:6px 12px; }
   <button id="rectBtn">1. Draw Rect</button>
   <button id="moveBtn">2. Movement</button>
   <button id="animBtn">Anim</button>
+  <button id="dirBtn">Dir: CW</button>
   <button id="resetBtn">Reset</button>
 </div>
 
@@ -44,8 +45,7 @@ let scissor = structuredClone(baseScissor);
 const State = {
   IDLE: "idle",
   RECT: "rect",
-  MOVE: "move",
-  ANIM: "anim"
+  MOVE: "move"
 };
 
 let state = State.IDLE;
@@ -55,13 +55,14 @@ let rectPoints = [];
 let rect = null;
 
 /* Motion roles */
-let pivot = null;
-let startRef = null;
-let endRef = null;
+let pivot = null;      // 🔴 on geometry
+let startRef = null;   // 🟡 on geometry
+let endRef = null;     // 🟢 anywhere inside rect
 
 /* Animation */
 let t = 0;
 let animating = false;
+let rotationDir = 1; // 1 = CW, -1 = CCW
 
 /* =========================================================
    MATH HELPERS
@@ -75,6 +76,19 @@ function pos(e){
 function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
 
 function angle(a,b){ return Math.atan2(b.y-a.y, b.x-a.x); }
+
+function norm(a){
+  return (a % TAU + TAU) % TAU;
+}
+
+function lerpAngle(a0, a1, t, dir){
+  a0 = norm(a0);
+  a1 = norm(a1);
+  let d = a1 - a0;
+  if(dir === 1 && d < 0) d += TAU;
+  if(dir === -1 && d > 0) d -= TAU;
+  return a0 + d * t;
+}
 
 function rotate(p,c,a){
   const dx = p.x - c.x, dy = p.y - c.y;
@@ -97,7 +111,7 @@ function insideRect(p,r){
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  /* Rectangle only after commit */
+  // rectangle (only after 4th click)
   if(rect){
     ctx.save();
     ctx.translate(rect.x,rect.y);
@@ -107,7 +121,7 @@ function draw(){
     ctx.restore();
   }
 
-  /* Scissor */
+  // scissor
   ctx.lineWidth = 6;
   ctx.strokeStyle = "#111";
   scissor.forEach(l=>{
@@ -117,12 +131,12 @@ function draw(){
     ctx.stroke();
   });
 
-  /* Role markers (only after selection) */
+  // role markers
   if(pivot) dot(pivot,"red");
   if(startRef) dot(startRef,"yellow");
   if(endRef) dot(endRef,"lime");
 
-  /* Rect points preview */
+  // rect points preview
   ctx.fillStyle="#333";
   rectPoints.forEach(p=>dot(p,"#333",4));
 }
@@ -140,17 +154,17 @@ function dot(p,col,r=5){
 function loop(){
   if(animating && rect && pivot && startRef && endRef){
     t += 0.02;
-    if(t>=1){ animating=false; }
+    if(t >= 1){ animating = false; }
 
     const a0 = angle(pivot,startRef);
     const a1 = angle(pivot,endRef);
-    const a  = a0 + (a1-a0)*t;
+    const a  = lerpAngle(a0, a1, t, rotationDir);
 
     scissor = structuredClone(baseScissor);
 
     scissor.forEach(seg=>{
-      if(insideRect(seg.b,rect)){
-        seg.b = rotate(seg.b,pivot,a);
+      if(insideRect(seg.b, rect)){
+        seg.b = rotate(seg.b, pivot, a);
       }
     });
   }
@@ -166,13 +180,13 @@ loop();
 canvas.addEventListener("pointerdown",e=>{
   const m = pos(e);
 
-  /* Rectangle mode */
-  if(state===State.RECT){
+  // Rectangle definition (4 clicks)
+  if(state === State.RECT){
     rectPoints.push(m);
-    if(rectPoints.length===4){
+    if(rectPoints.length === 4){
       const [R1,R2,R3] = rectPoints;
       const ang = angle(R1,R2);
-      const dx = R3.x-R1.x, dy = R3.y-R1.y;
+      const dx = R3.x - R1.x, dy = R3.y - R1.y;
       rect = {
         x:R1.x,
         y:R1.y,
@@ -185,46 +199,63 @@ canvas.addEventListener("pointerdown",e=>{
     return;
   }
 
-  /* Movement role assignment */
-  if(state===State.MOVE){
-    let candidates=[];
-    baseScissor.forEach(l=>{ candidates.push(l.a,l.b); });
-    candidates.sort((a,b)=>dist(a,m)-dist(b,m));
-    const picked = candidates[0];
-
+  // Movement role assignment
+  if(state === State.MOVE){
+    // pivot
     if(!pivot){
-      pivot={...picked};
-    } else if(!startRef){
-      startRef={...picked};
-    } else if(!endRef && dist(picked,startRef)>8){
-      endRef={...picked};
+      pivot = nearestGeometryPoint(m);
+      return;
+    }
+
+    // start (must be on geometry)
+    if(!startRef){
+      startRef = nearestGeometryPoint(m);
+      return;
+    }
+
+    // end (ANYWHERE inside rectangle)
+    if(!endRef && rect && insideRect(m, rect)){
+      endRef = { ...m };
+      return;
     }
   }
 });
 
+function nearestGeometryPoint(m){
+  let pts=[];
+  baseScissor.forEach(l=>{ pts.push(l.a,l.b); });
+  pts.sort((a,b)=>dist(a,m)-dist(b,m));
+  return { ...pts[0] };
+}
+
 /* =========================================================
    UI
 ========================================================= */
-rectBtn.onclick=()=>{
+rectBtn.onclick = ()=>{
   rectPoints=[];
   rect=null;
   pivot=startRef=endRef=null;
   state=State.RECT;
 };
 
-moveBtn.onclick=()=>{
+moveBtn.onclick = ()=>{
   pivot=startRef=endRef=null;
   state=State.MOVE;
 };
 
-animBtn.onclick=()=>{
+animBtn.onclick = ()=>{
   if(rect && pivot && startRef && endRef){
     t=0;
     animating=true;
   }
 };
 
-resetBtn.onclick=()=>{
+dirBtn.onclick = ()=>{
+  rotationDir *= -1;
+  dirBtn.textContent = "Dir: " + (rotationDir===1 ? "CW" : "CCW");
+};
+
+resetBtn.onclick = ()=>{
   scissor = structuredClone(baseScissor);
   rectPoints=[];
   rect=null;
