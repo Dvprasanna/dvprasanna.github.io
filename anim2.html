@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Walking Stickman – Motion Logic Demo</title>
+<title>Walking Stickman – Bent Limbs</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body { margin:0; background:#cfcfcf; }
@@ -11,7 +11,7 @@ canvas { display:block; margin:auto; background:#f7f7f7; }
 </head>
 <body>
 
-<canvas id="c" width="500" height="300"></canvas>
+<canvas id="c" width="520" height="300"></canvas>
 
 <script>
 const c = document.getElementById("c");
@@ -19,11 +19,9 @@ const ctx = c.getContext("2d");
 
 let t = 0;
 
-/* ================= MATH ================= */
 const sin = Math.sin;
 const cos = Math.cos;
 
-/* ================= DRAW HELPERS ================= */
 function line(x1,y1,x2,y2){
   ctx.beginPath();
   ctx.moveTo(x1,y1);
@@ -31,14 +29,13 @@ function line(x1,y1,x2,y2){
   ctx.stroke();
 }
 
-function limb(x,y,len,ang){
+function joint(x,y,len,ang){
   return {
-    x2: x + len*cos(ang),
-    y2: y + len*sin(ang)
+    x: x + len * cos(ang),
+    y: y + len * sin(ang)
   };
 }
 
-/* ================= LOOP ================= */
 function loop(){
   ctx.clearRect(0,0,c.width,c.height);
   ctx.lineWidth = 3;
@@ -46,39 +43,56 @@ function loop(){
 
   t += 0.05;
 
-  /* ---------- LINEAR MOTION (TORSO) ---------- */
-  const baseX = 100 + t*2;              // forward walk
-  const baseY = 150 + sin(t)*5;         // vertical bob
+  /* ---- TORSO (LINEAR) ---- */
+  const baseX = 120 + t * 2;
+  const baseY = 160 + sin(t) * 6;
 
-  /* ---------- TORSO ---------- */
-  line(baseX, baseY-40, baseX, baseY+40);
+  line(baseX, baseY-45, baseX, baseY+35);
 
-  /* ---------- HEAD (LINEAR + ANGULAR) ---------- */
+  /* ---- HEAD ---- */
   ctx.beginPath();
-  ctx.arc(baseX, baseY-55, 10, 0, Math.PI*2);
+  ctx.arc(baseX, baseY-60, 10, 0, Math.PI*2);
   ctx.stroke();
 
-  /* ---------- ANGULAR MOTION (ARMS) ---------- */
-  const armSwing = sin(t)*0.8;
+  /* ---- ARM MOTION (ANGULAR + ANGULAR) ---- */
+  const armSwing = sin(t) * 0.9;
+  const elbowBend = sin(t + Math.PI/2) * 0.6;
 
-  let a1 = limb(baseX, baseY-30, 35, armSwing);
-  let a2 = limb(baseX, baseY-30, 35, armSwing+Math.PI);
+  // Left arm
+  let shoulderL = { x: baseX, y: baseY-30 };
+  let elbowL = joint(shoulderL.x, shoulderL.y, 30, armSwing);
+  let handL  = joint(elbowL.x, elbowL.y, 25, armSwing + elbowBend);
 
-  line(baseX, baseY-30, a1.x2, a1.y2);
-  line(baseX, baseY-30, a2.x2, a2.y2);
+  line(shoulderL.x, shoulderL.y, elbowL.x, elbowL.y);
+  line(elbowL.x, elbowL.y, handL.x, handL.y);
 
-  /* ---------- ANGULAR MOTION (LEGS) ---------- */
-  const legSwing = sin(t)*0.9;
+  // Right arm (opposite phase)
+  let shoulderR = { x: baseX, y: baseY-30 };
+  let elbowR = joint(shoulderR.x, shoulderR.y, 30, armSwing + Math.PI);
+  let handR  = joint(elbowR.x, elbowR.y, 25, armSwing + Math.PI - elbowBend);
 
-  let l1 = limb(baseX, baseY+40, 45, legSwing);
-  let l2 = limb(baseX, baseY+40, 45, legSwing+Math.PI);
+  line(shoulderR.x, shoulderR.y, elbowR.x, elbowR.y);
+  line(elbowR.x, elbowR.y, handR.x, handR.y);
 
-  line(baseX, baseY+40, l1.x2, l1.y2);
-  line(baseX, baseY+40, l2.x2, l2.y2);
+  /* ---- LEG MOTION (ANGULAR + ANGULAR) ---- */
+  const legSwing = sin(t) * 0.9;
+  const kneeBend = sin(t + Math.PI/2) * 0.7;
 
-  /* ---------- FEET (LINEAR + ANGULAR) ---------- */
-  line(l1.x2, l1.y2, l1.x2+10*cos(legSwing), l1.y2+5);
-  line(l2.x2, l2.y2, l2.x2+10*cos(legSwing+Math.PI), l2.y2+5);
+  // Left leg
+  let hipL = { x: baseX, y: baseY+35 };
+  let kneeL = joint(hipL.x, hipL.y, 35, legSwing);
+  let footL = joint(kneeL.x, kneeL.y, 35, legSwing + kneeBend);
+
+  line(hipL.x, hipL.y, kneeL.x, kneeL.y);
+  line(kneeL.x, kneeL.y, footL.x, footL.y);
+
+  // Right leg
+  let hipR = { x: baseX, y: baseY+35 };
+  let kneeR = joint(hipR.x, hipR.y, 35, legSwing + Math.PI);
+  let footR = joint(kneeR.x, kneeR.y, 35, legSwing + Math.PI - kneeBend);
+
+  line(hipR.x, hipR.y, kneeR.x, kneeR.y);
+  line(kneeR.x, kneeR.y, footR.x, footR.y);
 
   requestAnimationFrame(loop);
 }
