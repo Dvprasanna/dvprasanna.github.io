@@ -6,74 +6,97 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body { margin:0; background:#bfbfbf; font-family:sans-serif; }
-canvas { display:block; margin:auto; background:#f6f6f6; touch-action:none; }
-.controls { text-align:center; padding:8px; background:#ddd; }
-button { margin:4px; padding:6px 12px; }
+.controls {
+  background:#ddd;
+  padding:8px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:center;
+}
+button { padding:6px 12px; }
+#tooltip {
+  flex:1;
+  background:#f4f4f4;
+  padding:6px 10px;
+  border-left:3px solid #999;
+  font-size:13px;
+}
+canvas {
+  display:block;
+  margin:auto;
+  background:#f6f6f6;
+  touch-action:none;
+}
 </style>
 </head>
 <body>
 
 <div class="controls">
-  <button id="rectBtn">1. Rect</button>
-  <button id="moveBtn">2. Move</button>
+  <button id="rectBtn">Rect</button>
+  <button id="moveBtn">Movement</button>
   <button id="animBtn">Anim</button>
   <button id="dirBtn">Dir: CW</button>
+  <button id="exportBtn">Export Anim</button>
   <button id="resetBtn">Reset</button>
+
+  <div id="tooltip">Select a tool to see instructions.</div>
 </div>
 
 <canvas id="c" width="420" height="260"></canvas>
 
 <script>
 /* ================= CORE ================= */
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
+const c = document.getElementById("c");
+const ctx = c.getContext("2d");
+const tooltip = document.getElementById("tooltip");
 const TAU = Math.PI * 2;
 
 /* ================= STATIC SCISSOR ================= */
 const BASE_SCISSOR = [
-  { a:{x:210,y:130}, b:{x:340,y:90} },   // blade A
-  { a:{x:210,y:130}, b:{x:80,y:170} }    // blade B
+  { a:{x:210,y:130}, b:{x:340,y:90} },
+  { a:{x:210,y:130}, b:{x:80,y:170} }
 ];
-
 let scissor = structuredClone(BASE_SCISSOR);
 
 /* ================= STATE ================= */
-let rectPoints = [];
+let rectPts = [];
 let rect = null;
 
-let pivot = null;       // 🔴 geometry
-let startRef = null;    // 🟡 geometry
-let endRef = null;      // 🟢 anywhere
+let pivot = null;
+let startRef = null;
+let endRef = null;
 
 let animating = false;
+let previewMode = false;
+
 let t = 0;
-let timeDir = 1;        // open / close
-let rotationDir = 1;    // CW / CCW
+let timeDir = 1;
+let rotationDir = 1;
 
 /* ================= MATH ================= */
 const pos = e => {
-  const r = canvas.getBoundingClientRect();
-  const p = e.touches ? e.touches[0] : e;
-  return { x:p.clientX - r.left, y:p.clientY - r.top };
+  const r=c.getBoundingClientRect();
+  const p=e.touches?e.touches[0]:e;
+  return {x:p.clientX-r.left,y:p.clientY-r.top};
 };
-
-const dist = (a,b) => Math.hypot(a.x-b.x,a.y-b.y);
-const angle = (a,b) => Math.atan2(b.y-a.y,b.x-a.x);
-const norm = a => (a % TAU + TAU) % TAU;
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const angle=(a,b)=>Math.atan2(b.y-a.y,b.x-a.x);
+const norm=a=>(a%TAU+TAU)%TAU;
 
 function lerpAngle(a0,a1,t,dir){
-  a0 = norm(a0); a1 = norm(a1);
-  let d = a1 - a0;
-  if(dir === 1 && d < 0) d += TAU;
-  if(dir === -1 && d > 0) d -= TAU;
-  return a0 + d * t;
+  a0=norm(a0); a1=norm(a1);
+  let d=a1-a0;
+  if(dir===1 && d<0) d+=TAU;
+  if(dir===-1 && d>0) d-=TAU;
+  return a0+d*t;
 }
 
 function rotate(p,c,a){
   const dx=p.x-c.x, dy=p.y-c.y;
   return {
-    x:c.x + dx*Math.cos(a) - dy*Math.sin(a),
-    y:c.y + dx*Math.sin(a) + dy*Math.cos(a)
+    x:c.x+dx*Math.cos(a)-dy*Math.sin(a),
+    y:c.y+dx*Math.sin(a)+dy*Math.cos(a)
   };
 }
 
@@ -93,9 +116,9 @@ function dot(p,col,r=5){
 }
 
 function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.clearRect(0,0,c.width,c.height);
 
-  if(rect){
+  if(!previewMode && rect){
     ctx.save();
     ctx.translate(rect.x,rect.y);
     ctx.rotate(rect.angle);
@@ -113,31 +136,30 @@ function draw(){
     ctx.stroke();
   });
 
-  if(pivot) dot(pivot,"red");
-  if(startRef) dot(startRef,"yellow");
-  if(endRef) dot(endRef,"lime");
-
-  rectPoints.forEach(p=>dot(p,"#333",4));
+  if(!previewMode){
+    if(pivot) dot(pivot,"red");
+    if(startRef) dot(startRef,"yellow");
+    if(endRef) dot(endRef,"lime");
+    rectPts.forEach(p=>dot(p,"#333",4));
+  }
 }
 
 /* ================= LOOP ================= */
 function loop(){
   if(animating && pivot && startRef && endRef){
     t += 0.015 * timeDir;
+    if(t>=1){ t=1; timeDir=-1; }
+    if(t<=0){ t=0; timeDir=1; }
 
-    if(t >= 1){ t = 1; timeDir = -1; }
-    if(t <= 0){ t = 0; timeDir = 1; }
+    const aStart=angle(pivot,startRef);
+    const aEnd=angle(pivot,endRef);
+    const cur=lerpAngle(aStart,aEnd,t,rotationDir);
+    const delta=cur-aStart;
 
-    const aStart = angle(pivot,startRef);
-    const aEnd   = angle(pivot,endRef);
-
-    const cur = lerpAngle(aStart,aEnd,t,rotationDir);
-    const delta = cur - aStart;
-
-    scissor = structuredClone(BASE_SCISSOR);
+    scissor=structuredClone(BASE_SCISSOR);
     scissor.forEach(seg=>{
       if(!rect || insideRect(seg.b,rect)){
-        seg.b = rotate(seg.b,pivot,delta);
+        seg.b=rotate(seg.b,pivot,delta);
       }
     });
   }
@@ -148,63 +170,59 @@ function loop(){
 loop();
 
 /* ================= INPUT ================= */
-canvas.addEventListener("pointerdown",e=>{
-  const m = pos(e);
+c.addEventListener("pointerdown",e=>{
+  if(previewMode) return;
 
-  // rectangle definition
-  if(rectPoints.length < 4){
-    rectPoints.push(m);
-    if(rectPoints.length === 4){
-      const [R1,R2,R3] = rectPoints;
-      const ang = angle(R1,R2);
-      const dx = R3.x-R1.x, dy = R3.y-R1.y;
-      rect = {
-        x:R1.x,
-        y:R1.y,
+  const m=pos(e);
+
+  if(rectPts.length<4){
+    rectPts.push(m);
+    if(rectPts.length===4){
+      const [R1,R2,R3]=rectPts;
+      const ang=angle(R1,R2);
+      const dx=R3.x-R1.x, dy=R3.y-R1.y;
+      rect={x:R1.x,y:R1.y,
         w:dx*Math.cos(-ang)-dy*Math.sin(-ang),
         h:dx*Math.sin(-ang)+dy*Math.cos(-ang),
-        angle:ang
-      };
+        angle:ang};
     }
     return;
   }
 
-  // role picking
   if(!pivot){
-    pivot = nearestPoint(m);
-    return;
+    pivot=nearest(m); return;
   }
   if(!startRef){
-    startRef = nearestPoint(m);
-    return;
+    startRef=nearest(m); return;
   }
   if(!endRef){
-    endRef = { ...m }; // anywhere
+    endRef={...m};
   }
 });
 
-function nearestPoint(m){
+function nearest(m){
   let pts=[];
   BASE_SCISSOR.forEach(l=>pts.push(l.a,l.b));
   pts.sort((a,b)=>dist(a,m)-dist(b,m));
-  return { ...pts[0] };
+  return {...pts[0]};
 }
 
-/* ================= UI ================= */
+/* ================= UI & TOOLTIPS ================= */
 rectBtn.onclick=()=>{
-  rectPoints=[]; rect=null;
-  pivot=startRef=endRef=null;
-  animating=false;
+  tooltip.textContent=
+    "Rect tool: Click 4 times on canvas. 1st = corner, 2nd = angle, 3rd = size, 4th = finish. This limits which parts move.";
 };
 
 moveBtn.onclick=()=>{
-  pivot=startRef=endRef=null;
+  tooltip.textContent=
+    "Movement tool: Click pivot (red), then start point (yellow) on blade, then end point (green) anywhere to define angle.";
 };
 
 animBtn.onclick=()=>{
-  if(pivot && startRef && endRef){
-    animating=true;
-  }
+  tooltip.textContent=
+    "Anim: Preview animation. Editing guides are hidden. Scissor opens and closes continuously.";
+  previewMode=true;
+  animating=true;
 };
 
 dirBtn.onclick=()=>{
@@ -212,12 +230,30 @@ dirBtn.onclick=()=>{
   dirBtn.textContent="Dir: "+(rotationDir===1?"CW":"CCW");
 };
 
+exportBtn.onclick=()=>{
+  const data={
+    scissor:BASE_SCISSOR,
+    rect,
+    pivot,
+    startRef,
+    endRef,
+    rotationDir
+  };
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="anim1-export.json";
+  a.click();
+};
+
 resetBtn.onclick=()=>{
-  scissor = structuredClone(BASE_SCISSOR);
-  rectPoints=[]; rect=null;
+  scissor=structuredClone(BASE_SCISSOR);
+  rectPts=[]; rect=null;
   pivot=startRef=endRef=null;
   animating=false;
+  previewMode=false;
   t=0; timeDir=1;
+  tooltip.textContent="Select a tool to see instructions.";
 };
 </script>
 
