@@ -2,26 +2,23 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>anim1 – Point Driven Scissor</title>
+<title>anim1 – Static to Animation</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body { margin:0; background:#bbb; font-family:sans-serif; }
 canvas { display:block; margin:auto; background:#eee; touch-action:none; }
-.controls {
-  text-align:center;
-  padding:8px;
-  background:#ddd;
-}
+.controls { text-align:center; padding:8px; background:#ddd; }
 button { margin:4px; padding:6px 12px; }
 </style>
 </head>
 <body>
 
 <div class="controls">
-  <button id="drawRect">Draw Rect</button>
-  <button id="play">Play</button>
-  <button id="dir">Direction: CW</button>
-  <button id="reset">Start Over</button>
+  <button id="rectBtn">1. Draw Rect</button>
+  <button id="moveBtn">2. Movement</button>
+  <button id="animBtn">Anim</button>
+  <button id="dirBtn">Dir: CW</button>
+  <button id="resetBtn">Start Over</button>
 </div>
 
 <canvas id="c" width="360" height="260"></canvas>
@@ -29,193 +26,177 @@ button { margin:4px; padding:6px 12px; }
 <script>
 const c = document.getElementById("c");
 const ctx = c.getContext("2d");
-
 const TAU = Math.PI * 2;
 
-// ---------- INITIAL SCISSOR (STATIC DRAWING) ----------
-const scissor = {
-  pivot: { x: 190, y: 130 },
-  blades: [
-    { to: { x: 300, y: 90 } },   // top blade
-    { to: { x: 80,  y: 170 } }   // bottom blade
-  ]
-};
+// ---------------- STATIC SCISSOR ----------------
+let lines = [
+  { a:{x:180,y:130}, b:{x:300,y:90} },
+  { a:{x:180,y:130}, b:{x:80,y:170} }
+];
+const original = JSON.parse(JSON.stringify(lines));
 
-// Original copy for reset
-const original = JSON.parse(JSON.stringify(scissor));
-
-// ---------- STATE ----------
+// ---------------- STATE ----------------
+let mode = "idle"; // rect | move | idle
+let rectPts = [];
 let rect = null;
-let rectStart = null;
-let mode = "idle"; // idle | drawRect | select
-let rotationDir = 1;
-let animating = false;
-let t = 0;
 
-// Selected points
-let selPivot = false;
-let selStart = false;
-let selEnd   = false;
+let pivot=null, start=null, end=null;
+let anim=false, t=0, dir=1;
 
-// Start / end angle refs
-let startAngle = 0;
-let endAngle   = 0;
+// ---------------- MATH ----------------
+const angle=(a,b)=>Math.atan2(b.y-a.y,b.x-a.x);
+const norm=a=>(a%TAU+TAU)%TAU;
 
-// ---------- UTILS ----------
-function pos(e){
-  const r = c.getBoundingClientRect();
-  const t = e.touches ? e.touches[0] : e;
-  return { x: t.clientX - r.left, y: t.clientY - r.top };
+function lerpAngle(a0,a1,t,d){
+  a0=norm(a0); a1=norm(a1);
+  let delta=a1-a0;
+  if(d===1 && delta<0) delta+=TAU;
+  if(d===-1 && delta>0) delta-=TAU;
+  return a0+delta*t;
 }
 
-function dist(a,b){
-  return Math.hypot(a.x-b.x, a.y-b.y);
-}
-
-function insideRect(p,r){
-  return (
-    p.x >= r.x &&
-    p.x <= r.x + r.w &&
-    p.y >= r.y &&
-    p.y <= r.y + r.h
-  );
-}
-
-function normalize(a){
-  return (a % TAU + TAU) % TAU;
-}
-
-function lerpAngle(a0,a1,t,dir){
-  a0=normalize(a0); a1=normalize(a1);
-  let d=a1-a0;
-  if(dir===1 && d<0) d+=TAU;
-  if(dir===-1 && d>0) d-=TAU;
-  return a0 + d*t;
-}
-
-function rotatePoint(p,pivot,a){
-  const dx=p.x-pivot.x;
-  const dy=p.y-pivot.y;
+function rotate(p,c,a){
+  const dx=p.x-c.x, dy=p.y-c.y;
   return {
-    x: pivot.x + dx*Math.cos(a) - dy*Math.sin(a),
-    y: pivot.y + dx*Math.sin(a) + dy*Math.cos(a)
+    x:c.x+dx*Math.cos(a)-dy*Math.sin(a),
+    y:c.y+dx*Math.sin(a)+dy*Math.cos(a)
   };
 }
 
-// ---------- DRAW ----------
-function drawPoint(p,col){
-  ctx.fillStyle=col;
-  ctx.beginPath();
-  ctx.arc(p.x,p.y,6,0,TAU);
-  ctx.fill();
+function insideRect(p,r){
+  const dx=p.x-r.x, dy=p.y-r.y;
+  const lx=dx*Math.cos(-r.angle)-dy*Math.sin(-r.angle);
+  const ly=dx*Math.sin(-r.angle)+dy*Math.cos(-r.angle);
+  return lx>=0 && lx<=r.w && ly>=0 && ly<=r.h;
 }
 
-function drawBlade(from,to,col="#111"){
-  ctx.lineWidth=6;
-  ctx.strokeStyle=col;
-  ctx.beginPath();
-  ctx.moveTo(from.x,from.y);
-  ctx.lineTo(to.x,to.y);
-  ctx.stroke();
-}
+function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
 
+// ---------------- DRAW ----------------
 function draw(){
   ctx.clearRect(0,0,c.width,c.height);
 
-  // rectangle
+  // rectangle only after 4th point
   if(rect){
+    ctx.save();
+    ctx.translate(rect.x,rect.y);
+    ctx.rotate(rect.angle);
     ctx.fillStyle="rgba(80,130,255,0.5)";
-    ctx.fillRect(rect.x,rect.y,rect.w,rect.h);
+    ctx.fillRect(0,0,rect.w,rect.h);
+    ctx.restore();
   }
 
-  // blades
-  drawBlade(scissor.pivot, scissor.blades[1].to);
-  drawBlade(scissor.pivot, scissor.blades[0].to);
+  // scissor
+  ctx.lineWidth=6;
+  ctx.strokeStyle="#111";
+  lines.forEach(l=>{
+    ctx.beginPath();
+    ctx.moveTo(l.a.x,l.a.y);
+    ctx.lineTo(l.b.x,l.b.y);
+    ctx.stroke();
+  });
 
-  // highlights
-  drawPoint(scissor.pivot, selPivot?"red":"#900");
-  drawPoint(scissor.blades[0].to, selStart?"yellow":"#aa0");
-  drawPoint(scissor.blades[1].to, selEnd?"lime":"#0a0");
+  // selection dots
+  if(pivot){ ctx.fillStyle="red"; ctx.beginPath(); ctx.arc(pivot.x,pivot.y,5,0,TAU); ctx.fill(); }
+  if(start){ ctx.fillStyle="yellow"; ctx.beginPath(); ctx.arc(start.x,start.y,5,0,TAU); ctx.fill(); }
+  if(end){ ctx.fillStyle="lime"; ctx.beginPath(); ctx.arc(end.x,end.y,5,0,TAU); ctx.fill(); }
+
+  // rect points (while drawing)
+  ctx.fillStyle="#333";
+  rectPts.forEach(p=>{
+    ctx.beginPath(); ctx.arc(p.x,p.y,4,0,TAU); ctx.fill();
+  });
 }
 
-// ---------- ANIMATION ----------
-function animate(){
-  if(animating){
-    t += 0.03;
-    if(t>=1){ animating=false; }
+// ---------------- LOOP ----------------
+function loop(){
+  if(anim && rect && pivot && start && end){
+    t+=0.02;
+    if(t>=1) anim=false;
 
-    const a = lerpAngle(startAngle,endAngle,t,rotationDir);
+    const a0=angle(pivot,start);
+    const a1=angle(pivot,end);
+    const a=lerpAngle(a0,a1,t,dir);
 
-    const orig = original.blades[0].to;
-    if(insideRect(orig,rect)){
-      scissor.blades[0].to = rotatePoint(orig, scissor.pivot, a);
-    }
+    lines.forEach((l,i)=>{
+      const orig=original[i].b;
+      if(insideRect(orig,rect)){
+        lines[i].b=rotate(orig,pivot,a);
+      }
+    });
   }
 
   draw();
-  requestAnimationFrame(animate);
+  requestAnimationFrame(loop);
 }
-animate();
+loop();
 
-// ---------- INPUT ----------
+// ---------------- INPUT ----------------
+function pos(e){
+  const r=c.getBoundingClientRect();
+  const t=e.touches?e.touches[0]:e;
+  return {x:t.clientX-r.left,y:t.clientY-r.top};
+}
+
 c.addEventListener("pointerdown",e=>{
   const m=pos(e);
 
-  if(mode==="drawRect"){
-    rectStart=m;
-    rect={x:m.x,y:m.y,w:0,h:0};
+  if(mode==="rect"){
+    rectPts.push(m);
+    if(rectPts.length===4){
+      const [R1,R2,R3]=rectPts;
+      const ang=angle(R1,R2);
+      const dx=R3.x-R1.x, dy=R3.y-R1.y;
+      rect={x:R1.x,y:R1.y,
+        w:dx*Math.cos(-ang)-dy*Math.sin(-ang),
+        h:dx*Math.sin(-ang)+dy*Math.cos(-ang),
+        angle:ang};
+      mode="idle";
+    }
     return;
   }
 
-  // Selection phase
-  if(rect){
-    if(dist(m,scissor.pivot)<12){
-      selPivot=true;
-    } else if(dist(m,scissor.blades[0].to)<12){
-      selStart=true;
-      startAngle=Math.atan2(
-        scissor.blades[0].to.y-scissor.pivot.y,
-        scissor.blades[0].to.x-scissor.pivot.x
-      );
-    } else if(dist(m,scissor.blades[1].to)<12){
-      selEnd=true;
-      endAngle=Math.atan2(
-        scissor.blades[1].to.y-scissor.pivot.y,
-        scissor.blades[1].to.x-scissor.pivot.x
-      );
-    }
+  if(mode==="move"){
+    let candidates=[];
+    lines.forEach(l=>candidates.push(l.a,l.b));
+    candidates.sort((a,b)=>dist(a,m)-dist(b,m));
+    const p=candidates[0];
+
+    if(!pivot) pivot={...p};
+    else if(!start) start={...p};
+    else if(!end) end={...p};
   }
 });
 
-c.addEventListener("pointermove",e=>{
-  if(rectStart){
-    const m=pos(e);
-    rect.w=m.x-rectStart.x;
-    rect.h=m.y-rectStart.y;
-  }
-});
+// ---------------- UI ----------------
+rectBtn.onclick=()=>{
+  rectPts=[]; rect=null;
+  pivot=start=end=null;
+  mode="rect";
+};
 
-c.addEventListener("pointerup",()=>{
-  rectStart=null;
-});
+moveBtn.onclick=()=>{
+  pivot=start=end=null;
+  mode="move";
+};
 
-// ---------- UI ----------
-drawRect.onclick=()=>{ mode="drawRect"; rect=null; };
-play.onclick=()=>{
-  if(selStart && selEnd){
-    t=0; animating=true;
+animBtn.onclick=()=>{
+  if(pivot&&start&&end&&rect){
+    t=0; anim=true;
   }
 };
-dir.onclick=()=>{
-  rotationDir*=-1;
-  dir.textContent="Direction: "+(rotationDir===1?"CW":"CCW");
+
+dirBtn.onclick=()=>{
+  dir*=-1;
+  dirBtn.textContent="Dir: "+(dir===1?"CW":"CCW");
 };
-reset.onclick=()=>{
-  Object.assign(scissor,JSON.parse(JSON.stringify(original)));
-  rect=null;
-  selPivot=selStart=selEnd=false;
-  animating=false;
-  t=0;
+
+resetBtn.onclick=()=>{
+  lines=JSON.parse(JSON.stringify(original));
+  rectPts=[]; rect=null;
+  pivot=start=end=null;
+  anim=false;
+  mode="idle";
 };
 </script>
 
