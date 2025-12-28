@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Walking Stickman – Motion Logic Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { margin:0; background:#cfcfcf; }
+canvas { display:block; margin:auto; background:#f7f7f7; }
+</style>
+</head>
+<body>
+
+<canvas id="c" width="500" height="300"></canvas>
+
+<script>
+const c = document.getElementById("c");
+const ctx = c.getContext("2d");
+
+let t = 0;
+
+/* ================= MATH ================= */
+const sin = Math.sin;
+const cos = Math.cos;
+
+/* ================= DRAW HELPERS ================= */
+function line(x1,y1,x2,y2){
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+}
+
+function limb(x,y,len,ang){
+  return {
+    x2: x + len*cos(ang),
+    y2: y + len*sin(ang)
+  };
+}
+
+/* ================= LOOP ================= */
+function loop(){
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#111";
+
+  t += 0.05;
+
+  /* ---------- LINEAR MOTION (TORSO) ---------- */
+  const baseX = 100 + t*2;              // forward walk
+  const baseY = 150 + sin(t)*5;         // vertical bob
+
+  /* ---------- TORSO ---------- */
+  line(baseX, baseY-40, baseX, baseY+40);
+
+  /* ---------- HEAD (LINEAR + ANGULAR) ---------- */
+  ctx.beginPath();
+  ctx.arc(baseX, baseY-55, 10, 0, Math.PI*2);
+  ctx.stroke();
+
+  /* ---------- ANGULAR MOTION (ARMS) ---------- */
+  const armSwing = sin(t)*0.8;
+
+  let a1 = limb(baseX, baseY-30, 35, armSwing);
+  let a2 = limb(baseX, baseY-30, 35, armSwing+Math.PI);
+
+  line(baseX, baseY-30, a1.x2, a1.y2);
+  line(baseX, baseY-30, a2.x2, a2.y2);
+
+  /* ---------- ANGULAR MOTION (LEGS) ---------- */
+  const legSwing = sin(t)*0.9;
+
+  let l1 = limb(baseX, baseY+40, 45, legSwing);
+  let l2 = limb(baseX, baseY+40, 45, legSwing+Math.PI);
+
+  line(baseX, baseY+40, l1.x2, l1.y2);
+  line(baseX, baseY+40, l2.x2, l2.y2);
+
+  /* ---------- FEET (LINEAR + ANGULAR) ---------- */
+  line(l1.x2, l1.y2, l1.x2+10*cos(legSwing), l1.y2+5);
+  line(l2.x2, l2.y2, l2.x2+10*cos(legSwing+Math.PI), l2.y2+5);
+
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+
+</body>
+</html>
