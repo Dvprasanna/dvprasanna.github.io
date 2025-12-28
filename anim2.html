@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Walking Stickman – Bent Limbs</title>
+<title>Walking Stickman – Natural Arms</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 body { margin:0; background:#cfcfcf; }
@@ -18,9 +18,9 @@ const c = document.getElementById("c");
 const ctx = c.getContext("2d");
 
 let t = 0;
-
 const sin = Math.sin;
 const cos = Math.cos;
+const PI = Math.PI;
 
 function line(x1,y1,x2,y2){
   ctx.beginPath();
@@ -43,53 +43,74 @@ function loop(){
 
   t += 0.05;
 
-  /* ---- TORSO (LINEAR) ---- */
+  /* -------- TORSO (LINEAR) -------- */
   const baseX = 120 + t * 2;
   const baseY = 160 + sin(t) * 6;
 
   line(baseX, baseY-45, baseX, baseY+35);
 
-  /* ---- HEAD ---- */
+  /* -------- HEAD -------- */
   ctx.beginPath();
-  ctx.arc(baseX, baseY-60, 10, 0, Math.PI*2);
+  ctx.arc(baseX, baseY-60, 10, 0, PI*2);
   ctx.stroke();
 
-  /* ---- ARM MOTION (ANGULAR + ANGULAR) ---- */
-  const armSwing = sin(t) * 0.9;
-  const elbowBend = sin(t + Math.PI/2) * 0.6;
+  /* -------- ARM MOTION (FIXED) -------- */
+  const armBase = PI / 2;          // downwards
+  const armSwing = sin(t) * 0.5;   // forward/back
+  const elbowBend = sin(t + PI/2) * 0.6;
 
-  // Left arm
+  // LEFT ARM (forward when right leg forward)
   let shoulderL = { x: baseX, y: baseY-30 };
-  let elbowL = joint(shoulderL.x, shoulderL.y, 30, armSwing);
-  let handL  = joint(elbowL.x, elbowL.y, 25, armSwing + elbowBend);
+  let elbowL = joint(
+    shoulderL.x,
+    shoulderL.y,
+    30,
+    armBase + armSwing
+  );
+  let handL = joint(
+    elbowL.x,
+    elbowL.y,
+    25,
+    armBase + armSwing - elbowBend
+  );
 
   line(shoulderL.x, shoulderL.y, elbowL.x, elbowL.y);
   line(elbowL.x, elbowL.y, handL.x, handL.y);
 
-  // Right arm (opposite phase)
+  // RIGHT ARM (opposite phase)
   let shoulderR = { x: baseX, y: baseY-30 };
-  let elbowR = joint(shoulderR.x, shoulderR.y, 30, armSwing + Math.PI);
-  let handR  = joint(elbowR.x, elbowR.y, 25, armSwing + Math.PI - elbowBend);
+  let elbowR = joint(
+    shoulderR.x,
+    shoulderR.y,
+    30,
+    armBase - armSwing
+  );
+  let handR = joint(
+    elbowR.x,
+    elbowR.y,
+    25,
+    armBase - armSwing + elbowBend
+  );
 
   line(shoulderR.x, shoulderR.y, elbowR.x, elbowR.y);
   line(elbowR.x, elbowR.y, handR.x, handR.y);
 
-  /* ---- LEG MOTION (ANGULAR + ANGULAR) ---- */
+  /* -------- LEG MOTION (ALREADY OK) -------- */
   const legSwing = sin(t) * 0.9;
-  const kneeBend = sin(t + Math.PI/2) * 0.7;
+  const kneeBend = sin(t + PI/2) * 0.7;
 
-  // Left leg
+  // LEFT LEG
   let hipL = { x: baseX, y: baseY+35 };
-  let kneeL = joint(hipL.x, hipL.y, 35, legSwing);
-  let footL = joint(kneeL.x, kneeL.y, 35, legSwing + kneeBend);
+  let kneeL = joint(hipL.x, hipL.y, 35, PI/2 + legSwing);
+  let footL = joint(kneeL.x, kneeL.y, 35, PI/2 + legSwing + kneeBend);
 
   line(hipL.x, hipL.y, kneeL.x, kneeL.y);
   line(kneeL.x, kneeL.y, footL.x, footL.y);
 
-  // Right leg
+  // RIGHT LEG
   let hipR = { x: baseX, y: baseY+35 };
-  let kneeR = joint(hipR.x, hipR.y, 35, legSwing + Math.PI);
-  let footR = joint(kneeR.x, kneeR.y, 35, legSwing + Math.PI - kneeBend);
+  let kneeR = joint(hipR.x, hipR.y, 35, PI/2 - legSwing);
+  let footR = joint(kneeR.x, kneeR.y, 35, PI/2 - legSwing - kneeBend);
 
   line(hipR.x, hipR.y, kneeR.x, kneeR.y);
   line(kneeR.x, kneeR.y, footR.x, footR.y);
