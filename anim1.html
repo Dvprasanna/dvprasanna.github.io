@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Scissor Action Demo</title>
+<style>
+  body { background:#ccc; }
+  canvas { background:#eee; display:block; margin:20px auto; }
+</style>
+</head>
+<body>
+
+<canvas id="c" width="600" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+// ===== YOUR DATA MODEL =====
+
+// Light blue rectangle (motion boundary)
+const rect = { x:150, y:80, w:200, h:160 };
+
+// Red pivot (center)
+const pivot = { x:300, y:160 };
+
+// Yellow = start
+const start = { x:200, y:200 };
+
+// Green = end
+const end = { x:220, y:120 };
+
+// Blade length
+const bladeLength = 120;
+
+// Pre-calc angles
+const startAngle = Math.atan2(start.y - pivot.y, start.x - pivot.x);
+const endAngle   = Math.atan2(end.y - pivot.y, end.x - pivot.x);
+
+// Animation
+let t = 0;
+let dir = 1;
+
+function drawPoint(p, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawBlade(angle) {
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "#111";
+  ctx.beginPath();
+  ctx.moveTo(pivot.x, pivot.y);
+  ctx.lineTo(
+    pivot.x + Math.cos(angle) * bladeLength,
+    pivot.y + Math.sin(angle) * bladeLength
+  );
+  ctx.stroke();
+}
+
+function animate() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Rectangle
+  ctx.fillStyle = "rgba(50,100,255,0.6)";
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+  // Interpolated angle
+  let angle = startAngle + t * (endAngle - startAngle);
+
+  // Scissor blades
+  drawBlade(angle);
+  drawBlade(angle + Math.PI); // opposite blade
+
+  // Points
+  drawPoint(pivot, "red");
+  drawPoint(start, "yellow");
+  drawPoint(end, "lime");
+
+  // Animate t
+  t += 0.01 * dir;
+  if (t >= 1 || t <= 0) dir *= -1;
+
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+
+</body>
+</html>
