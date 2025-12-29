@@ -1,22 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Image Slicer</title>
+
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
 <style>
-  body { font-family: sans-serif; margin: 10px; }
-  canvas { border: 1px solid #333; touch-action: none; }
-  button { margin: 5px 5px 5px 0; }
+  body { font-family: Arial, sans-serif; margin: 10px; }
+  canvas { border: 1px solid #000; touch-action: none; display: block; }
+  button { margin: 4px; }
+  .active { background:#222; color:#fff; }
 </style>
 </head>
 <body>
 
 <input type="file" id="upload" accept="image/*"><br>
+
 <button id="cropBtn">Crop</button>
-<button id="exportBtn">Export</button>
+<button id="confirmCropBtn" disabled>Confirm Crop</button>
+<br>
+
+<button id="vBtn">Vertical Line</button>
+<button id="hBtn">Horizontal Line</button>
+<button id="previewBtn">Preview Blocks</button>
 <button id="resetBtn">Reset Lines</button>
+<button id="exportBtn">Export</button>
 
 <br><br>
 <canvas id="canvas"></canvas>
@@ -28,38 +38,47 @@ const ctx = canvas.getContext("2d");
 let img = new Image();
 let imageLoaded = false;
 
-// slicing data
+// modes
+let mode = null;          // "v" | "h"
+let cropping = false;
+let showPreview = false;
+
+// crop
+let cropStart = null;
+let cropRect = null;
+
+// slicing
 let verticalCuts = [];
 let horizontalCuts = [];
 
-// crop state (simple full-image crop placeholder)
-let crop = null;
-
-// ---------- IMAGE LOAD ----------
-document.getElementById("upload").onchange = e => {
+/* ---------------- IMAGE LOAD ---------------- */
+upload.onchange = e => {
   const file = e.target.files[0];
   if (!file) return;
 
   img.onload = () => {
     const maxW = window.innerWidth - 20;
-    const maxH = window.innerHeight - 200;
-
+    const maxH = window.innerHeight - 220;
     const scale = Math.min(maxW / img.width, maxH / img.height, 1);
 
     canvas.width  = Math.floor(img.width * scale);
     canvas.height = Math.floor(img.height * scale);
 
-    draw();
     imageLoaded = true;
+    resetAllVisuals();
+    draw();
   };
   img.src = URL.createObjectURL(file);
 };
 
-// ---------- DRAW ----------
+/* ---------------- DRAW ---------------- */
 function draw() {
+  if (!imageLoaded) return;
+
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
+  // slicing lines
   ctx.strokeStyle = "red";
   ctx.lineWidth = 1;
 
@@ -76,114 +95,202 @@ function draw() {
     ctx.lineTo(canvas.width, y);
     ctx.stroke();
   });
+
+  // crop preview
+  if (cropRect) {
+    ctx.strokeStyle = "blue";
+    ctx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+  }
+
+  // block preview
+  if (showPreview) {
+    const b = generateBlocks();
+    ctx.strokeStyle = "green";
+    ctx.font = "12px monospace";
+    b.forEach((blk,i)=>{
+      ctx.strokeRect(blk.x, blk.y, blk.w, blk.h);
+      ctx.fillText(i, blk.x + 4, blk.y + 14);
+    });
+  }
 }
 
-// ---------- LINE DRAWING (EDGE ONLY) ----------
-canvas.addEventListener("click", e => {
+/* ---------------- MODE BUTTONS ---------------- */
+function clearActive() {
+  vBtn.classList.remove("active");
+  hBtn.classList.remove("active");
+}
+
+vBtn.onclick = () => {
+  mode = "v";
+  clearActive();
+  vBtn.classList.add("active");
+};
+
+hBtn.onclick = () => {
+  mode = "h";
+  clearActive();
+  hBtn.classList.add("active");
+};
+
+/* ---------------- CROP ---------------- */
+cropBtn.onclick = () => {
+  if (!imageLoaded) return;
+  cropping = true;
+  cropRect = null;
+  cropStart = null;
+  confirmCropBtn.disabled = false;
+};
+
+confirmCropBtn.onclick = () => {
+  if (!cropRect) return;
+
+  const temp = document.createElement("canvas");
+  temp.width = cropRect.w;
+  temp.height = cropRect.h;
+
+  temp.getContext("2d").drawImage(
+    canvas,
+    cropRect.x, cropRect.y, cropRect.w, cropRect.h,
+    0, 0, cropRect.w, cropRect.h
+  );
+
+  img.src = temp.toDataURL("image/png");
+
+  cropping = false;
+  cropRect = null;
+  cropStart = null;
+  confirmCropBtn.disabled = true;
+
+  verticalCuts = [];
+  horizontalCuts = [];
+  showPreview = false;
+};
+
+/* ---------------- CANVAS INPUT ---------------- */
+canvas.onmousedown = e => {
   if (!imageLoaded) return;
 
   const r = canvas.getBoundingClientRect();
   const x = Math.floor(e.clientX - r.left);
   const y = Math.floor(e.clientY - r.top);
 
+  if (cropping) {
+    cropStart = {x,y};
+    return;
+  }
+
   const edge = 10;
 
-  if (x < edge || x > canvas.width - edge) {
+  if (mode === "v" && (x < edge || x > canvas.width - edge)) {
     verticalCuts.push(x);
-  } else if (y < edge || y > canvas.height - edge) {
+  }
+
+  if (mode === "h" && (y < edge || y > canvas.height - edge)) {
     horizontalCuts.push(y);
-  } else {
-    return;
   }
 
   verticalCuts = [...new Set(verticalCuts)].sort((a,b)=>a-b);
   horizontalCuts = [...new Set(horizontalCuts)].sort((a,b)=>a-b);
 
-  draw();
-});
-
-// ---------- RESET (LINES ONLY) ----------
-document.getElementById("resetBtn").onclick = () => {
-  verticalCuts = [];
-  horizontalCuts = [];
+  showPreview = false;
   draw();
 };
 
-// ---------- BLOCK GENERATION ----------
+canvas.onmousemove = e => {
+  if (!cropping || !cropStart) return;
+
+  const r = canvas.getBoundingClientRect();
+  const x = Math.floor(e.clientX - r.left);
+  const y = Math.floor(e.clientY - r.top);
+
+  cropRect = {
+    x: Math.min(cropStart.x, x),
+    y: Math.min(cropStart.y, y),
+    w: Math.abs(x - cropStart.x),
+    h: Math.abs(y - cropStart.y)
+  };
+  draw();
+};
+
+canvas.onmouseup = () => cropStart = null;
+
+/* ---------------- RESET ---------------- */
+resetBtn.onclick = () => {
+  verticalCuts = [];
+  horizontalCuts = [];
+  showPreview = false;
+  draw();
+};
+
+function resetAllVisuals(){
+  verticalCuts = [];
+  horizontalCuts = [];
+  cropRect = null;
+  cropStart = null;
+  showPreview = false;
+}
+
+/* ---------------- BLOCK MATH ---------------- */
 function generateBlocks() {
   const X = [0, ...verticalCuts, canvas.width];
   const Y = [0, ...horizontalCuts, canvas.height];
 
   const blocks = [];
-
-  for (let i=0; i<Y.length-1; i++) {
-    for (let j=0; j<X.length-1; j++) {
+  for (let i=0;i<Y.length-1;i++) {
+    for (let j=0;j<X.length-1;j++) {
       const w = X[j+1] - X[j];
       const h = Y[i+1] - Y[i];
-      if (w >= 1 && h >= 1) {
-        blocks.push({
-          x: X[j],
-          y: Y[i],
-          width: w,
-          height: h,
-          index: blocks.length
-        });
+      if (w>=1 && h>=1) {
+        blocks.push({ x:X[j], y:Y[i], w, h });
       }
     }
   }
   return blocks;
 }
 
-// ---------- EXPORT ----------
-document.getElementById("exportBtn").onclick = async () => {
+/* ---------------- PREVIEW ---------------- */
+previewBtn.onclick = () => {
   if (!imageLoaded) return;
+  showPreview = true;
+  draw();
+};
 
+/* ---------------- EXPORT ---------------- */
+exportBtn.onclick = async () => {
   const blocks = generateBlocks();
-  if (!blocks.length) return alert("No blocks");
+  if (!blocks.length) {
+    alert("No blocks to export");
+    return;
+  }
 
-  if (!confirm("Export ALL blocks?\nOK = ZIP\nCancel = select")) {
-    exportSelected(blocks);
+  if (confirm("Export ALL blocks as ZIP?\nOK = ZIP\nCancel = single block")) {
+    const zip = new JSZip();
+    for (let i=0;i<blocks.length;i++) {
+      const blob = await blockToBlob(blocks[i]);
+      zip.file(`block_${i}.jpg`, blob);
+    }
+    const out = await zip.generateAsync({type:"blob"});
+    download(out, "blocks.zip");
   } else {
-    exportAll(blocks);
+    const id = prompt(`Block index (0 - ${blocks.length-1})`);
+    if (!blocks[id]) return;
+    const blob = await blockToBlob(blocks[id]);
+    download(blob, `block_${id}.jpg`);
   }
 };
 
-function blockToBlob(block) {
+function blockToBlob(b) {
   return new Promise(resolve => {
     const c = document.createElement("canvas");
-    c.width = block.width;
-    c.height = block.height;
-    const cx = c.getContext("2d");
-
-    cx.drawImage(
+    c.width = b.w;
+    c.height = b.h;
+    c.getContext("2d").drawImage(
       canvas,
-      block.x, block.y, block.width, block.height,
-      0, 0, block.width, block.height
+      b.x, b.y, b.w, b.h,
+      0, 0, b.w, b.h
     );
-
-    c.toBlob(b => resolve(b), "image/jpeg", 0.95);
+    c.toBlob(resolve, "image/jpeg", 0.95);
   });
-}
-
-async function exportAll(blocks) {
-  const zip = new JSZip();
-  for (let b of blocks) {
-    const blob = await blockToBlob(b);
-    zip.file(`block_${b.index}.jpg`, blob);
-  }
-  const zipBlob = await zip.generateAsync({type:"blob"});
-  download(zipBlob, "blocks.zip");
-}
-
-async function exportSelected(blocks) {
-  const ids = prompt(`Enter block numbers (0-${blocks.length-1}) comma separated`);
-  if (!ids) return;
-
-  const selected = ids.split(",").map(n => blocks[+n]).filter(Boolean);
-  for (let b of selected) {
-    const blob = await blockToBlob(b);
-    download(blob, `block_${b.index}.jpg`);
-  }
 }
 
 function download(blob, name) {
