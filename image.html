@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Slicer</title>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  body { font-family: sans-serif; margin: 10px; }
+  canvas { border: 1px solid #333; touch-action: none; }
+  button { margin: 5px 5px 5px 0; }
+</style>
+</head>
+<body>
+
+<input type="file" id="upload" accept="image/*"><br>
+<button id="cropBtn">Crop</button>
+<button id="exportBtn">Export</button>
+<button id="resetBtn">Reset Lines</button>
+
+<br><br>
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+let img = new Image();
+let imageLoaded = false;
+
+// slicing data
+let verticalCuts = [];
+let horizontalCuts = [];
+
+// crop state (simple full-image crop placeholder)
+let crop = null;
+
+// ---------- IMAGE LOAD ----------
+document.getElementById("upload").onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  img.onload = () => {
+    const maxW = window.innerWidth - 20;
+    const maxH = window.innerHeight - 200;
+
+    const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+
+    canvas.width  = Math.floor(img.width * scale);
+    canvas.height = Math.floor(img.height * scale);
+
+    draw();
+    imageLoaded = true;
+  };
+  img.src = URL.createObjectURL(file);
+};
+
+// ---------- DRAW ----------
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  ctx.strokeStyle = "red";
+  ctx.lineWidth = 1;
+
+  verticalCuts.forEach(x => {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  });
+
+  horizontalCuts.forEach(y => {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  });
+}
+
+// ---------- LINE DRAWING (EDGE ONLY) ----------
+canvas.addEventListener("click", e => {
+  if (!imageLoaded) return;
+
+  const r = canvas.getBoundingClientRect();
+  const x = Math.floor(e.clientX - r.left);
+  const y = Math.floor(e.clientY - r.top);
+
+  const edge = 10;
+
+  if (x < edge || x > canvas.width - edge) {
+    verticalCuts.push(x);
+  } else if (y < edge || y > canvas.height - edge) {
+    horizontalCuts.push(y);
+  } else {
+    return;
+  }
+
+  verticalCuts = [...new Set(verticalCuts)].sort((a,b)=>a-b);
+  horizontalCuts = [...new Set(horizontalCuts)].sort((a,b)=>a-b);
+
+  draw();
+});
+
+// ---------- RESET (LINES ONLY) ----------
+document.getElementById("resetBtn").onclick = () => {
+  verticalCuts = [];
+  horizontalCuts = [];
+  draw();
+};
+
+// ---------- BLOCK GENERATION ----------
+function generateBlocks() {
+  const X = [0, ...verticalCuts, canvas.width];
+  const Y = [0, ...horizontalCuts, canvas.height];
+
+  const blocks = [];
+
+  for (let i=0; i<Y.length-1; i++) {
+    for (let j=0; j<X.length-1; j++) {
+      const w = X[j+1] - X[j];
+      const h = Y[i+1] - Y[i];
+      if (w >= 1 && h >= 1) {
+        blocks.push({
+          x: X[j],
+          y: Y[i],
+          width: w,
+          height: h,
+          index: blocks.length
+        });
+      }
+    }
+  }
+  return blocks;
+}
+
+// ---------- EXPORT ----------
+document.getElementById("exportBtn").onclick = async () => {
+  if (!imageLoaded) return;
+
+  const blocks = generateBlocks();
+  if (!blocks.length) return alert("No blocks");
+
+  if (!confirm("Export ALL blocks?\nOK = ZIP\nCancel = select")) {
+    exportSelected(blocks);
+  } else {
+    exportAll(blocks);
+  }
+};
+
+function blockToBlob(block) {
+  return new Promise(resolve => {
+    const c = document.createElement("canvas");
+    c.width = block.width;
+    c.height = block.height;
+    const cx = c.getContext("2d");
+
+    cx.drawImage(
+      canvas,
+      block.x, block.y, block.width, block.height,
+      0, 0, block.width, block.height
+    );
+
+    c.toBlob(b => resolve(b), "image/jpeg", 0.95);
+  });
+}
+
+async function exportAll(blocks) {
+  const zip = new JSZip();
+  for (let b of blocks) {
+    const blob = await blockToBlob(b);
+    zip.file(`block_${b.index}.jpg`, blob);
+  }
+  const zipBlob = await zip.generateAsync({type:"blob"});
+  download(zipBlob, "blocks.zip");
+}
+
+async function exportSelected(blocks) {
+  const ids = prompt(`Enter block numbers (0-${blocks.length-1}) comma separated`);
+  if (!ids) return;
+
+  const selected = ids.split(",").map(n => blocks[+n]).filter(Boolean);
+  for (let b of selected) {
+    const blob = await blockToBlob(b);
+    download(blob, `block_${b.index}.jpg`);
+  }
+}
+
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+}
+</script>
+
+</body>
+</html>
