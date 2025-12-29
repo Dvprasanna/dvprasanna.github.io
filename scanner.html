@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>B/W Document Readability Scanner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f2f2f2;
+    padding: 10px;
+    text-align: center;
+  }
+  canvas {
+    border: 1px solid #333;
+    max-width: 100%;
+    background: white;
+  }
+  input {
+    margin: 10px 0;
+  }
+</style>
+</head>
+<body>
+
+<h3>Black & White Readability Scanner</h3>
+<input type="file" accept="image/*" id="upload">
+<br>
+<canvas id="canvas"></canvas>
+
+<script>
+const upload = document.getElementById("upload");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+upload.onchange = e => {
+  const img = new Image();
+  img.onload = () => processImage(img);
+  img.src = URL.createObjectURL(e.target.files[0]);
+};
+
+function processImage(img) {
+  canvas.width = img.width;
+  canvas.height = img.height;
+  ctx.drawImage(img, 0, 0);
+
+  let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  let d = imgData.data;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  // STEP 1A: Grayscale
+  let gray = new Uint8ClampedArray(w * h);
+  for (let i = 0; i < d.length; i += 4) {
+    gray[i/4] = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+  }
+
+  // STEP 1B: Local adaptive B/W
+  let bw = new Uint8ClampedArray(w * h);
+  const R = 8; // local radius
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let sum = 0, count = 0;
+      for (let dy = -R; dy <= R; dy++) {
+        for (let dx = -R; dx <= R; dx++) {
+          let nx = x + dx, ny = y + dy;
+          if (nx >= 0 && ny >= 0 && nx < w && ny < h) {
+            sum += gray[ny*w + nx];
+            count++;
+          }
+        }
+      }
+      let idx = y*w + x;
+      bw[idx] = gray[idx] < (sum / count - 10) ? 1 : 0;
+    }
+  }
+
+  // STEP 2: Grid-based white enforcement
+  const GRID = 10;
+  for (let gy = 0; gy < h; gy += GRID) {
+    for (let gx = 0; gx < w; gx += GRID) {
+      let black = 0, total = 0;
+      for (let y = gy; y < gy + GRID && y < h; y++) {
+        for (let x = gx; x < gx + GRID && x < w; x++) {
+          total++;
+          if (bw[y*w + x]) black++;
+        }
+      }
+      if (black < total * 0.3) {
+        for (let y = gy; y < gy + GRID && y < h; y++) {
+          for (let x = gx; x < gx + GRID && x < w; x++) {
+            bw[y*w + x] = 0;
+          }
+        }
+      }
+    }
+  }
+
+  // STEP 3: Estimate stroke thickness
+  let hist = {};
+  for (let y = 0; y < h; y++) {
+    let run = 0;
+    for (let x = 0; x < w; x++) {
+      if (bw[y*w + x]) run++;
+      else {
+        if (run > 0 && run < 20) hist[run] = (hist[run] || 0) + 1;
+        run = 0;
+      }
+    }
+  }
+  let T = Object.keys(hist).sort((a,b) => hist[b] - hist[a])[0] || 2;
+  T = parseInt(T);
+
+  // STEP 4: Thickness-consistent cleanup
+  let out = new Uint8ClampedArray(w * h);
+  for (let y = 0; y < h; y++) {
+    let run = 0;
+    for (let x = 0; x < w; x++) {
+      let i = y*w + x;
+      if (bw[i]) run++;
+      else {
+        if (run >= T-1 && run <= T+2) {
+          for (let k = 1; k <= run; k++) out[i-k] = 1;
+        }
+        run = 0;
+      }
+    }
+  }
+
+  // Render result
+  for (let i = 0; i < d.length; i += 4) {
+    let v = out[i/4] ? 0 : 255;
+    d[i] = d[i+1] = d[i+2] = v;
+    d[i+3] = 255;
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+}
+</script>
+
+</body>
+</html>
