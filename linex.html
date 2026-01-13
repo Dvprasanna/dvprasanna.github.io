@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Pixel Line Balance Test — v0.4.3</title>
+<title>Pixel Balance Test — v0.5.0</title>
 
 <!--
-  App Version: v0.4.3
+  App Version: v0.5.0
   Line Engine: v1.0.0
   Brush Engine: v1.0.0
-  Balance Logic: v1.4.0 (Green/Red side-heavy)
+  Balance Logic: v1.5.0 (Single-color bar)
 -->
 
 <style>
@@ -17,32 +17,45 @@
     background: #111;
     color: #fff;
     font-family: system-ui, sans-serif;
-  }
-  #top {
-    padding: 8px;
-    background: #000;
-    border-bottom: 1px solid #333;
-    text-align: center;
-  }
-  #version {
-    font-size: 11px;
-    color: #888;
-  }
-  #balance {
-    height: 14px;
-    background: #222;
     display: flex;
-    margin-top: 6px;
+    flex-direction: column;
+    align-items: center;
   }
-  #leftBar, #rightBar {
-    transition: width 0.15s linear, background 0.15s linear;
+
+  #status {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    margin: 12px 0;
+    font-size: 12px;
+    color: #aaa;
   }
+
   canvas {
-    display: block;
-    margin: auto;
     background: #000;
     cursor: crosshair;
+    display: block;
   }
+
+  #barWrap {
+    width: 600px;
+    height: 16px;
+    background: #222;
+    margin-top: 8px;
+  }
+
+  #bar {
+    height: 100%;
+    width: 50%;
+    background: #2ecc71;
+    transition: width 0.15s linear, background 0.15s linear;
+  }
+
+  #counts {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #888;
+  }
+
   button {
     margin-top: 6px;
     padding: 4px 10px;
@@ -52,28 +65,21 @@
 
 <body>
 
-<div id="top">
-  <div><b>Pixel Balance Test</b></div>
-  <div id="version">
-    App v0.4.3 · Line v1.0.0 · Brush v1.0.0 · Balance v1.4.0
-  </div>
-
-  <div id="counts">Left: 0 | Center: 0 | Right: 0</div>
-
-  <!-- ORIGINAL BALANCE BAR -->
-  <div id="balance">
-    <div id="leftBar" style="width:50%"></div>
-    <div id="rightBar" style="width:50%"></div>
-  </div>
-
-  <button onclick="resetAll()">Reset</button>
-</div>
+<div id="status">PIXEL BALANCE</div>
 
 <canvas id="c" width="600" height="400"></canvas>
 
+<div id="barWrap">
+  <div id="bar"></div>
+</div>
+
+<div id="counts">Left: 0 | Center: 0 | Right: 0</div>
+
+<button onclick="resetAll()">Reset</button>
+
 <script>
 /* ================= VERSION ================= */
-const APP_VERSION = "0.4.3";
+const APP_VERSION = "0.5.0";
 
 /* ================= BRUSH ================= */
 const BRUSH_RADIUS = 1;
@@ -119,31 +125,20 @@ function putPixel(x,y){
   }
 }
 
-/* ================= BALANCE BAR (GREEN / RED) ================= */
-function updateBalance(){
+/* ================= BALANCE BAR ================= */
+function updateBar(){
   const total = left + right || 1;
+  const diff = left - right;
+  const ratio = Math.abs(diff) / total;
 
-  const leftPct = (left / total) * 100;
-  const rightPct = 100 - leftPct;
+  const bar = document.getElementById("bar");
 
-  const leftBar = document.getElementById("leftBar");
-  const rightBar = document.getElementById("rightBar");
+  bar.style.width = (50 + ratio * 100) + "%";
 
-  leftBar.style.width = leftPct + "%";
-  rightBar.style.width = rightPct + "%";
-
-  if (left > right) {
-    leftBar.style.background  = "#2ecc71"; // green
-    rightBar.style.background = "#e74c3c"; // red
-  } 
-  else if (right > left) {
-    rightBar.style.background = "#2ecc71"; // green
-    leftBar.style.background  = "#e74c3c"; // red
-  } 
-  else {
-    // perfect balance
-    leftBar.style.background  = "#2ecc71";
-    rightBar.style.background = "#2ecc71";
+  if (diff >= 0) {
+    bar.style.background = "#2ecc71"; // left heavy or equal
+  } else {
+    bar.style.background = "#e74c3c"; // right heavy
   }
 
   document.getElementById("counts").innerText =
@@ -162,7 +157,7 @@ canvas.onmousemove = e=>{
   const x=e.offsetX|0, y=e.offsetY|0;
   getLinePixels(prevX,prevY,x,y).forEach(p=>putPixel(p[0],p[1]));
   prevX=x; prevY=y;
-  updateBalance();
+  updateBar();
 };
 
 window.onmouseup = ()=>drawing=false;
@@ -171,9 +166,9 @@ window.onmouseup = ()=>drawing=false;
 function resetAll(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   left=right=center=0;
-  document.getElementById("leftBar").style.width="50%";
-  document.getElementById("rightBar").style.width="50%";
-  updateBalance();
+  document.getElementById("bar").style.width="50%";
+  document.getElementById("bar").style.background="#2ecc71";
+  updateBar();
 }
 
 /* ================= CENTER GUIDE ================= */
@@ -182,6 +177,8 @@ for(let y=0;y<canvas.height;y++){
   ctx.fillRect(midX,y,1,1);
 }
 ctx.fillStyle="#fff";
+
+console.log("Pixel Balance Test v" + APP_VERSION);
 </script>
 
 </body>
