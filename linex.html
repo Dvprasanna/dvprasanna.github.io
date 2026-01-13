@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Line Logic Balance Test</title>
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: #fff;
+    font-family: system-ui, sans-serif;
+  }
+  #top {
+    padding: 8px;
+    background: #000;
+    border-bottom: 1px solid #333;
+    text-align: center;
+  }
+  #balance {
+    height: 14px;
+    background: #222;
+    display: flex;
+    margin-top: 6px;
+  }
+  #leftBar {
+    background: #2ecc71;
+    width: 50%;
+  }
+  #rightBar {
+    background: #e74c3c;
+    width: 50%;
+  }
+  canvas {
+    display: block;
+    margin: auto;
+    background: #000;
+    cursor: crosshair;
+  }
+</style>
+</head>
+
+<body>
+
+<div id="top">
+  <div>Pixel Balance Test (Left vs Right)</div>
+  <div id="counts">Left: 0 | Right: 0</div>
+  <div id="balance">
+    <div id="leftBar"></div>
+    <div id="rightBar"></div>
+  </div>
+</div>
+
+<canvas id="c" width="600" height="400"></canvas>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+ctx.fillStyle = "#fff";
+
+let drawing = false;
+let prevX = 0;
+let prevY = 0;
+
+const midX = canvas.width / 2;
+
+let leftCount = 0;
+let rightCount = 0;
+
+/* ================= LINE LOGIC ================= */
+function getLinePixels(x1, y1, x2, y2) {
+  const pts = [];
+
+  let dx = Math.abs(x2 - x1);
+  let dy = Math.abs(y2 - y1);
+
+  let sx = x1 < x2 ? 1 : -1;
+  let sy = y1 < y2 ? 1 : -1;
+
+  let err = dx - dy;
+
+  while (true) {
+    pts.push([x1, y1]);
+    if (x1 === x2 && y1 === y2) break;
+
+    let e2 = 2 * err;
+
+    if (e2 > -dy) {
+      err -= dy;
+      x1 += sx;
+    }
+    if (e2 < dx) {
+      err += dx;
+      y1 += sy;
+    }
+  }
+  return pts;
+}
+
+/* ================= RENDER ================= */
+function putPixel(x, y) {
+  ctx.fillRect(x, y, 1, 1);
+
+  if (x < midX) leftCount++;
+  else rightCount++;
+}
+
+/* ================= BALANCE ================= */
+function updateBalance() {
+  const total = leftCount + rightCount || 1;
+  const leftPct = (leftCount / total) * 100;
+  const rightPct = 100 - leftPct;
+
+  document.getElementById("leftBar").style.width = leftPct + "%";
+  document.getElementById("rightBar").style.width = rightPct + "%";
+
+  document.getElementById("counts").innerText =
+    `Left: ${leftCount} | Right: ${rightCount}`;
+}
+
+/* ================= INPUT ================= */
+canvas.addEventListener("mousedown", e => {
+  drawing = true;
+  prevX = Math.floor(e.offsetX);
+  prevY = Math.floor(e.offsetY);
+});
+
+canvas.addEventListener("mousemove", e => {
+  if (!drawing) return;
+
+  const x = Math.floor(e.offsetX);
+  const y = Math.floor(e.offsetY);
+
+  const pixels = getLinePixels(prevX, prevY, x, y);
+  pixels.forEach(p => putPixel(p[0], p[1]));
+
+  prevX = x;
+  prevY = y;
+  updateBalance();
+});
+
+window.addEventListener("mouseup", () => drawing = false);
+</script>
+
+</body>
+</html>
