@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Canvas CAD Engine – V1</title>
+
+<style>
+  html, body {
+    margin: 0;
+    background: #111;
+    color: #fff;
+    font-family: system-ui, sans-serif;
+  }
+
+  canvas {
+    display: block;
+    background: #000;
+    touch-action: none;
+  }
+</style>
+</head>
+
+<body>
+
+<canvas id="cad"></canvas>
+
+<script>
+/* ===============================
+   Canvas CAD Engine
+   Version: 1.0.0
+   =============================== */
+
+const canvas = document.getElementById("cad");
+const ctx = canvas.getContext("2d");
+
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight * 0.6;
+}
+resize();
+window.addEventListener("resize", resize);
+
+// --- Core reference ---
+function gridCenter() {
+  return {
+    x: canvas.width / 2,
+    y: canvas.width / 2   // IMPORTANT: W/2 from top
+  };
+}
+
+// --- Grid settings ---
+const rectGrid = 20;
+const radialStep = 20;
+const angleStep = Math.PI / 12; // 15°
+
+let drawing = false;
+let last = null;
+
+// ===============================
+// Drawing helpers
+// ===============================
+
+function drawRectGrid() {
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 1;
+
+  for (let x = 0; x < canvas.width; x += rectGrid) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+
+  for (let y = 0; y < canvas.height; y += rectGrid) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  }
+}
+
+function drawCircularGrid() {
+  const { x, y } = gridCenter();
+
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = 1;
+
+  // axes
+  ctx.beginPath();
+  ctx.moveTo(0, y);
+  ctx.lineTo(canvas.width, y);
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, canvas.height);
+  ctx.stroke();
+
+  // circles
+  for (let r = radialStep; r < canvas.width; r += radialStep) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // angle lines
+  for (let a = 0; a < Math.PI * 2; a += angleStep) {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(
+      x + Math.cos(a) * canvas.width,
+      y + Math.sin(a) * canvas.width
+    );
+    ctx.stroke();
+  }
+}
+
+function snapPoint(px, py) {
+  const { x: cx, y: cy } = gridCenter();
+
+  const dx = px - cx;
+  const dy = py - cy;
+
+  const angle  = Math.round(Math.atan2(dy, dx) / angleStep) * angleStep;
+  const radius = Math.round(Math.hypot(dx, dy) / radialStep) * radialStep;
+
+  return {
+    x: cx + Math.cos(angle) * radius,
+    y: cy + Math.sin(angle) * radius
+  };
+}
+
+// ===============================
+// Interaction
+// ===============================
+
+function start(e) {
+  drawing = true;
+  const p = getPoint(e);
+  last = snapPoint(p.x, p.y);
+}
+
+function move(e) {
+  if (!drawing) return;
+
+  const p = getPoint(e);
+  const snap = snapPoint(p.x, p.y);
+
+  ctx.strokeStyle = "#0f0";
+  ctx.lineWidth = 2;
+
+  ctx.beginPath();
+  ctx.moveTo(last.x, last.y);
+  ctx.lineTo(snap.x, snap.y);
+  ctx.stroke();
+
+  last = snap;
+}
+
+function stop() {
+  drawing = false;
+  last = null;
+}
+
+function getPoint(e) {
+  const rect = canvas.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return {
+    x: t.clientX - rect.left,
+    y: t.clientY - rect.top
+  };
+}
+
+// ===============================
+// Render loop
+// ===============================
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawRectGrid();
+  drawCircularGrid();
+  requestAnimationFrame(render);
+}
+render();
+
+// ===============================
+// Events
+// ===============================
+
+canvas.addEventListener("mousedown", start);
+canvas.addEventListener("mousemove", move);
+canvas.addEventListener("mouseup", stop);
+canvas.addEventListener("mouseleave", stop);
+
+canvas.addEventListener("touchstart", start, { passive: false });
+canvas.addEventListener("touchmove", move, { passive: false });
+canvas.addEventListener("touchend", stop);
+
+</script>
+
+</body>
+</html>
