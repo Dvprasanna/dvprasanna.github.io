@@ -22,19 +22,17 @@
     display: flex;
     margin-top: 6px;
   }
-  #leftBar {
-    background: #2ecc71;
-    width: 50%;
-  }
-  #rightBar {
-    background: #e74c3c;
-    width: 50%;
-  }
+  #leftBar { background:#2ecc71; }
+  #rightBar { background:#e74c3c; }
   canvas {
     display: block;
     margin: auto;
     background: #000;
     cursor: crosshair;
+  }
+  button {
+    margin-top: 6px;
+    padding: 4px 10px;
   }
 </style>
 </head>
@@ -43,11 +41,12 @@
 
 <div id="top">
   <div>Pixel Balance Test (Left vs Right)</div>
-  <div id="counts">Left: 0 | Right: 0</div>
+  <div id="counts">Left: 0 | Center: 0 | Right: 0</div>
   <div id="balance">
-    <div id="leftBar"></div>
-    <div id="rightBar"></div>
+    <div id="leftBar" style="width:50%"></div>
+    <div id="rightBar" style="width:50%"></div>
   </div>
+  <button onclick="resetAll()">Reset</button>
 </div>
 
 <canvas id="c" width="600" height="400"></canvas>
@@ -55,91 +54,80 @@
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
-
 ctx.fillStyle = "#fff";
 
 let drawing = false;
-let prevX = 0;
-let prevY = 0;
+let prevX = 0, prevY = 0;
 
-const midX = canvas.width / 2;
+const midX = Math.floor(canvas.width / 2);
 
-let leftCount = 0;
-let rightCount = 0;
+let left = 0, right = 0, center = 0;
 
-/* ================= LINE LOGIC ================= */
-function getLinePixels(x1, y1, x2, y2) {
-  const pts = [];
-
-  let dx = Math.abs(x2 - x1);
-  let dy = Math.abs(y2 - y1);
-
-  let sx = x1 < x2 ? 1 : -1;
-  let sy = y1 < y2 ? 1 : -1;
-
-  let err = dx - dy;
-
-  while (true) {
-    pts.push([x1, y1]);
-    if (x1 === x2 && y1 === y2) break;
-
-    let e2 = 2 * err;
-
-    if (e2 > -dy) {
-      err -= dy;
-      x1 += sx;
-    }
-    if (e2 < dx) {
-      err += dx;
-      y1 += sy;
-    }
+/* ===== LINE LOGIC ===== */
+function getLinePixels(x1,y1,x2,y2){
+  const pts=[];
+  let dx=Math.abs(x2-x1), dy=Math.abs(y2-y1);
+  let sx=x1<x2?1:-1, sy=y1<y2?1:-1;
+  let err=dx-dy;
+  while(true){
+    pts.push([x1,y1]);
+    if(x1===x2 && y1===y2) break;
+    let e2=2*err;
+    if(e2>-dy){ err-=dy; x1+=sx; }
+    if(e2< dx){ err+=dx; y1+=sy; }
   }
   return pts;
 }
 
-/* ================= RENDER ================= */
-function putPixel(x, y) {
-  ctx.fillRect(x, y, 1, 1);
+/* ===== RENDER ===== */
+function putPixel(x,y){
+  ctx.fillRect(x,y,1,1);
 
-  if (x < midX) leftCount++;
-  else rightCount++;
+  if (x < midX) left++;
+  else if (x > midX) right++;
+  else center++;
 }
 
-/* ================= BALANCE ================= */
-function updateBalance() {
-  const total = leftCount + rightCount || 1;
-  const leftPct = (leftCount / total) * 100;
-  const rightPct = 100 - leftPct;
-
-  document.getElementById("leftBar").style.width = leftPct + "%";
-  document.getElementById("rightBar").style.width = rightPct + "%";
-
+/* ===== BALANCE ===== */
+function updateBalance(){
+  const total = left + right || 1;
+  document.getElementById("leftBar").style.width = (left/total)*100 + "%";
+  document.getElementById("rightBar").style.width = (right/total)*100 + "%";
   document.getElementById("counts").innerText =
-    `Left: ${leftCount} | Right: ${rightCount}`;
+    `Left: ${left} | Center: ${center} | Right: ${right}`;
 }
 
-/* ================= INPUT ================= */
-canvas.addEventListener("mousedown", e => {
+/* ===== INPUT ===== */
+canvas.onmousedown = e => {
   drawing = true;
-  prevX = Math.floor(e.offsetX);
-  prevY = Math.floor(e.offsetY);
-});
+  prevX = e.offsetX | 0;
+  prevY = e.offsetY | 0;
+};
 
-canvas.addEventListener("mousemove", e => {
-  if (!drawing) return;
-
-  const x = Math.floor(e.offsetX);
-  const y = Math.floor(e.offsetY);
-
-  const pixels = getLinePixels(prevX, prevY, x, y);
-  pixels.forEach(p => putPixel(p[0], p[1]));
-
-  prevX = x;
-  prevY = y;
+canvas.onmousemove = e => {
+  if(!drawing) return;
+  const x = e.offsetX | 0;
+  const y = e.offsetY | 0;
+  getLinePixels(prevX,prevY,x,y).forEach(p=>putPixel(p[0],p[1]));
+  prevX=x; prevY=y;
   updateBalance();
-});
+};
 
-window.addEventListener("mouseup", () => drawing = false);
+window.onmouseup = ()=> drawing=false;
+
+/* ===== RESET ===== */
+function resetAll(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  left=right=center=0;
+  updateBalance();
+}
+
+/* draw center guide */
+ctx.fillStyle="#333";
+for(let y=0;y<canvas.height;y++){
+  ctx.fillRect(midX,y,1,1);
+}
+ctx.fillStyle="#fff";
 </script>
 
 </body>
