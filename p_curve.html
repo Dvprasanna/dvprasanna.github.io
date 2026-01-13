@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Curve Editor (Bezier + Sine + Cos)</title>
+<title>Curve & Wave Editor</title>
 
 <style>
 html, body {
@@ -63,68 +63,81 @@ addEventListener("resize", resize);
 let mode = "bezier";
 
 /* ---------- UI ---------- */
-document.getElementById("bezier").onclick = () => mode = "bezier";
-document.getElementById("sine").onclick   = () => mode = "sine";
-document.getElementById("cos").onclick    = () => mode = "cos";
+bezier.onclick = () => mode="bezier";
+sine.onclick   = () => mode="sine";
+cos.onclick    = () => mode="cos";
 
-document.getElementById("clear").onclick = () => {
-  curves = [];
-  redrawAll();
-};
+clear.onclick = () => { curves=[]; redrawAll(); };
 
-document.getElementById("export").onclick = () => {
-  const a = document.createElement("a");
-  a.download = "canvas.png";
-  a.href = canvas.toDataURL("image/png");
+export.onclick = () => {
+  const a=document.createElement("a");
+  a.download="canvas.png";
+  a.href=canvas.toDataURL();
   a.click();
 };
 
 /* ---------- State ---------- */
-let curves = [];
-let current = null;
-let dragging = false;
+let curves=[];
+let current=null;
+let dragging=false;
+let activeHandle=null;
+const HR=8;
 
 /* ---------- Pointer ---------- */
 function getPos(e){
-  if (e.touches) e = e.touches[0];
-  const r = canvas.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
+  if(e.touches) e=e.touches[0];
+  const r=canvas.getBoundingClientRect();
+  return {x:e.clientX-r.left,y:e.clientY-r.top};
 }
 
 /* ---------- Events ---------- */
-canvas.addEventListener("mousedown", start);
-canvas.addEventListener("touchstart", start);
-canvas.addEventListener("mousemove", move);
-canvas.addEventListener("touchmove", move);
-canvas.addEventListener("mouseup", end);
-canvas.addEventListener("touchend", end);
+canvas.addEventListener("mousedown",start);
+canvas.addEventListener("touchstart",start);
+canvas.addEventListener("mousemove",move);
+canvas.addEventListener("touchmove",move);
+canvas.addEventListener("mouseup",end);
+canvas.addEventListener("touchend",end);
 
 /* ---------- Start ---------- */
 function start(e){
   e.preventDefault();
-  const p = getPos(e);
-  dragging = true;
-  current = { type: mode, x0:p.x, y0:p.y };
+  const p=getPos(e);
+
+  // hit handles
+  for(const c of curves){
+    if(c.hAmp && hit(c.hAmp,p)){ activeHandle={c,type:"amp"}; return; }
+    if(c.hPhase && hit(c.hPhase,p)){ activeHandle={c,type:"phase"}; return; }
+  }
+
+  dragging=true;
+  current={ type:mode, x0:p.x, y0:p.y };
 }
 
 /* ---------- Move ---------- */
 function move(e){
-  if (!dragging) return;
-  const p = getPos(e);
-  current.x1 = p.x;
-  current.y1 = p.y;
+  const p=getPos(e);
 
+  if(activeHandle){
+    updateWaveHandle(activeHandle,p);
+    redrawAll();
+    return;
+  }
+
+  if(!dragging) return;
+  current.x1=p.x; current.y1=p.y;
   redrawAll();
-  preview(current);
 }
 
 /* ---------- End ---------- */
 function end(){
-  if (!dragging) return;
-  dragging = false;
-  curves.push(current);
-  current = null;
-  redrawAll();
+  if(dragging){
+    dragging=false;
+    initWave(current);
+    curves.push(current);
+    current=null;
+    redrawAll();
+  }
+  activeHandle=null;
 }
 
 /* ---------- Drawing ---------- */
@@ -133,96 +146,92 @@ function pixel(x,y){
   ctx.fillRect(Math.round(x),Math.round(y),1,1);
 }
 
-function preview(c){
-  if (c.type === "bezier") drawLine(c.x0,c.y0,c.x1,c.y1);
-  if (c.type === "sine") drawSine(c);
-  if (c.type === "cos")  drawCos(c);
+function drawHandle(p,color){
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.arc(p.x,p.y,HR,0,Math.PI*2);
+  ctx.fill();
 }
 
+function hit(p,m){
+  return Math.hypot(p.x-m.x,p.y-m.y)<HR;
+}
+
+/* ---------- Wave Init ---------- */
+function initWave(c){
+  const dx=c.x1-c.x0, dy=c.y1-c.y0;
+  const len=Math.hypot(dx,dy);
+  if(!len) return;
+
+  c.ux=dx/len; c.uy=dy/len;
+  c.nx=-c.uy;  c.ny=c.ux;
+
+  c.amp=Math.min(len/6,40);
+  c.phase=0;
+
+  updateWaveHandles(c);
+}
+
+/* ---------- Update Handles ---------- */
+function updateWaveHandles(c){
+  const mx=(c.x0+c.x1)/2;
+  const my=(c.y0+c.y1)/2;
+
+  c.hAmp={
+    x: mx + c.nx*c.amp,
+    y: my + c.ny*c.amp
+  };
+
+  c.hPhase={
+    x: mx + c.ux*30,
+    y: my + c.uy*30
+  };
+}
+
+/* ---------- Handle Drag ---------- */
+function updateWaveHandle(h,p){
+  const c=h.c;
+  if(h.type==="amp"){
+    const dx=p.x-(c.x0+c.x1)/2;
+    const dy=p.y-(c.y0+c.y1)/2;
+    c.amp=dx*c.nx+dy*c.ny;
+  }
+  if(h.type==="phase"){
+    const dx=p.x-(c.x0+c.x1)/2;
+    const dy=p.y-(c.y0+c.y1)/2;
+    c.phase=(dx*c.ux+dy*c.uy)/30;
+  }
+  updateWaveHandles(c);
+}
+
+/* ---------- Draw All ---------- */
 function redrawAll(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  curves.forEach(c => {
-    if (c.type === "bezier") drawBezier(c);
-    if (c.type === "sine")   drawSine(c);
-    if (c.type === "cos")    drawCos(c);
+  curves.forEach(c=>{
+    if(c.type==="sine") drawWave(c,Math.sin);
+    if(c.type==="cos")  drawWave(c,Math.cos);
   });
 }
 
-function drawLine(x0,y0,x1,y1){
-  const s = Math.max(Math.abs(x1-x0),Math.abs(y1-y0));
-  for(let i=0;i<=s;i++){
-    const t=i/s;
-    pixel(x0+t*(x1-x0),y0+t*(y1-y0));
-  }
-}
+/* ---------- Draw Wave ---------- */
+function drawWave(c,fn){
+  const dx=c.x1-c.x0, dy=c.y1-c.y0;
+  const len=Math.hypot(dx,dy);
+  const steps=len*2;
 
-/* ---------- Bézier (two-max S-curve) ---------- */
-function drawBezier(c){
-  const dx = c.x1-c.x0;
-  const dy = c.y1-c.y0;
-
-  let nx = -dy, ny = dx;
-  const l = Math.hypot(nx,ny);
-  nx/=l; ny/=l;
-
-  let D = Math.min(Math.abs(dx),Math.abs(dy))/3;
-  if (D<10) D=10;
-
-  const C1 = {
-    x: c.x0 + dx*0.33 + nx*D,
-    y: c.y0 + dy*0.33 + ny*D
-  };
-  const C2 = {
-    x: c.x0 + dx*0.66 - nx*D,
-    y: c.y0 + dy*0.66 - ny*D
-  };
-
-  const s = Math.max(Math.abs(dx),Math.abs(dy))*4;
-  for(let i=0;i<=s;i++){
-    const t=i/s, mt=1-t;
-    pixel(
-      mt*mt*mt*c.x0 + 3*mt*mt*t*C1.x + 3*mt*t*t*C2.x + t*t*t*c.x1,
-      mt*mt*mt*c.y0 + 3*mt*mt*t*C1.y + 3*mt*t*t*C2.y + t*t*t*c.y1
-    );
-  }
-}
-
-/* ---------- Shared wave math ---------- */
-function waveBase(c, fn){
-  const dx = c.x1-c.x0;
-  const dy = c.y1-c.y0;
-  const len = Math.hypot(dx,dy);
-  if (len===0) return;
-
-  const ux = dx/len;
-  const uy = dy/len;
-  const nx = -uy;
-  const ny = ux;
-
-  const amplitude = Math.min(len/6, 40);
-  const cycles = 1;
-
-  const steps = len*2;
   for(let i=0;i<=steps;i++){
-    const t = i/steps;
-    const phase = t * Math.PI * 2 * cycles;
-    const offset = fn(phase) * amplitude;
+    const t=i/steps;
+    const phase=t*Math.PI*2 + c.phase;
+    const off=fn(phase)*c.amp;
 
     pixel(
-      c.x0 + ux*len*t + nx*offset,
-      c.y0 + uy*len*t + ny*offset
+      c.x0 + c.ux*len*t + c.nx*off,
+      c.y0 + c.uy*len*t + c.ny*off
     );
   }
-}
 
-/* ---------- SINE ---------- */
-function drawSine(c){
-  waveBase(c, Math.sin);
-}
-
-/* ---------- COS ---------- */
-function drawCos(c){
-  waveBase(c, Math.cos);
+  drawHandle(c.hAmp,"#ff4444");   // amplitude
+  drawHandle(c.hPhase,"#4488ff"); // phase
 }
 </script>
 
