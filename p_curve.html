@@ -33,6 +33,8 @@ canvas{
   <button onclick="setMode('sine')">SINE</button>
   <button onclick="setMode('cos')">COS</button>
   <button onclick="toggleHandles()">HANDLES</button>
+  <button onclick="undo()">UNDO</button>
+  <button onclick="redo()">REDO</button>
   <button onclick="clearAll()">CLS</button>
   <button onclick="exportPNG()">EXPORT</button>
 </div>
@@ -61,18 +63,47 @@ const App = {
   activeCurve:null,
   activeHandle:null,
   dragging:false,
-  showHandles:true
+  showHandles:true,
+  undoStack:[],
+  redoStack:[]
 };
+
+/* ================= STATE HELPERS ================= */
+function snapshot(){
+  App.undoStack.push(JSON.parse(JSON.stringify(App.curves)));
+  App.redoStack.length = 0; // clear redo on new action
+}
+
+function undo(){
+  if(!App.undoStack.length) return;
+  App.redoStack.push(JSON.parse(JSON.stringify(App.curves)));
+  App.curves = App.undoStack.pop();
+  redraw();
+}
+
+function redo(){
+  if(!App.redoStack.length) return;
+  App.undoStack.push(JSON.parse(JSON.stringify(App.curves)));
+  App.curves = App.redoStack.pop();
+  redraw();
+}
+
+/* keyboard */
+addEventListener("keydown",e=>{
+  if(e.ctrlKey && e.key==="z") undo();
+  if(e.ctrlKey && e.key==="y") redo();
+});
 
 /* ================= UI ================= */
 function setMode(m){ App.mode=m; }
 
 function toggleHandles(){
-  App.showHandles = !App.showHandles;
+  App.showHandles=!App.showHandles;
   redraw();
 }
 
 function clearAll(){
+  snapshot();
   App.curves=[];
   redraw();
 }
@@ -104,14 +135,15 @@ function hit(h,p){
   return Math.hypot(h.x-p.x,h.y-p.y)<HANDLE_R;
 }
 
-/* ================= CURVE FACTORY ================= */
+/* ================= CURVES ================= */
 function createCurve(type,p0,p1){
+  snapshot();
   if(type==="bezier") return createBezier(p0,p1);
   if(type==="sine")   return createWave(p0,p1,Math.sin);
   if(type==="cos")    return createWave(p0,p1,Math.cos);
 }
 
-/* -------- Bezier (S-curve, 2 handles) -------- */
+/* -------- Bezier -------- */
 function createBezier(p0,p1){
   const dx=p1.x-p0.x, dy=p1.y-p0.y;
   const len=Math.hypot(dx,dy);
@@ -138,7 +170,7 @@ function createBezier(p0,p1){
   };
 }
 
-/* -------- Wave (Sine / Cos) -------- */
+/* -------- Wave -------- */
 function createWave(p0,p1,fn){
   const dx=p1.x-p0.x, dy=p1.y-p0.y;
   const len=Math.hypot(dx,dy);
@@ -191,6 +223,7 @@ function start(e){
       const c=App.curves[i];
       for(const h of c.handles){
         if(hit(h,p)){
+          snapshot();
           App.activeHandle=h;
           App.activeCurve=c;
           return;
@@ -212,7 +245,7 @@ function move(e){
       const mx=(c.p0.x+c.p1.x)/2;
       const my=(c.p0.y+c.p1.y)/2;
       const dx=p.x-mx, dy=p.y-my;
-      c.amp=dx*(-c.fn?1:1);
+      c.amp=dx;
       c.phase=dx/30;
       c.update();
     }else{
@@ -242,9 +275,7 @@ function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   App.curves.forEach(c=>{
     c.draw();
-    if(App.showHandles){
-      c.handles.forEach(drawHandle);
-    }
+    if(App.showHandles) c.handles.forEach(drawHandle);
   });
 }
 </script>
