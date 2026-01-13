@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Curve Editor (Bezier + Sine)</title>
+<title>Curve Editor (Bezier + Sine + Cos)</title>
 
 <style>
 html, body {
@@ -36,6 +36,7 @@ canvas {
 <div id="ui">
   <button id="bezier">BEZIER</button>
   <button id="sine">SINE</button>
+  <button id="cos">COS</button>
   <button id="clear">CLS</button>
   <button id="export">EXPORT</button>
 </div>
@@ -64,6 +65,7 @@ let mode = "bezier";
 /* ---------- UI ---------- */
 document.getElementById("bezier").onclick = () => mode = "bezier";
 document.getElementById("sine").onclick   = () => mode = "sine";
+document.getElementById("cos").onclick    = () => mode = "cos";
 
 document.getElementById("clear").onclick = () => {
   curves = [];
@@ -92,10 +94,8 @@ function getPos(e){
 /* ---------- Events ---------- */
 canvas.addEventListener("mousedown", start);
 canvas.addEventListener("touchstart", start);
-
 canvas.addEventListener("mousemove", move);
 canvas.addEventListener("touchmove", move);
-
 canvas.addEventListener("mouseup", end);
 canvas.addEventListener("touchend", end);
 
@@ -135,14 +135,16 @@ function pixel(x,y){
 
 function preview(c){
   if (c.type === "bezier") drawLine(c.x0,c.y0,c.x1,c.y1);
-  if (c.type === "sine") drawSine(c,true);
+  if (c.type === "sine") drawSine(c);
+  if (c.type === "cos")  drawCos(c);
 }
 
 function redrawAll(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   curves.forEach(c => {
     if (c.type === "bezier") drawBezier(c);
-    if (c.type === "sine") drawSine(c,false);
+    if (c.type === "sine")   drawSine(c);
+    if (c.type === "cos")    drawCos(c);
   });
 }
 
@@ -185,8 +187,8 @@ function drawBezier(c){
   }
 }
 
-/* ---------- SINE WAVE ---------- */
-function drawSine(c, preview){
+/* ---------- Shared wave math ---------- */
+function waveBase(c, fn){
   const dx = c.x1-c.x0;
   const dy = c.y1-c.y0;
   const len = Math.hypot(dx,dy);
@@ -198,18 +200,29 @@ function drawSine(c, preview){
   const ny = ux;
 
   const amplitude = Math.min(len/6, 40);
-  const cycles = 1; // one full sine wave
+  const cycles = 1;
 
   const steps = len*2;
   for(let i=0;i<=steps;i++){
     const t = i/steps;
     const phase = t * Math.PI * 2 * cycles;
-    const offset = Math.sin(phase) * amplitude;
+    const offset = fn(phase) * amplitude;
 
-    const x = c.x0 + ux*len*t + nx*offset;
-    const y = c.y0 + uy*len*t + ny*offset;
-    pixel(x,y);
+    pixel(
+      c.x0 + ux*len*t + nx*offset,
+      c.y0 + uy*len*t + ny*offset
+    );
   }
+}
+
+/* ---------- SINE ---------- */
+function drawSine(c){
+  waveBase(c, Math.sin);
+}
+
+/* ---------- COS ---------- */
+function drawCos(c){
+  waveBase(c, Math.cos);
 }
 </script>
 
