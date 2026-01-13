@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Two-Max Bézier Curve</title>
+<title>Curve Editor (Bezier + Sine)</title>
 
 <style>
 html, body {
@@ -11,6 +11,17 @@ html, body {
   padding: 0;
   overflow: hidden;
   background: #111;
+}
+#ui {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+}
+button {
+  margin-right: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
 }
 canvas {
   display: block;
@@ -21,34 +32,57 @@ canvas {
 </head>
 
 <body>
+
+<div id="ui">
+  <button id="bezier">BEZIER</button>
+  <button id="sine">SINE</button>
+  <button id="clear">CLS</button>
+  <button id="export">EXPORT</button>
+</div>
+
 <canvas id="c"></canvas>
 
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-/* ---------- Canvas resize (critical for iOS) ---------- */
-function resize() {
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width  = innerWidth * dpr;
+/* ---------- Resize ---------- */
+function resize(){
+  const dpr = devicePixelRatio || 1;
+  canvas.width = innerWidth * dpr;
   canvas.height = innerHeight * dpr;
-  canvas.style.width  = innerWidth + "px";
-  canvas.style.height = innerHeight + "px";
+  canvas.style.width = innerWidth+"px";
+  canvas.style.height = innerHeight+"px";
   ctx.setTransform(dpr,0,0,dpr,0,0);
 }
 resize();
 addEventListener("resize", resize);
 
+/* ---------- Mode ---------- */
+let mode = "bezier";
+
+/* ---------- UI ---------- */
+document.getElementById("bezier").onclick = () => mode = "bezier";
+document.getElementById("sine").onclick   = () => mode = "sine";
+
+document.getElementById("clear").onclick = () => {
+  curves = [];
+  redrawAll();
+};
+
+document.getElementById("export").onclick = () => {
+  const a = document.createElement("a");
+  a.download = "canvas.png";
+  a.href = canvas.toDataURL("image/png");
+  a.click();
+};
+
 /* ---------- State ---------- */
+let curves = [];
+let current = null;
 let dragging = false;
-let activeHandle = null;
 
-let x0,y0,x1,y1;        // start / end
-let C1 = null, C2 = null; // Max-1 / Max-2
-
-const HANDLE_RADIUS = 8;
-
-/* ---------- Pointer helper ---------- */
+/* ---------- Pointer ---------- */
 function getPos(e){
   if (e.touches) e = e.touches[0];
   const r = canvas.getBoundingClientRect();
@@ -69,137 +103,115 @@ canvas.addEventListener("touchend", end);
 function start(e){
   e.preventDefault();
   const p = getPos(e);
-
-  // Handle selection
-  if (C1 && hitHandle(C1,p.x,p.y)) { activeHandle = C1; return; }
-  if (C2 && hitHandle(C2,p.x,p.y)) { activeHandle = C2; return; }
-
-  // New curve
   dragging = true;
-  C1 = C2 = null;
-  x0 = p.x; y0 = p.y;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  current = { type: mode, x0:p.x, y0:p.y };
 }
 
 /* ---------- Move ---------- */
 function move(e){
-  const p = getPos(e);
-
-  // Drag handle
-  if (activeHandle) {
-    activeHandle.x = p.x;
-    activeHandle.y = p.y;
-    redraw();
-    return;
-  }
-
-  // Drag endpoint
   if (!dragging) return;
-  x1 = p.x; y1 = p.y;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawLine(x0,y0,x1,y1);
+  const p = getPos(e);
+  current.x1 = p.x;
+  current.y1 = p.y;
+
+  redrawAll();
+  preview(current);
 }
 
 /* ---------- End ---------- */
 function end(){
-  if (dragging) {
-    dragging = false;
-    createInitialHandles();
-    redraw();
-  }
-  activeHandle = null;
+  if (!dragging) return;
+  dragging = false;
+  curves.push(current);
+  current = null;
+  redrawAll();
 }
 
-/* ---------- Drawing helpers ---------- */
+/* ---------- Drawing ---------- */
 function pixel(x,y){
-  ctx.fillStyle = "#0f0";
+  ctx.fillStyle="#0f0";
   ctx.fillRect(Math.round(x),Math.round(y),1,1);
 }
 
+function preview(c){
+  if (c.type === "bezier") drawLine(c.x0,c.y0,c.x1,c.y1);
+  if (c.type === "sine") drawSine(c,true);
+}
+
+function redrawAll(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  curves.forEach(c => {
+    if (c.type === "bezier") drawBezier(c);
+    if (c.type === "sine") drawSine(c,false);
+  });
+}
+
 function drawLine(x0,y0,x1,y1){
-  const steps = Math.max(Math.abs(x1-x0),Math.abs(y1-y0));
-  for(let i=0;i<=steps;i++){
-    const t=i/steps;
-    pixel(x0+t*(x1-x0), y0+t*(y1-y0));
+  const s = Math.max(Math.abs(x1-x0),Math.abs(y1-y0));
+  for(let i=0;i<=s;i++){
+    const t=i/s;
+    pixel(x0+t*(x1-x0),y0+t*(y1-y0));
   }
 }
 
-function drawHandlePoint(p,color){
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(p.x,p.y,HANDLE_RADIUS,0,Math.PI*2);
-  ctx.fill();
-}
-
-function drawHandleLine(a,b){
-  ctx.strokeStyle="#444";
-  ctx.beginPath();
-  ctx.moveTo(a.x,a.y);
-  ctx.lineTo(b.x,b.y);
-  ctx.stroke();
-}
-
-function hitHandle(p,x,y){
-  return Math.hypot(p.x-x,p.y-y) < HANDLE_RADIUS;
-}
-
-/* ---------- Initial Max-1 / Max-2 creation ---------- */
-function createInitialHandles(){
-  const dx = x1-x0;
-  const dy = y1-y0;
-  if(dx===0 && dy===0) return;
+/* ---------- Bézier (two-max S-curve) ---------- */
+function drawBezier(c){
+  const dx = c.x1-c.x0;
+  const dy = c.y1-c.y0;
 
   let nx = -dy, ny = dx;
-  const nl = Math.hypot(nx,ny);
-  nx/=nl; ny/=nl;
+  const l = Math.hypot(nx,ny);
+  nx/=l; ny/=l;
 
   let D = Math.min(Math.abs(dx),Math.abs(dy))/3;
-  if (D < 10) D = 10;
+  if (D<10) D=10;
 
-  const t1 = 0.33, t2 = 0.66;
-
-  C1 = {
-    x: x0 + dx*t1 + nx*D,
-    y: y0 + dy*t1 + ny*D
+  const C1 = {
+    x: c.x0 + dx*0.33 + nx*D,
+    y: c.y0 + dy*0.33 + ny*D
+  };
+  const C2 = {
+    x: c.x0 + dx*0.66 - nx*D,
+    y: c.y0 + dy*0.66 - ny*D
   };
 
-  C2 = {
-    x: x0 + dx*t2 - nx*D,
-    y: y0 + dy*t2 - ny*D
-  };
+  const s = Math.max(Math.abs(dx),Math.abs(dy))*4;
+  for(let i=0;i<=s;i++){
+    const t=i/s, mt=1-t;
+    pixel(
+      mt*mt*mt*c.x0 + 3*mt*mt*t*C1.x + 3*mt*t*t*C2.x + t*t*t*c.x1,
+      mt*mt*mt*c.y0 + 3*mt*mt*t*C1.y + 3*mt*t*t*C2.y + t*t*t*c.y1
+    );
+  }
 }
 
-/* ---------- Redraw everything ---------- */
-function redraw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawBezier();
-  drawHandleLine({x:x0,y:y0},C1);
-  drawHandleLine({x:x1,y:y1},C2);
-  drawHandlePoint(C1,"#ff4444"); // Max-1
-  drawHandlePoint(C2,"#4488ff"); // Max-2
-}
+/* ---------- SINE WAVE ---------- */
+function drawSine(c, preview){
+  const dx = c.x1-c.x0;
+  const dy = c.y1-c.y0;
+  const len = Math.hypot(dx,dy);
+  if (len===0) return;
 
-/* ---------- Core: two-max cubic Bézier ---------- */
-function drawBezier(){
-  const steps = Math.max(Math.abs(x1-x0),Math.abs(y1-y0))*4;
+  const ux = dx/len;
+  const uy = dy/len;
+  const nx = -uy;
+  const ny = ux;
 
+  const amplitude = Math.min(len/6, 40);
+  const cycles = 1; // one full sine wave
+
+  const steps = len*2;
   for(let i=0;i<=steps;i++){
-    const t=i/steps, mt=1-t;
-    const x =
-      mt*mt*mt*x0 +
-      3*mt*mt*t*C1.x +
-      3*mt*t*t*C2.x +
-      t*t*t*x1;
+    const t = i/steps;
+    const phase = t * Math.PI * 2 * cycles;
+    const offset = Math.sin(phase) * amplitude;
 
-    const y =
-      mt*mt*mt*y0 +
-      3*mt*mt*t*C1.y +
-      3*mt*t*t*C2.y +
-      t*t*t*y1;
-
+    const x = c.x0 + ux*len*t + nx*offset;
+    const y = c.y0 + uy*len*t + ny*offset;
     pixel(x,y);
   }
 }
 </script>
+
 </body>
 </html>
