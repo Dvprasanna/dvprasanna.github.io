@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Pixel Balance Test — v0.5.0</title>
+<title>Pixel Balance Test — v0.5.2</title>
 
 <!--
-  App Version: v0.5.0
+  App Version: v0.5.2
   Line Engine: v1.0.0
   Brush Engine: v1.0.0
-  Balance Logic: v1.5.0 (Single-color bar)
+  Balance Logic: v1.7.0 (Equal = black)
 -->
 
 <style>
@@ -22,32 +22,34 @@
     align-items: center;
   }
 
+  /* vertical body text */
   #status {
     writing-mode: vertical-rl;
     text-orientation: mixed;
-    margin: 12px 0;
     font-size: 12px;
     color: #aaa;
+    margin: 12px 0;
   }
 
   canvas {
     background: #000;
-    cursor: crosshair;
     display: block;
+    cursor: crosshair;
   }
 
-  #barWrap {
+  /* bar below canvas */
+  #barContainer {
     width: 600px;
-    height: 16px;
+    height: 14px;
     background: #222;
-    margin-top: 8px;
+    margin-top: 10px;
   }
 
   #bar {
     height: 100%;
     width: 50%;
-    background: #2ecc71;
-    transition: width 0.15s linear, background 0.15s linear;
+    background: #000; /* equal = black */
+    transition: width 0.15s linear;
   }
 
   #counts {
@@ -69,7 +71,7 @@
 
 <canvas id="c" width="600" height="400"></canvas>
 
-<div id="barWrap">
+<div id="barContainer">
   <div id="bar"></div>
 </div>
 
@@ -79,7 +81,7 @@
 
 <script>
 /* ================= VERSION ================= */
-const APP_VERSION = "0.5.0";
+const APP_VERSION = "0.5.2";
 
 /* ================= BRUSH ================= */
 const BRUSH_RADIUS = 1;
@@ -96,49 +98,58 @@ const midX = Math.floor(canvas.width / 2);
 let left = 0, right = 0, center = 0;
 
 /* ================= LINE LOGIC ================= */
-function getLinePixels(x1,y1,x2,y2){
-  const pts=[];
-  let dx=Math.abs(x2-x1), dy=Math.abs(y2-y1);
-  let sx=x1<x2?1:-1, sy=y1<y2?1:-1;
-  let err=dx-dy;
-  while(true){
-    pts.push([x1,y1]);
-    if(x1===x2 && y1===y2) break;
-    let e2=2*err;
-    if(e2>-dy){ err-=dy; x1+=sx; }
-    if(e2< dx){ err+=dx; y1+=sy; }
+function getLinePixels(x1, y1, x2, y2) {
+  const pts = [];
+  let dx = Math.abs(x2 - x1);
+  let dy = Math.abs(y2 - y1);
+  let sx = x1 < x2 ? 1 : -1;
+  let sy = y1 < y2 ? 1 : -1;
+  let err = dx - dy;
+
+  while (true) {
+    pts.push([x1, y1]);
+    if (x1 === x2 && y1 === y2) break;
+    let e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; x1 += sx; }
+    if (e2 <  dx) { err += dx; y1 += sy; }
   }
   return pts;
 }
 
 /* ================= PIXEL BRUSH ================= */
-function putPixel(x,y){
-  for(let dy=-BRUSH_RADIUS;dy<=BRUSH_RADIUS;dy++){
-    for(let dx=-BRUSH_RADIUS;dx<=BRUSH_RADIUS;dx++){
-      const px=x+dx, py=y+dy;
-      ctx.fillRect(px,py,1,1);
+function putPixel(x, y) {
+  for (let dy = -BRUSH_RADIUS; dy <= BRUSH_RADIUS; dy++) {
+    for (let dx = -BRUSH_RADIUS; dx <= BRUSH_RADIUS; dx++) {
+      const px = x + dx;
+      const py = y + dy;
 
-      if(px<midX) left++;
-      else if(px>midX) right++;
+      ctx.fillRect(px, py, 1, 1);
+
+      if (px < midX) left++;
+      else if (px > midX) right++;
       else center++;
     }
   }
 }
 
 /* ================= BALANCE BAR ================= */
-function updateBar(){
+function updateBar() {
   const total = left + right || 1;
   const diff = left - right;
   const ratio = Math.abs(diff) / total;
 
   const bar = document.getElementById("bar");
 
+  /* width shows imbalance magnitude */
   bar.style.width = (50 + ratio * 100) + "%";
 
-  if (diff >= 0) {
-    bar.style.background = "#2ecc71"; // left heavy or equal
-  } else {
+  /* color shows side */
+  if (diff > 0) {
+    bar.style.background = "#2ecc71"; // left heavy
+  } else if (diff < 0) {
     bar.style.background = "#e74c3c"; // right heavy
+  } else {
+    bar.style.background = "#000";    // equal = black
   }
 
   document.getElementById("counts").innerText =
@@ -146,37 +157,43 @@ function updateBar(){
 }
 
 /* ================= INPUT ================= */
-canvas.onmousedown = e=>{
-  drawing=true;
-  prevX=e.offsetX|0;
-  prevY=e.offsetY|0;
+canvas.onmousedown = e => {
+  drawing = true;
+  prevX = e.offsetX | 0;
+  prevY = e.offsetY | 0;
 };
 
-canvas.onmousemove = e=>{
-  if(!drawing) return;
-  const x=e.offsetX|0, y=e.offsetY|0;
-  getLinePixels(prevX,prevY,x,y).forEach(p=>putPixel(p[0],p[1]));
-  prevX=x; prevY=y;
+canvas.onmousemove = e => {
+  if (!drawing) return;
+
+  const x = e.offsetX | 0;
+  const y = e.offsetY | 0;
+
+  getLinePixels(prevX, prevY, x, y).forEach(p => putPixel(p[0], p[1]));
+
+  prevX = x;
+  prevY = y;
   updateBar();
 };
 
-window.onmouseup = ()=>drawing=false;
+window.onmouseup = () => drawing = false;
 
 /* ================= RESET ================= */
-function resetAll(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  left=right=center=0;
-  document.getElementById("bar").style.width="50%";
-  document.getElementById("bar").style.background="#2ecc71";
+function resetAll() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  left = right = center = 0;
+  const bar = document.getElementById("bar");
+  bar.style.width = "50%";
+  bar.style.background = "#000";
   updateBar();
 }
 
 /* ================= CENTER GUIDE ================= */
-ctx.fillStyle="#333";
-for(let y=0;y<canvas.height;y++){
-  ctx.fillRect(midX,y,1,1);
+ctx.fillStyle = "#333";
+for (let y = 0; y < canvas.height; y++) {
+  ctx.fillRect(midX, y, 1, 1);
 }
-ctx.fillStyle="#fff";
+ctx.fillStyle = "#fff";
 
 console.log("Pixel Balance Test v" + APP_VERSION);
 </script>
