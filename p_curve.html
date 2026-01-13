@@ -3,48 +3,50 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Max Deviation Curve</title>
+<title>Cubic Bézier Max Deviation Curve</title>
+
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    background: #111;
-  }
-  canvas {
-    display: block;
-    background: #000;
-    touch-action: none;
-  }
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #111;
+}
+canvas {
+  display: block;
+  background: #000;
+  touch-action: none;
+}
 </style>
 </head>
-<body>
 
+<body>
 <canvas id="c"></canvas>
 
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-// --- Proper canvas sizing (CRITICAL) ---
+/* ---------- Canvas resize (iOS safe) ---------- */
 function resize() {
   const dpr = window.devicePixelRatio || 1;
-  canvas.width = innerWidth * dpr;
+  canvas.width  = innerWidth * dpr;
   canvas.height = innerHeight * dpr;
-  canvas.style.width = innerWidth + "px";
+  canvas.style.width  = innerWidth + "px";
   canvas.style.height = innerHeight + "px";
   ctx.setTransform(dpr,0,0,dpr,0,0);
 }
 resize();
-window.addEventListener("resize", resize);
+addEventListener("resize", resize);
 
 ctx.fillStyle = "#0f0";
 
+/* ---------- State ---------- */
 let dragging = false;
-let x0, y0, x1, y1;
+let x0,y0,x1,y1;
 
-// --- Unified pointer position ---
-function getPos(e) {
+/* ---------- Pointer helper ---------- */
+function getPos(e){
   if (e.touches) e = e.touches[0];
   const r = canvas.getBoundingClientRect();
   return {
@@ -53,7 +55,7 @@ function getPos(e) {
   };
 }
 
-// --- Events (mouse + touch) ---
+/* ---------- Events ---------- */
 canvas.addEventListener("mousedown", start);
 canvas.addEventListener("touchstart", start);
 
@@ -63,105 +65,114 @@ canvas.addEventListener("touchmove", move);
 canvas.addEventListener("mouseup", end);
 canvas.addEventListener("touchend", end);
 
-function start(e) {
+function start(e){
   e.preventDefault();
   const p = getPos(e);
   dragging = true;
-  x0 = p.x;
-  y0 = p.y;
+  x0 = p.x; y0 = p.y;
   ctx.clearRect(0,0,canvas.width,canvas.height);
 }
 
-function move(e) {
+function move(e){
   if (!dragging) return;
   e.preventDefault();
   const p = getPos(e);
-  x1 = p.x;
-  y1 = p.y;
+  x1 = p.x; y1 = p.y;
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawLine(x0,y0,x1,y1);
+  drawLine(x0,y0,x1,y1); // preview
 }
 
-function end(e) {
+function end(){
   if (!dragging) return;
   dragging = false;
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawMaxDeviationCurve(x0,y0,x1,y1);
+  drawCubicBezier(x0,y0,x1,y1);
 }
 
-// --- Pixel drawing ---
-function drawPixel(x,y){
+/* ---------- Drawing helpers ---------- */
+function pixel(x,y){
   ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
 }
 
-// --- Straight line preview ---
 function drawLine(x0,y0,x1,y1){
   const steps = Math.max(Math.abs(x1-x0), Math.abs(y1-y0));
-  for (let i=0;i<=steps;i++){
-    const t = i/steps;
-    drawPixel(
-      x0 + t*(x1-x0),
-      y0 + t*(y1-y0)
-    );
+  for(let i=0;i<=steps;i++){
+    const t=i/steps;
+    pixel(x0+t*(x1-x0), y0+t*(y1-y0));
   }
 }
 
-// --- Core curve algorithm ---
-function drawMaxDeviationCurve(x0,y0,x1,y1){
-  const dx = x1 - x0;
-  const dy = y1 - y0;
-  if (dx === 0 && dy === 0) return;
+function drawPoint(x,y,color){
+  ctx.fillStyle=color;
+  ctx.fillRect(x-2,y-2,4,4);
+  ctx.fillStyle="#0f0";
+}
+
+function drawHandle(xa,ya,xb,yb){
+  ctx.strokeStyle="#444";
+  ctx.beginPath();
+  ctx.moveTo(xa,ya);
+  ctx.lineTo(xb,yb);
+  ctx.stroke();
+}
+
+/* ---------- Core: Cubic Bézier ---------- */
+function drawCubicBezier(x0,y0,x1,y1){
+  const dx = x1-x0;
+  const dy = y1-y0;
+  if(dx===0 && dy===0) return;
 
   // perpendicular normal
   let nx = -dy;
-  let ny = dx;
-  const nlen = Math.hypot(nx, ny);
-  nx /= nlen;
-  ny /= nlen;
+  let ny =  dx;
+  const nl = Math.hypot(nx,ny);
+  nx/=nl; ny/=nl;
 
-  // max deviation (pixel safe)
-  let Dmax = Math.floor(Math.min(Math.abs(dx), Math.abs(dy)) / 3);
-  if (Dmax < 6) Dmax = 6;
+  // choose bend side automatically
+  const side = (dx*dy >= 0) ? 1 : -1;
+  nx*=side; ny*=side;
 
-  // positions along line
-  const p25 = 0.25;
-  const p75 = 0.75;
+  // max deviation (pixel-safe)
+  let Dmax = Math.floor(Math.min(Math.abs(dx),Math.abs(dy))/3);
+  if(Dmax<6) Dmax=6;
 
-  const x25 = x0 + dx * p25;
-  const y25 = y0 + dy * p25;
-  const x75 = x0 + dx * p75;
-  const y75 = y0 + dy * p75;
+  // positions along baseline
+  const x25 = x0 + dx*0.25;
+  const y25 = y0 + dy*0.25;
+  const x75 = x0 + dx*0.75;
+  const y75 = y0 + dy*0.75;
 
   // cubic control points (plateau)
-  const c1x = x25 + nx * Dmax;
-  const c1y = y25 + ny * Dmax;
-  const c2x = x75 + nx * Dmax;
-  const c2y = y75 + ny * Dmax;
+  const c1x = x25 + nx*Dmax*1.2;
+  const c1y = y25 + ny*Dmax*1.2;
+  const c2x = x75 + nx*Dmax*1.2;
+  const c2y = y75 + ny*Dmax*1.2;
 
-  const steps = Math.max(Math.abs(dx), Math.abs(dy)) * 4;
+  // visualize Bézier structure
+  drawHandle(x0,y0,c1x,c1y);
+  drawHandle(x1,y1,c2x,c2y);
+  drawPoint(x0,y0,"#0f0");
+  drawPoint(x1,y1,"#0f0");
+  drawPoint(c1x,c1y,"#f00");
+  drawPoint(c2x,c2y,"#f00");
 
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const mt = 1 - t;
-
+  // rasterize curve
+  const steps = Math.max(Math.abs(dx),Math.abs(dy))*4;
+  for(let i=0;i<=steps;i++){
+    const t=i/steps, mt=1-t;
     const x =
       mt*mt*mt*x0 +
       3*mt*mt*t*c1x +
       3*mt*t*t*c2x +
       t*t*t*x1;
-
     const y =
       mt*mt*mt*y0 +
       3*mt*mt*t*c1y +
       3*mt*t*t*c2y +
       t*t*t*y1;
-
-    drawPixel(x, y);
-  
-   
-}
+    pixel(x,y);
+  }
 }
 </script>
-
 </body>
 </html>
