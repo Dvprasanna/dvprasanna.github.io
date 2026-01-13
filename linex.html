@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Pixel Balance Test — v0.5.2</title>
+<title>Pixel Balance Gauge — v0.6.0</title>
 
 <!--
-  App Version: v0.5.2
+  App Version: v0.6.0
   Line Engine: v1.0.0
   Brush Engine: v1.0.0
-  Balance Logic: v1.7.0 (Equal = black)
+  Balance Logic: v2.0.0 (Center-based red gauge)
 -->
 
 <style>
@@ -22,7 +22,7 @@
     align-items: center;
   }
 
-  /* vertical body text */
+  /* vertical text */
   #status {
     writing-mode: vertical-rl;
     text-orientation: mixed;
@@ -37,19 +37,33 @@
     cursor: crosshair;
   }
 
-  /* bar below canvas */
-  #barContainer {
+  /* gauge container */
+  #gauge {
+    position: relative;
     width: 600px;
     height: 14px;
-    background: #222;
+    background: #000;
     margin-top: 10px;
   }
 
-  #bar {
+  /* center marker */
+  #centerLine {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 1px;
     height: 100%;
-    width: 50%;
-    background: #000; /* equal = black */
-    transition: width 0.15s linear;
+    background: #444;
+  }
+
+  /* red fill */
+  #fill {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: #e74c3c;
+    width: 0;
+    left: 50%;
   }
 
   #counts {
@@ -71,8 +85,10 @@
 
 <canvas id="c" width="600" height="400"></canvas>
 
-<div id="barContainer">
-  <div id="bar"></div>
+<!-- GAUGE BELOW CANVAS -->
+<div id="gauge">
+  <div id="centerLine"></div>
+  <div id="fill"></div>
 </div>
 
 <div id="counts">Left: 0 | Center: 0 | Right: 0</div>
@@ -81,7 +97,7 @@
 
 <script>
 /* ================= VERSION ================= */
-const APP_VERSION = "0.5.2";
+const APP_VERSION = "0.6.0";
 
 /* ================= BRUSH ================= */
 const BRUSH_RADIUS = 1;
@@ -132,24 +148,29 @@ function putPixel(x, y) {
   }
 }
 
-/* ================= BALANCE BAR ================= */
-function updateBar() {
+/* ================= GAUGE UPDATE ================= */
+function updateGauge() {
   const total = left + right || 1;
-  const diff = left - right;
-  const ratio = Math.abs(diff) / total;
+  const diff = right - left; // +ve → right heavy
+  const ratio = Math.min(1, Math.abs(diff) / total);
 
-  const bar = document.getElementById("bar");
+  const gaugeWidth = 600;
+  const fill = document.getElementById("fill");
 
-  /* width shows imbalance magnitude */
-  bar.style.width = (50 + ratio * 100) + "%";
+  const px = ratio * (gaugeWidth / 2);
 
-  /* color shows side */
   if (diff > 0) {
-    bar.style.background = "#2ecc71"; // left heavy
+    // right heavy → grow right
+    fill.style.left = "50%";
+    fill.style.width = px + "px";
   } else if (diff < 0) {
-    bar.style.background = "#e74c3c"; // right heavy
+    // left heavy → grow left
+    fill.style.left = (gaugeWidth / 2 - px) + "px";
+    fill.style.width = px + "px";
   } else {
-    bar.style.background = "#000";    // equal = black
+    // equal
+    fill.style.width = "0px";
+    fill.style.left = "50%";
   }
 
   document.getElementById("counts").innerText =
@@ -165,7 +186,6 @@ canvas.onmousedown = e => {
 
 canvas.onmousemove = e => {
   if (!drawing) return;
-
   const x = e.offsetX | 0;
   const y = e.offsetY | 0;
 
@@ -173,7 +193,7 @@ canvas.onmousemove = e => {
 
   prevX = x;
   prevY = y;
-  updateBar();
+  updateGauge();
 };
 
 window.onmouseup = () => drawing = false;
@@ -182,10 +202,7 @@ window.onmouseup = () => drawing = false;
 function resetAll() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   left = right = center = 0;
-  const bar = document.getElementById("bar");
-  bar.style.width = "50%";
-  bar.style.background = "#000";
-  updateBar();
+  updateGauge();
 }
 
 /* ================= CENTER GUIDE ================= */
@@ -195,7 +212,7 @@ for (let y = 0; y < canvas.height; y++) {
 }
 ctx.fillStyle = "#fff";
 
-console.log("Pixel Balance Test v" + APP_VERSION);
+console.log("Pixel Balance Gauge v" + APP_VERSION);
 </script>
 
 </body>
