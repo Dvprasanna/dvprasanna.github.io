@@ -1,69 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Canvas Balance Meter</title>
 
 <style>
-  body {
-    background: #111;
-    color: #fff;
-    font-family: system-ui, sans-serif;
-    text-align: center;
+  body{
+    margin:0;
+    background:#111;
+    color:#fff;
+    font-family:system-ui,sans-serif;
+    text-align:center;
   }
 
-  canvas {
-    background: #000;
-    border: 1px solid #444;
-    touch-action: none;
+  canvas{
+    background:#000;
+    border:1px solid #444;
+    touch-action:none;
+    margin-top:10px;
   }
 
-  .controls {
-    margin: 10px;
+  .controls{ margin:10px; }
+
+  button{
+    padding:6px 12px;
+    margin:4px;
   }
 
-  button {
-    padding: 6px 12px;
-    margin: 4px;
+  .meter{
+    width:300px;
+    height:14px;
+    background:#333;
+    margin:10px auto;
+    position:relative;
   }
 
-  .meter {
-    width: 300px;
-    height: 14px;
-    background: #333;
-    margin: 10px auto;
-    position: relative;
+  .center{
+    position:absolute;
+    left:50%;
+    top:0;
+    width:2px;
+    height:100%;
+    background:#777;
   }
 
-  .center {
-    position: absolute;
-    left: 50%;
-    top: 0;
-    width: 2px;
-    height: 100%;
-    background: #888;
+  .fill{
+    position:absolute;
+    top:0;
+    height:100%;
   }
 
-  .fill {
-    position: absolute;
-    top: 0;
-    height: 100%;
-  }
+  .leftFill{ right:50%; background:#00c8ff; }
+  .rightFill{ left:50%; background:#ff5050; }
 
-  .leftFill {
-    right: 50%;
-    background: #00c8ff;
-  }
-
-  .rightFill {
-    left: 50%;
-    background: #ff5050;
-  }
-
-  .readout {
-    font-size: 13px;
-    opacity: 0.85;
+  .readout{
+    font-size:13px;
+    opacity:.85;
+    margin-bottom:10px;
   }
 </style>
 </head>
@@ -73,8 +67,8 @@
 <canvas id="canvas" width="300" height="300"></canvas>
 
 <div class="controls">
-  <button onclick="addCircle('left')">Balance ● Left</button>
-  <button onclick="addCircle('right')">Balance ● Right</button>
+  <button onclick="addCircle('left')">● Left</button>
+  <button onclick="addCircle('right')">● Right</button>
 </div>
 
 <div class="meter">
@@ -86,105 +80,125 @@
 <div class="readout" id="readout">Balanced</div>
 
 <script>
+/* ===================== SETUP ===================== */
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-ctx.strokeStyle = "#fff";
 ctx.fillStyle = "#fff";
-ctx.lineWidth = 1;
-ctx.lineCap = "round";
+
+const leftFill  = document.getElementById("leftFill");
+const rightFill = document.getElementById("rightFill");
+const readout   = document.getElementById("readout");
 
 let drawing = false;
 let lastX = 0;
 let lastY = 0;
 
-/* --------- Drawing helpers ---------- */
-function pos(e) {
+const BRUSH = 1; // pixel-true brush
+
+/* ===================== INPUT ===================== */
+function getPos(e){
   const r = canvas.getBoundingClientRect();
-  const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
-  const y = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
-  return { x: Math.floor(x), y: Math.floor(y) };
+  const p = e.touches ? e.touches[0] : e;
+  return {
+    x: Math.floor(p.clientX - r.left),
+    y: Math.floor(p.clientY - r.top)
+  };
 }
 
-function start(e) {
+/* ===================== DRAW CORE ===================== */
+function drawPixel(x,y){
+  ctx.fillRect(x,y,BRUSH,BRUSH);
+}
+
+// Bresenham line (pixel perfect)
+function drawLine(x0,y0,x1,y1){
+  let dx = Math.abs(x1 - x0);
+  let dy = Math.abs(y1 - y0);
+  let sx = x0 < x1 ? 1 : -1;
+  let sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+
+  while(true){
+    drawPixel(x0,y0);
+    if(x0 === x1 && y0 === y1) break;
+    const e2 = err * 2;
+    if(e2 > -dy){ err -= dy; x0 += sx; }
+    if(e2 <  dx){ err += dx; y0 += sy; }
+  }
+}
+
+/* ===================== EVENTS ===================== */
+function start(e){
+  e.preventDefault();
   drawing = true;
-  const p = pos(e);
+  const p = getPos(e);
   lastX = p.x;
   lastY = p.y;
+  drawPixel(lastX,lastY);
+  updateBalance();
 }
 
-function move(e) {
-  if (!drawing) return;
-  const p = pos(e);
-
-  ctx.beginPath();
-  ctx.moveTo(lastX + 0.5, lastY + 0.5);
-  ctx.lineTo(p.x + 0.5, p.y + 0.5);
-  ctx.stroke();
-
+function move(e){
+  if(!drawing) return;
+  e.preventDefault();
+  const p = getPos(e);
+  drawLine(lastX,lastY,p.x,p.y);
   lastX = p.x;
   lastY = p.y;
-
-  updateBalance(); // 🔥 after each stroke move
+  updateBalance();
 }
 
-function stop() {
-  drawing = false;
-}
+function stop(){ drawing = false; }
 
-canvas.addEventListener("mousedown", start);
-canvas.addEventListener("mousemove", move);
-canvas.addEventListener("mouseup", stop);
-canvas.addEventListener("mouseleave", stop);
+canvas.addEventListener("mousedown",start);
+canvas.addEventListener("mousemove",move);
+canvas.addEventListener("mouseup",stop);
+canvas.addEventListener("mouseleave",stop);
 
-canvas.addEventListener("touchstart", start, { passive: false });
-canvas.addEventListener("touchmove", move, { passive: false });
-canvas.addEventListener("touchend", stop);
+canvas.addEventListener("touchstart",start,{passive:false});
+canvas.addEventListener("touchmove",move,{passive:false});
+canvas.addEventListener("touchend",stop);
 
-/* --------- Balance Meter ---------- */
-const leftFill = document.getElementById("leftFill");
-const rightFill = document.getElementById("rightFill");
-const readout = document.getElementById("readout");
-
-function updateBalance() {
-  const img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+/* ===================== BALANCE ===================== */
+function updateBalance(){
+  const data = ctx.getImageData(0,0,canvas.width,canvas.height).data;
   let left = 0, right = 0;
   const mid = canvas.width / 2;
 
-  for (let y = 0; y < canvas.height; y++) {
-    for (let x = 0; x < canvas.width; x++) {
-      const i = (y * canvas.width + x) * 4;
-      if (img[i] > 0) { // any drawn pixel
-        x < mid ? left++ : right++;
-      }
+  for(let i=0;i<data.length;i+=4){
+    if(data[i] > 0){
+      const x = (i/4) % canvas.width;
+      x < mid ? left++ : right++;
     }
   }
 
   const diff = left - right;
-  const max = Math.max(left, right, 1);
-  const percent = Math.min(Math.abs(diff) / max * 100, 50);
+  const max = Math.max(left,right,1);
+  const pct = Math.min(Math.abs(diff)/max*100,50);
 
-  leftFill.style.width = diff > 0 ? percent + "%" : "0";
-  rightFill.style.width = diff < 0 ? percent + "%" : "0";
+  leftFill.style.width  = diff > 0 ? pct+"%" : "0";
+  rightFill.style.width = diff < 0 ? pct+"%" : "0";
 
-  if (diff === 0) readout.textContent = "Perfectly Balanced";
-  else readout.textContent =
-    diff > 0
-      ? `Left heavier by ${diff} px`
-      : `Right heavier by ${Math.abs(diff)} px`;
+  readout.textContent =
+    diff === 0 ? "Perfectly Balanced"
+    : diff > 0 ? `Left heavier by ${diff} px`
+               : `Right heavier by ${-diff} px`;
 }
 
-/* --------- Balance Circle ---------- */
-function addCircle(side) {
-  const r = 10;
-  const m = 5;
-  const x = side === "left" ? r + m : canvas.width - r - m;
-  const y = canvas.height - r - m;
+/* ===================== TEST WEIGHT ===================== */
+function addCircle(side){
+  const r = 10, m = 5;
+  const x = side==="left" ? r+m : canvas.width-r-m;
+  const y = canvas.height-r-m;
 
-  ctx.beginPath();
-  ctx.arc(x + 0.5, y + 0.5, r, 0, Math.PI * 2);
-  ctx.fill();
-
+  for(let a=0;a<360;a++){
+    const rad = a*Math.PI/180;
+    drawPixel(
+      Math.round(x + r*Math.cos(rad)),
+      Math.round(y + r*Math.sin(rad))
+    );
+  }
   updateBalance();
 }
 </script>
