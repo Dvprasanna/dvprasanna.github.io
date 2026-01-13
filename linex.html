@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Pixel Balance Gauge — v0.6.0</title>
+<title>Pixel Balance Gauge — v0.6.1</title>
 
 <!--
-  App Version: v0.6.0
+  App Version: v0.6.1
   Line Engine: v1.0.0
   Brush Engine: v1.0.0
-  Balance Logic: v2.0.0 (Center-based red gauge)
+  Balance Logic: v2.1.0 (True center gauge)
 -->
 
 <style>
@@ -22,7 +22,6 @@
     align-items: center;
   }
 
-  /* vertical text */
   #status {
     writing-mode: vertical-rl;
     text-orientation: mixed;
@@ -37,7 +36,6 @@
     cursor: crosshair;
   }
 
-  /* gauge container */
   #gauge {
     position: relative;
     width: 600px;
@@ -46,7 +44,6 @@
     margin-top: 10px;
   }
 
-  /* center marker */
   #centerLine {
     position: absolute;
     left: 50%;
@@ -56,7 +53,6 @@
     background: #444;
   }
 
-  /* red fill */
   #fill {
     position: absolute;
     top: 0;
@@ -85,7 +81,6 @@
 
 <canvas id="c" width="600" height="400"></canvas>
 
-<!-- GAUGE BELOW CANVAS -->
 <div id="gauge">
   <div id="centerLine"></div>
   <div id="fill"></div>
@@ -96,13 +91,9 @@
 <button onclick="resetAll()">Reset</button>
 
 <script>
-/* ================= VERSION ================= */
-const APP_VERSION = "0.6.0";
-
-/* ================= BRUSH ================= */
+const APP_VERSION = "0.6.1";
 const BRUSH_RADIUS = 1;
 
-/* ================= SETUP ================= */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 ctx.fillStyle = "#fff";
@@ -113,7 +104,7 @@ const midX = Math.floor(canvas.width / 2);
 
 let left = 0, right = 0, center = 0;
 
-/* ================= LINE LOGIC ================= */
+/* LINE LOGIC */
 function getLinePixels(x1, y1, x2, y2) {
   const pts = [];
   let dx = Math.abs(x2 - x1);
@@ -132,13 +123,12 @@ function getLinePixels(x1, y1, x2, y2) {
   return pts;
 }
 
-/* ================= PIXEL BRUSH ================= */
+/* PIXEL BRUSH */
 function putPixel(x, y) {
   for (let dy = -BRUSH_RADIUS; dy <= BRUSH_RADIUS; dy++) {
     for (let dx = -BRUSH_RADIUS; dx <= BRUSH_RADIUS; dx++) {
       const px = x + dx;
       const py = y + dy;
-
       ctx.fillRect(px, py, 1, 1);
 
       if (px < midX) left++;
@@ -148,27 +138,25 @@ function putPixel(x, y) {
   }
 }
 
-/* ================= GAUGE UPDATE ================= */
+/* TRUE CENTER GAUGE */
 function updateGauge() {
   const total = left + right || 1;
-  const diff = right - left; // +ve → right heavy
+  const diff = right - left;
   const ratio = Math.min(1, Math.abs(diff) / total);
 
-  const gaugeWidth = 600;
+  const gauge = document.getElementById("gauge");
   const fill = document.getElementById("fill");
+  const gaugeWidth = gauge.clientWidth;
 
   const px = ratio * (gaugeWidth / 2);
 
   if (diff > 0) {
-    // right heavy → grow right
     fill.style.left = "50%";
     fill.style.width = px + "px";
   } else if (diff < 0) {
-    // left heavy → grow left
     fill.style.left = (gaugeWidth / 2 - px) + "px";
     fill.style.width = px + "px";
   } else {
-    // equal
     fill.style.width = "0px";
     fill.style.left = "50%";
   }
@@ -177,7 +165,7 @@ function updateGauge() {
     `Left: ${left} | Center: ${center} | Right: ${right}`;
 }
 
-/* ================= INPUT ================= */
+/* INPUT */
 canvas.onmousedown = e => {
   drawing = true;
   prevX = e.offsetX | 0;
@@ -188,9 +176,7 @@ canvas.onmousemove = e => {
   if (!drawing) return;
   const x = e.offsetX | 0;
   const y = e.offsetY | 0;
-
   getLinePixels(prevX, prevY, x, y).forEach(p => putPixel(p[0], p[1]));
-
   prevX = x;
   prevY = y;
   updateGauge();
@@ -198,14 +184,13 @@ canvas.onmousemove = e => {
 
 window.onmouseup = () => drawing = false;
 
-/* ================= RESET ================= */
 function resetAll() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   left = right = center = 0;
   updateGauge();
 }
 
-/* ================= CENTER GUIDE ================= */
+/* CENTER GUIDE */
 ctx.fillStyle = "#333";
 for (let y = 0; y < canvas.height; y++) {
   ctx.fillRect(midX, y, 1, 1);
