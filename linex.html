@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Pixel Line Balance Test — v0.3.0</title>
+<title>Pixel Line Balance Test — v0.4.3</title>
 
 <!--
-  App Version: v0.3.0
-  Line Engine: v1.0.0 (Bresenham)
-  Brush Engine: v1.0.0 (Pixel block)
-  Balance Logic: v1.1.0 (Center-neutral)
+  App Version: v0.4.3
+  Line Engine: v1.0.0
+  Brush Engine: v1.0.0
+  Balance Logic: v1.4.0 (Green/Red side-heavy)
 -->
 
 <style>
@@ -34,8 +34,9 @@
     display: flex;
     margin-top: 6px;
   }
-  #leftBar { background:#2ecc71; }
-  #rightBar { background:#e74c3c; }
+  #leftBar, #rightBar {
+    transition: width 0.15s linear, background 0.15s linear;
+  }
   canvas {
     display: block;
     margin: auto;
@@ -54,28 +55,28 @@
 <div id="top">
   <div><b>Pixel Balance Test</b></div>
   <div id="version">
-    App v0.3.0 · Line v1.0.0 · Brush v1.0.0 · Balance v1.1.0
+    App v0.4.3 · Line v1.0.0 · Brush v1.0.0 · Balance v1.4.0
   </div>
+
   <div id="counts">Left: 0 | Center: 0 | Right: 0</div>
+
+  <!-- ORIGINAL BALANCE BAR -->
   <div id="balance">
     <div id="leftBar" style="width:50%"></div>
     <div id="rightBar" style="width:50%"></div>
   </div>
+
   <button onclick="resetAll()">Reset</button>
 </div>
 
-<canvas id="c" width="1200" height="800"></canvas>
+<canvas id="c" width="600" height="400"></canvas>
 
 <script>
 /* ================= VERSION ================= */
-const APP_VERSION = "0.3.0";
-const LINE_ENGINE_VER = "1.0.0";
-const BRUSH_ENGINE_VER = "1.0.0";
-const BALANCE_VER = "1.1.0";
+const APP_VERSION = "0.4.3";
 
 /* ================= BRUSH ================= */
 const BRUSH_RADIUS = 1;
-// 0 = 1px, 1 = 3px, 2 = 5px
 
 /* ================= SETUP ================= */
 const canvas = document.getElementById("c");
@@ -84,101 +85,103 @@ ctx.fillStyle = "#fff";
 
 let drawing = false;
 let prevX = 0, prevY = 0;
-
 const midX = Math.floor(canvas.width / 2);
 
 let left = 0, right = 0, center = 0;
 
-/* ================= LINE LOGIC (Bresenham) ================= */
-function getLinePixels(x1, y1, x2, y2) {
-  const pts = [];
-  let dx = Math.abs(x2 - x1);
-  let dy = Math.abs(y2 - y1);
-  let sx = x1 < x2 ? 1 : -1;
-  let sy = y1 < y2 ? 1 : -1;
-  let err = dx - dy;
-
-  while (true) {
-    pts.push([x1, y1]);
-    if (x1 === x2 && y1 === y2) break;
-    let e2 = 2 * err;
-    if (e2 > -dy) { err -= dy; x1 += sx; }
-    if (e2 <  dx) { err += dx; y1 += sy; }
+/* ================= LINE LOGIC ================= */
+function getLinePixels(x1,y1,x2,y2){
+  const pts=[];
+  let dx=Math.abs(x2-x1), dy=Math.abs(y2-y1);
+  let sx=x1<x2?1:-1, sy=y1<y2?1:-1;
+  let err=dx-dy;
+  while(true){
+    pts.push([x1,y1]);
+    if(x1===x2 && y1===y2) break;
+    let e2=2*err;
+    if(e2>-dy){ err-=dy; x1+=sx; }
+    if(e2< dx){ err+=dx; y1+=sy; }
   }
   return pts;
 }
 
 /* ================= PIXEL BRUSH ================= */
-function putPixel(x, y) {
-  for (let dy = -BRUSH_RADIUS; dy <= BRUSH_RADIUS; dy++) {
-    for (let dx = -BRUSH_RADIUS; dx <= BRUSH_RADIUS; dx++) {
-      const px = x + dx;
-      const py = y + dy;
+function putPixel(x,y){
+  for(let dy=-BRUSH_RADIUS;dy<=BRUSH_RADIUS;dy++){
+    for(let dx=-BRUSH_RADIUS;dx<=BRUSH_RADIUS;dx++){
+      const px=x+dx, py=y+dy;
+      ctx.fillRect(px,py,1,1);
 
-      ctx.fillRect(px, py, 1, 1);
-
-      if (px < midX) left++;
-      else if (px > midX) right++;
+      if(px<midX) left++;
+      else if(px>midX) right++;
       else center++;
     }
   }
 }
 
-/* ================= BALANCE ================= */
-function updateBalance() {
+/* ================= BALANCE BAR (GREEN / RED) ================= */
+function updateBalance(){
   const total = left + right || 1;
-  document.getElementById("leftBar").style.width =
-    (left / total) * 100 + "%";
-  document.getElementById("rightBar").style.width =
-    (right / total) * 100 + "%";
+
+  const leftPct = (left / total) * 100;
+  const rightPct = 100 - leftPct;
+
+  const leftBar = document.getElementById("leftBar");
+  const rightBar = document.getElementById("rightBar");
+
+  leftBar.style.width = leftPct + "%";
+  rightBar.style.width = rightPct + "%";
+
+  if (left > right) {
+    leftBar.style.background  = "#2ecc71"; // green
+    rightBar.style.background = "#e74c3c"; // red
+  } 
+  else if (right > left) {
+    rightBar.style.background = "#2ecc71"; // green
+    leftBar.style.background  = "#e74c3c"; // red
+  } 
+  else {
+    // perfect balance
+    leftBar.style.background  = "#2ecc71";
+    rightBar.style.background = "#2ecc71";
+  }
 
   document.getElementById("counts").innerText =
     `Left: ${left} | Center: ${center} | Right: ${right}`;
 }
 
 /* ================= INPUT ================= */
-canvas.onmousedown = e => {
-  drawing = true;
-  prevX = e.offsetX | 0;
-  prevY = e.offsetY | 0;
+canvas.onmousedown = e=>{
+  drawing=true;
+  prevX=e.offsetX|0;
+  prevY=e.offsetY|0;
 };
 
-canvas.onmousemove = e => {
-  if (!drawing) return;
-
-  const x = e.offsetX | 0;
-  const y = e.offsetY | 0;
-
-  getLinePixels(prevX, prevY, x, y)
-    .forEach(p => putPixel(p[0], p[1]));
-
-  prevX = x;
-  prevY = y;
+canvas.onmousemove = e=>{
+  if(!drawing) return;
+  const x=e.offsetX|0, y=e.offsetY|0;
+  getLinePixels(prevX,prevY,x,y).forEach(p=>putPixel(p[0],p[1]));
+  prevX=x; prevY=y;
   updateBalance();
 };
 
-window.onmouseup = () => drawing = false;
+window.onmouseup = ()=>drawing=false;
 
 /* ================= RESET ================= */
-function resetAll() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  left = right = center = 0;
+function resetAll(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  left=right=center=0;
+  document.getElementById("leftBar").style.width="50%";
+  document.getElementById("rightBar").style.width="50%";
   updateBalance();
 }
 
 /* ================= CENTER GUIDE ================= */
-ctx.fillStyle = "#333";
-for (let y = 0; y < canvas.height; y++) {
-  ctx.fillRect(midX, y, 1, 1);
+ctx.fillStyle="#333";
+for(let y=0;y<canvas.height;y++){
+  ctx.fillRect(midX,y,1,1);
 }
-ctx.fillStyle = "#fff";
-
-console.log(
-  `Pixel Balance Test v${APP_VERSION}`,
-  `Line ${LINE_ENGINE_VER}`,
-  `Brush ${BRUSH_ENGINE_VER}`,
-  `Balance ${BALANCE_VER}`
-);
+ctx.fillStyle="#fff";
 </script>
 
 </body>
