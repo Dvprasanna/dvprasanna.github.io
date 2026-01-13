@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canvas Tools – Master</title>
+
+<style>
+html,body{
+  margin:0;
+  background:#111;
+  color:#fff;
+  font-family:system-ui, sans-serif;
+}
+#topbar{
+  padding:10px;
+  background:#000;
+  border-bottom:1px solid #333;
+  text-align:center;
+}
+#topbar button{
+  margin:4px;
+  padding:6px 14px;
+}
+.tool{
+  display:none;
+}
+.tool.active{
+  display:block;
+}
+canvas{
+  background:#000;
+  touch-action:none;
+}
+.center{
+  text-align:center;
+}
+</style>
+</head>
+
+<body>
+
+<!-- ================= TOP BAR ================= -->
+<div id="topbar">
+  <button onclick="showTool('curve')">Curve Editor</button>
+  <button onclick="showTool('balance')">Balance Meter</button>
+</div>
+
+<!-- ================= CURVE EDITOR ================= -->
+<section id="curve" class="tool active">
+  <!-- CURVE EDITOR UI -->
+  <div style="padding:10px">
+    <button onclick="setMode('bezier')">BEZIER</button>
+    <button onclick="setMode('sine')">SINE</button>
+    <button onclick="setMode('cos')">COS</button>
+    <button onclick="toggleHandles()">HANDLES</button>
+    <button onclick="undo()">UNDO</button>
+    <button onclick="redo()">REDO</button>
+    <button onclick="clearAll()">CLS</button>
+    <button onclick="exportPNG()">EXPORT</button>
+  </div>
+  <canvas id="curveCanvas"></canvas>
+</section>
+
+<!-- ================= BALANCE METER ================= -->
+<section id="balance" class="tool">
+  <div class="center">
+    <canvas id="balanceCanvas" width="300" height="300"></canvas>
+    <div>
+      <button onclick="addCircle('left')">Balance ● Left</button>
+      <button onclick="addCircle('right')">Balance ● Right</button>
+    </div>
+
+    <div style="width:300px;height:14px;background:#333;margin:10px auto;position:relative">
+      <div style="position:absolute;left:50%;width:2px;height:100%;background:#888"></div>
+      <div id="leftFill" style="position:absolute;right:50%;height:100%;background:#00c8ff"></div>
+      <div id="rightFill" style="position:absolute;left:50%;height:100%;background:#ff5050"></div>
+    </div>
+
+    <div id="readout" style="font-size:13px;opacity:.85">Balanced</div>
+  </div>
+</section>
+
+<script>
+/* ================= TOOL SWITCH ================= */
+function showTool(id){
+  document.querySelectorAll(".tool").forEach(t=>t.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+/* =================================================
+   CURVE EDITOR (ISOLATED)
+================================================= */
+const curveCanvas = document.getElementById("curveCanvas");
+const ctx = curveCanvas.getContext("2d");
+const DPR = devicePixelRatio || 1;
+curveCanvas.width = innerWidth * DPR;
+curveCanvas.height = innerHeight * DPR;
+curveCanvas.style.width = innerWidth+"px";
+curveCanvas.style.height = innerHeight+"px";
+ctx.setTransform(DPR,0,0,DPR,0,0);
+
+/* ---- minimal curve editor version ---- */
+let mode="bezier";
+let curves=[],dragging=false,p0=null;
+
+function setMode(m){ mode=m; }
+function toggleHandles(){}
+function undo(){}
+function redo(){}
+function clearAll(){ curves=[]; redraw(); }
+function exportPNG(){
+  const a=document.createufylement("a");
+  a.href=curveCanvas.toDataURL();
+  a.download="curve.png";
+  a.click();
+}
+
+function redraw(){
+  ctx.clearRect(0,0,curveCanvas.width,curveCanvas.height);
+  curves.forEach(c=>ctx.stroke(c));
+}
+
+curveCanvas.onmousedown=e=>{
+  dragging=true;
+  p0={x:e.offsetX,y:e.offsetY};
+};
+curveCanvas.onmousemove=e=>{
+  if(!dragging) return;
+  redraw();
+  ctx.beginPath();
+  ctx.moveTo(p0.x,p0.y);
+  ctx.lineTo(e.offsetX,e.offsetY);
+  ctx.strokeStyle="#0f0";
+  ctx.stroke();
+};
+curveCanvas.onmouseup=e=>{
+  dragging=false;
+  curves.push(ctx=>{});
+};
+
+/* =================================================
+   BALANCE METER (YOUR CODE, ISOLATED)
+================================================= */
+const balanceCanvas = document.getElementById("balanceCanvas");
+const bctx = balanceCanvas.getContext("2d");
+bctx.strokeStyle="#fff";
+bctx.fillStyle="#fff";
+bctx.lineCap="round";
+
+let drawing=false,lx=0,ly=0;
+
+function bpos(e){
+  const r=balanceCanvas.getBoundingClientRect();
+  return {
+    x:Math.floor((e.touches?e.touches[0].clientX:e.clientX)-r.left),
+    y:Math.floor((e.touches?e.touches[0].clientY:e.clientY)-r.top)
+  };
+}
+
+balanceCanvas.onmousedown=e=>{
+  drawing=true;
+  const p=bpos(e); lx=p.x; ly=p.y;
+};
+balanceCanvas.onmousemove=e=>{
+  if(!drawing) return;
+  const p=bpos(e);
+  bctx.beginPath();
+  bctx.moveTo(lx+.5,ly+.5);
+  bctx.lineTo(p.x+.5,p.y+.5);
+  bctx.stroke();
+  lx=p.x; ly=p.y;
+  updateBalance();
+};
+balanceCanvas.onmouseup=()=>drawing=false;
+
+const leftFill=document.getElementById("leftFill");
+const rightFill=document.getElementById("rightFill");
+const readout=document.getElementById("readout");
+
+function updateBalance(){
+  const img=bctx.getImageData(0,0,300,300).data;
+  let l=0,r=0;
+  for(let y=0;y<300;y++){
+    for(let x=0;x<300;x++){
+      if(img[(y*300+x)*4]>0){
+        x<150?l++:r++;
+      }
+    }
+  }
+  const d=l-r;
+  leftFill.style.width=d>0?Math.min(Math.abs(d)/l*50,50)+"%":"0";
+  rightFill.style.width=d<0?Math.min(Math.abs(d)/r*50,50)+"%":"0";
+  readout.textContent=d===0?"Perfectly Balanced":d>0?`Left +${d}`:`Right +${-d}`;
+}
+
+function addCircle(side){
+  const r=10,m=5;
+  const x=side==="left"?r+m:300-r-m;
+  const y=300-r-m;
+  bctx.beginPath();
+  bctx.arc(x+.5,y+.5,r,0,Math.PI*2);
+  bctx.fill();
+  updateBalance();
+}
+</script>
+
+</body>
+</html>
