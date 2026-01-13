@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cubic Bézier Max Deviation Curve</title>
+<title>Two-Max Bézier Curve</title>
 
 <style>
 html, body {
@@ -27,7 +27,7 @@ canvas {
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-/* ---------- Canvas resize (iOS safe) ---------- */
+/* ---------- Canvas resize (critical for iOS) ---------- */
 function resize() {
   const dpr = window.devicePixelRatio || 1;
   canvas.width  = innerWidth * dpr;
@@ -39,20 +39,20 @@ function resize() {
 resize();
 addEventListener("resize", resize);
 
-ctx.fillStyle = "#0f0";
-
 /* ---------- State ---------- */
 let dragging = false;
-let x0,y0,x1,y1;
+let activeHandle = null;
+
+let x0,y0,x1,y1;        // start / end
+let C1 = null, C2 = null; // Max-1 / Max-2
+
+const HANDLE_RADIUS = 8;
 
 /* ---------- Pointer helper ---------- */
 function getPos(e){
   if (e.touches) e = e.touches[0];
   const r = canvas.getBoundingClientRect();
-  return {
-    x: e.clientX - r.left,
-    y: e.clientY - r.top
-  };
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
 /* ---------- Events ---------- */
@@ -65,111 +65,138 @@ canvas.addEventListener("touchmove", move);
 canvas.addEventListener("mouseup", end);
 canvas.addEventListener("touchend", end);
 
+/* ---------- Start ---------- */
 function start(e){
   e.preventDefault();
   const p = getPos(e);
+
+  // Handle selection
+  if (C1 && hitHandle(C1,p.x,p.y)) { activeHandle = C1; return; }
+  if (C2 && hitHandle(C2,p.x,p.y)) { activeHandle = C2; return; }
+
+  // New curve
   dragging = true;
+  C1 = C2 = null;
   x0 = p.x; y0 = p.y;
   ctx.clearRect(0,0,canvas.width,canvas.height);
 }
 
+/* ---------- Move ---------- */
 function move(e){
-  if (!dragging) return;
-  e.preventDefault();
   const p = getPos(e);
+
+  // Drag handle
+  if (activeHandle) {
+    activeHandle.x = p.x;
+    activeHandle.y = p.y;
+    redraw();
+    return;
+  }
+
+  // Drag endpoint
+  if (!dragging) return;
   x1 = p.x; y1 = p.y;
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawLine(x0,y0,x1,y1); // preview
+  drawLine(x0,y0,x1,y1);
 }
 
+/* ---------- End ---------- */
 function end(){
-  if (!dragging) return;
-  dragging = false;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawCubicBezier(x0,y0,x1,y1);
+  if (dragging) {
+    dragging = false;
+    createInitialHandles();
+    redraw();
+  }
+  activeHandle = null;
 }
 
 /* ---------- Drawing helpers ---------- */
 function pixel(x,y){
-  ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+  ctx.fillStyle = "#0f0";
+  ctx.fillRect(Math.round(x),Math.round(y),1,1);
 }
 
 function drawLine(x0,y0,x1,y1){
-  const steps = Math.max(Math.abs(x1-x0), Math.abs(y1-y0));
+  const steps = Math.max(Math.abs(x1-x0),Math.abs(y1-y0));
   for(let i=0;i<=steps;i++){
     const t=i/steps;
     pixel(x0+t*(x1-x0), y0+t*(y1-y0));
   }
 }
 
-function drawPoint(x,y,color){
-  ctx.fillStyle=color;
-  ctx.fillRect(x-2,y-2,4,4);
-  ctx.fillStyle="#0f0";
+function drawHandlePoint(p,color){
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(p.x,p.y,HANDLE_RADIUS,0,Math.PI*2);
+  ctx.fill();
 }
 
-function drawHandle(xa,ya,xb,yb){
+function drawHandleLine(a,b){
   ctx.strokeStyle="#444";
   ctx.beginPath();
-  ctx.moveTo(xa,ya);
-  ctx.lineTo(xb,yb);
+  ctx.moveTo(a.x,a.y);
+  ctx.lineTo(b.x,b.y);
   ctx.stroke();
 }
 
-/* ---------- Core: Cubic Bézier ---------- */
-function drawCubicBezier(x0,y0,x1,y1){
+function hitHandle(p,x,y){
+  return Math.hypot(p.x-x,p.y-y) < HANDLE_RADIUS;
+}
+
+/* ---------- Initial Max-1 / Max-2 creation ---------- */
+function createInitialHandles(){
   const dx = x1-x0;
   const dy = y1-y0;
   if(dx===0 && dy===0) return;
 
-  // perpendicular normal
-  let nx = -dy;
-  let ny =  dx;
+  let nx = -dy, ny = dx;
   const nl = Math.hypot(nx,ny);
   nx/=nl; ny/=nl;
 
-  // choose bend side automatically
-  const side = (dx*dy >= 0) ? 1 : -1;
-  nx*=side; ny*=side;
+  let D = Math.min(Math.abs(dx),Math.abs(dy))/3;
+  if (D < 10) D = 10;
 
-  // max deviation (pixel-safe)
-  let Dmax = Math.floor(Math.min(Math.abs(dx),Math.abs(dy))/3);
-  if(Dmax<6) Dmax=6;
+  const t1 = 0.33, t2 = 0.66;
 
-  // positions along baseline
-  const x25 = x0 + dx*0.25;
-  const y25 = y0 + dy*0.25;
-  const x75 = x0 + dx*0.75;
-  const y75 = y0 + dy*0.75;
+  C1 = {
+    x: x0 + dx*t1 + nx*D,
+    y: y0 + dy*t1 + ny*D
+  };
 
-  // cubic control points (plateau)
-  const c1x = x25 + nx*Dmax*1.2;
-  const c1y = y25 + ny*Dmax*1.2;
-  const c2x = x75 + nx*Dmax*1.2;
-  const c2y = y75 + ny*Dmax*1.2;
+  C2 = {
+    x: x0 + dx*t2 - nx*D,
+    y: y0 + dy*t2 - ny*D
+  };
+}
 
-  // visualize Bézier structure
-  drawHandle(x0,y0,c1x,c1y);
-  drawHandle(x1,y1,c2x,c2y);
-  drawPoint(x0,y0,"#0f0");
-  drawPoint(x1,y1,"#0f0");
-  drawPoint(c1x,c1y,"#f00");
-  drawPoint(c2x,c2y,"#f00");
+/* ---------- Redraw everything ---------- */
+function redraw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawBezier();
+  drawHandleLine({x:x0,y:y0},C1);
+  drawHandleLine({x:x1,y:y1},C2);
+  drawHandlePoint(C1,"#ff4444"); // Max-1
+  drawHandlePoint(C2,"#4488ff"); // Max-2
+}
 
-  // rasterize curve
-  const steps = Math.max(Math.abs(dx),Math.abs(dy))*4;
+/* ---------- Core: two-max cubic Bézier ---------- */
+function drawBezier(){
+  const steps = Math.max(Math.abs(x1-x0),Math.abs(y1-y0))*4;
+
   for(let i=0;i<=steps;i++){
     const t=i/steps, mt=1-t;
     const x =
       mt*mt*mt*x0 +
-      3*mt*mt*t*c1x +
-      3*mt*t*t*c2x +
+      3*mt*mt*t*C1.x +
+      3*mt*t*t*C2.x +
       t*t*t*x1;
+
     const y =
       mt*mt*mt*y0 +
-      3*mt*mt*t*c1y +
-      3*mt*t*t*c2y +
+      3*mt*mt*t*C1.y +
+      3*mt*t*t*C2.y +
       t*t*t*y1;
+
     pixel(x,y);
   }
 }
