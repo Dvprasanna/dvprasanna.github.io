@@ -110,40 +110,55 @@ function drawLine(x0,y0,x1,y1){
 function drawMaxDeviationCurve(x0,y0,x1,y1){
   const dx = x1 - x0;
   const dy = y1 - y0;
-
   if (dx === 0 && dy === 0) return;
 
+  // perpendicular normal
   let nx = -dy;
   let ny = dx;
   const nlen = Math.hypot(nx, ny);
   nx /= nlen;
   ny /= nlen;
 
+  // max deviation (pixel safe)
   let Dmax = Math.floor(Math.min(Math.abs(dx), Math.abs(dy)) / 3);
-  if (Dmax < 4) Dmax = 4;
+  if (Dmax < 6) Dmax = 6;
 
-  const xm = (x0 + x1) / 2;
-  const ym = (y0 + y1) / 2;
+  // positions along line
+  const p25 = 0.25;
+  const p75 = 0.75;
 
-  const cx = xm + nx * Dmax;
-  const cy = ym + ny * Dmax;
+  const x25 = x0 + dx * p25;
+  const y25 = y0 + dy * p25;
+  const x75 = x0 + dx * p75;
+  const y75 = y0 + dy * p75;
 
-  const steps = Math.max(Math.abs(dx), Math.abs(dy)) * 3;
+  // cubic control points (plateau)
+  const c1x = x25 + nx * Dmax;
+  const c1y = y25 + ny * Dmax;
+  const c2x = x75 + nx * Dmax;
+  const c2y = y75 + ny * Dmax;
 
-  for (let i=0;i<=steps;i++){
-    const t = i/steps;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy)) * 4;
+
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const mt = 1 - t;
+
     const x =
-      (1-t)*(1-t)*x0 +
-      2*(1-t)*t*cx +
-      t*t*x1;
+      mt*mt*mt*x0 +
+      3*mt*mt*t*c1x +
+      3*mt*t*t*c2x +
+      t*t*t*x1;
 
     const y =
-      (1-t)*(1-t)*y0 +
-      2*(1-t)*t*cy +
-      t*t*y1;
+      mt*mt*mt*y0 +
+      3*mt*mt*t*c1y +
+      3*mt*t*t*c2y +
+      t*t*t*y1;
 
-    drawPixel(x,y);
+    drawPixel(x, y);
   }
+}
 }
 </script>
 
