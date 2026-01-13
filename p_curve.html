@@ -65,13 +65,16 @@ const App = {
   dragging:false,
   showHandles:true,
   undoStack:[],
-  redoStack:[]
+  redoStack:[],
+  snapshotTaken:false
 };
 
-/* ================= STATE HELPERS ================= */
-function snapshot(){
+/* ================= SNAPSHOT ================= */
+function takeSnapshot(){
+  if (App.snapshotTaken) return;
   App.undoStack.push(JSON.parse(JSON.stringify(App.curves)));
-  App.redoStack.length = 0; // clear redo on new action
+  App.redoStack.length = 0;
+  App.snapshotTaken = true;
 }
 
 function undo(){
@@ -88,22 +91,12 @@ function redo(){
   redraw();
 }
 
-/* keyboard */
-addEventListener("keydown",e=>{
-  if(e.ctrlKey && e.key==="z") undo();
-  if(e.ctrlKey && e.key==="y") redo();
-});
-
 /* ================= UI ================= */
 function setMode(m){ App.mode=m; }
-
-function toggleHandles(){
-  App.showHandles=!App.showHandles;
-  redraw();
-}
+function toggleHandles(){ App.showHandles=!App.showHandles; redraw(); }
 
 function clearAll(){
-  snapshot();
+  takeSnapshot();
   App.curves=[];
   redraw();
 }
@@ -121,29 +114,24 @@ function pos(e){
   const r=canvas.getBoundingClientRect();
   return {x:e.clientX-r.left,y:e.clientY-r.top};
 }
+
 function pixel(x,y){
   ctx.fillStyle="#0f0";
   ctx.fillRect(Math.round(x),Math.round(y),1,1);
 }
+
 function drawHandle(h){
   ctx.fillStyle="#ff4444";
   ctx.beginPath();
   ctx.arc(h.x,h.y,HANDLE_R,0,Math.PI*2);
   ctx.fill();
 }
+
 function hit(h,p){
   return Math.hypot(h.x-p.x,h.y-p.y)<HANDLE_R;
 }
 
-/* ================= CURVES ================= */
-function createCurve(type,p0,p1){
-  snapshot();
-  if(type==="bezier") return createBezier(p0,p1);
-  if(type==="sine")   return createWave(p0,p1,Math.sin);
-  if(type==="cos")    return createWave(p0,p1,Math.cos);
-}
-
-/* -------- Bezier -------- */
+/* ================= CURVE FACTORY ================= */
 function createBezier(p0,p1){
   const dx=p1.x-p0.x, dy=p1.y-p0.y;
   const len=Math.hypot(dx,dy);
@@ -157,6 +145,7 @@ function createBezier(p0,p1){
       {x:p0.x+dx*0.33+nx*D,y:p0.y+dy*0.33+ny*D},
       {x:p0.x+dx*0.66-nx*D,y:p0.y+dy*0.66-ny*D}
     ],
+    update(){},
     draw(){
       const h=this.handles;
       for(let i=0;i<=200;i++){
@@ -170,7 +159,6 @@ function createBezier(p0,p1){
   };
 }
 
-/* -------- Wave -------- */
 function createWave(p0,p1,fn){
   const dx=p1.x-p0.x, dy=p1.y-p0.y;
   const len=Math.hypot(dx,dy);
@@ -179,8 +167,7 @@ function createWave(p0,p1,fn){
 
   const curve={
     type:"wave",
-    p0,p1,
-    fn,
+    p0,p1,fn,
     amp:Math.min(len/6,40),
     phase:0,
     handles:[{},{ }],
@@ -190,6 +177,15 @@ function createWave(p0,p1,fn){
       this.handles[0].y=my+ny*this.amp;
       this.handles[1].x=mx+ux*this.phase*30;
       this.handles[1].y=my+uy*this.phase*30;
+    },
+    applyHandle(h,p){
+      const mx=(p0.x+p1.x)/2, my=(p0.y+p1.y)/2;
+      const dx=p.x-mx, dy=p.y-my;
+
+      if(h===this.handles[0]) this.amp = dx*nx + dy*ny;
+      if(h===this.handles[1]) this.phase = (dx*ux + dy*uy)/30;
+
+      this.update();
     },
     draw(){
       const steps=len*2;
@@ -207,6 +203,12 @@ function createWave(p0,p1,fn){
   return curve;
 }
 
+function createCurve(type,p0,p1){
+  if(type==="bezier") return createBezier(p0,p1);
+  if(type==="sine") return createWave(p0,p1,Math.sin);
+  if(type==="cos") return createWave(p0,p1,Math.cos);
+}
+
 /* ================= EVENTS ================= */
 canvas.addEventListener("mousedown",start);
 canvas.addEventListener("touchstart",start);
@@ -217,13 +219,14 @@ canvas.addEventListener("touchend",end);
 
 function start(e){
   const p=pos(e);
+  App.snapshotTaken=false;
 
   if(App.showHandles){
     for(let i=App.curves.length-1;i>=0;i--){
       const c=App.curves[i];
       for(const h of c.handles){
         if(hit(h,p)){
-          snapshot();
+          takeSnapshot();
           App.activeHandle=h;
           App.activeCurve=c;
           return;
@@ -232,6 +235,7 @@ function start(e){
     }
   }
 
+  takeSnapshot();
   App.dragging=true;
   App.activeCurve={p0:p,p1:p};
 }
@@ -240,18 +244,7 @@ function move(e){
   const p=pos(e);
 
   if(App.activeHandle){
-    const c=App.activeCurve;
-    if(c.type==="wave"){
-      const mx=(c.p0.x+c.p1.x)/2;
-      const my=(c.p0.y+c.p1.y)/2;
-      const dx=p.x-mx, dy=p.y-my;
-      c.amp=dx;
-      c.phase=dx/30;
-      c.update();
-    }else{
-      App.activeHandle.x=p.x;
-      App.activeHandle.y=p.y;
-    }
+    App.activeCurve.applyHandle(App.activeHandle,p);
     redraw(); return;
   }
 
@@ -262,8 +255,7 @@ function move(e){
 
 function end(){
   if(App.dragging){
-    const c=createCurve(App.mode,App.activeCurve.p0,App.activeCurve.p1);
-    App.curves.push(c);
+    App.curves.push(createCurve(App.mode,App.activeCurve.p0,App.activeCurve.p1));
   }
   App.dragging=false;
   App.activeHandle=null;
