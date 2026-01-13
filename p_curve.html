@@ -32,6 +32,7 @@ canvas{
   <button onclick="setMode('bezier')">BEZIER</button>
   <button onclick="setMode('sine')">SINE</button>
   <button onclick="setMode('cos')">COS</button>
+  <button onclick="toggleHandles()">HANDLES</button>
   <button onclick="clearAll()">CLS</button>
   <button onclick="exportPNG()">EXPORT</button>
 </div>
@@ -59,11 +60,23 @@ const App = {
   curves:[],
   activeCurve:null,
   activeHandle:null,
-  dragging:false
+  dragging:false,
+  showHandles:true
 };
 
+/* ================= UI ================= */
 function setMode(m){ App.mode=m; }
-function clearAll(){ App.curves=[]; redraw(); }
+
+function toggleHandles(){
+  App.showHandles = !App.showHandles;
+  redraw();
+}
+
+function clearAll(){
+  App.curves=[];
+  redraw();
+}
+
 function exportPNG(){
   const a=document.createElement("a");
   a.download="drawing.png";
@@ -105,12 +118,12 @@ function createBezier(p0,p1){
   const nx=-dy/len, ny=dx/len;
   const D=len/3;
 
-  const curve={
+  return {
     type:"bezier",
     p0,p1,
     handles:[
-      {x:p0.x+dx*0.33+nx*D,y:p0.y+dy*0.33+ny*D,role:"c1"},
-      {x:p0.x+dx*0.66-nx*D,y:p0.y+dy*0.66-ny*D,role:"c2"}
+      {x:p0.x+dx*0.33+nx*D,y:p0.y+dy*0.33+ny*D},
+      {x:p0.x+dx*0.66-nx*D,y:p0.y+dy*0.66-ny*D}
     ],
     draw(){
       const h=this.handles;
@@ -123,7 +136,6 @@ function createBezier(p0,p1){
       }
     }
   };
-  return curve;
 }
 
 /* -------- Wave (Sine / Cos) -------- */
@@ -139,10 +151,7 @@ function createWave(p0,p1,fn){
     fn,
     amp:Math.min(len/6,40),
     phase:0,
-    handles:[
-      {role:"amp"},
-      {role:"phase"}
-    ],
+    handles:[{},{ }],
     update(){
       const mx=(p0.x+p1.x)/2, my=(p0.y+p1.y)/2;
       this.handles[0].x=mx+nx*this.amp;
@@ -177,14 +186,15 @@ canvas.addEventListener("touchend",end);
 function start(e){
   const p=pos(e);
 
-  // hit test handles
-  for(let i=App.curves.length-1;i>=0;i--){
-    const c=App.curves[i];
-    for(const h of c.handles){
-      if(hit(h,p)){
-        App.activeHandle=h;
-        App.activeCurve=c;
-        return;
+  if(App.showHandles){
+    for(let i=App.curves.length-1;i>=0;i--){
+      const c=App.curves[i];
+      for(const h of c.handles){
+        if(hit(h,p)){
+          App.activeHandle=h;
+          App.activeCurve=c;
+          return;
+        }
       }
     }
   }
@@ -202,8 +212,8 @@ function move(e){
       const mx=(c.p0.x+c.p1.x)/2;
       const my=(c.p0.y+c.p1.y)/2;
       const dx=p.x-mx, dy=p.y-my;
-      if(App.activeHandle.role==="amp") c.amp=dx*(-c.fn?1:1); // safe
-      if(App.activeHandle.role==="phase") c.phase=dx/30;
+      c.amp=dx*(-c.fn?1:1);
+      c.phase=dx/30;
       c.update();
     }else{
       App.activeHandle.x=p.x;
@@ -232,7 +242,9 @@ function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   App.curves.forEach(c=>{
     c.draw();
-    c.handles.forEach(drawHandle);
+    if(App.showHandles){
+      c.handles.forEach(drawHandle);
+    }
   });
 }
 </script>
