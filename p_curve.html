@@ -2,10 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Max Deviation Curve</title>
 <style>
-  body { margin: 0; background: #111; }
-  canvas { display: block; background: #000; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #111;
+  }
+  canvas {
+    display: block;
+    background: #000;
+    touch-action: none;
+  }
 </style>
 </head>
 <body>
@@ -16,47 +26,79 @@
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+// --- Proper canvas sizing (CRITICAL) ---
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = innerWidth * dpr;
+  canvas.height = innerHeight * dpr;
+  canvas.style.width = innerWidth + "px";
+  canvas.style.height = innerHeight + "px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+resize();
+window.addEventListener("resize", resize);
 
 ctx.fillStyle = "#0f0";
 
 let dragging = false;
 let x0, y0, x1, y1;
 
-// ---------- Mouse Events ----------
-canvas.addEventListener("mousedown", e => {
-  dragging = true;
-  x0 = e.offsetX;
-  y0 = e.offsetY;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-});
-
-canvas.addEventListener("mousemove", e => {
-  if (!dragging) return;
-  x1 = e.offsetX;
-  y1 = e.offsetY;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawLine(x0,y0,x1,y1); // preview straight line
-});
-
-canvas.addEventListener("mouseup", e => {
-  dragging = false;
-  x1 = e.offsetX;
-  y1 = e.offsetY;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawMaxDeviationCurve(x0,y0,x1,y1);
-});
-
-// ---------- Helpers ----------
-function drawPixel(x,y){
-  ctx.fillRect(Math.round(x),Math.round(y),1,1);
+// --- Unified pointer position ---
+function getPos(e) {
+  if (e.touches) e = e.touches[0];
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: e.clientX - r.left,
+    y: e.clientY - r.top
+  };
 }
 
+// --- Events (mouse + touch) ---
+canvas.addEventListener("mousedown", start);
+canvas.addEventListener("touchstart", start);
+
+canvas.addEventListener("mousemove", move);
+canvas.addEventListener("touchmove", move);
+
+canvas.addEventListener("mouseup", end);
+canvas.addEventListener("touchend", end);
+
+function start(e) {
+  e.preventDefault();
+  const p = getPos(e);
+  dragging = true;
+  x0 = p.x;
+  y0 = p.y;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+}
+
+function move(e) {
+  if (!dragging) return;
+  e.preventDefault();
+  const p = getPos(e);
+  x1 = p.x;
+  y1 = p.y;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawLine(x0,y0,x1,y1);
+}
+
+function end(e) {
+  if (!dragging) return;
+  dragging = false;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawMaxDeviationCurve(x0,y0,x1,y1);
+}
+
+// --- Pixel drawing ---
+function drawPixel(x,y){
+  ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+}
+
+// --- Straight line preview ---
 function drawLine(x0,y0,x1,y1){
   const steps = Math.max(Math.abs(x1-x0), Math.abs(y1-y0));
-  for(let i=0;i<=steps;i++){
-    let t = i/steps;
+  for (let i=0;i<=steps;i++){
+    const t = i/steps;
     drawPixel(
       x0 + t*(x1-x0),
       y0 + t*(y1-y0)
@@ -64,43 +106,38 @@ function drawLine(x0,y0,x1,y1){
   }
 }
 
-// ---------- Core Algorithm ----------
+// --- Core curve algorithm ---
 function drawMaxDeviationCurve(x0,y0,x1,y1){
-  let dx = x1 - x0;
-  let dy = y1 - y0;
+  const dx = x1 - x0;
+  const dy = y1 - y0;
 
-  // perpendicular normal
+  if (dx === 0 && dy === 0) return;
+
   let nx = -dy;
   let ny = dx;
-  let len = Math.hypot(nx,ny);
-  if(len === 0) return;
+  const nlen = Math.hypot(nx, ny);
+  nx /= nlen;
+  ny /= nlen;
 
-  nx /= len;
-  ny /= len;
-
-  // maximum deviation (pixel-safe)
   let Dmax = Math.floor(Math.min(Math.abs(dx), Math.abs(dy)) / 3);
-  if (Dmax < 2) Dmax = 2;
+  if (Dmax < 4) Dmax = 4;
 
-  // midpoint
-  let xm = (x0 + x1) / 2;
-  let ym = (y0 + y1) / 2;
+  const xm = (x0 + x1) / 2;
+  const ym = (y0 + y1) / 2;
 
-  // control point at max deviation
-  let cx = xm + nx * Dmax;
-  let cy = ym + ny * Dmax;
+  const cx = xm + nx * Dmax;
+  const cy = ym + ny * Dmax;
 
-  // rasterize quadratic bezier
-  const steps = Math.max(Math.abs(dx), Math.abs(dy)) * 2;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy)) * 3;
 
-  for(let i=0;i<=steps;i++){
-    let t = i/steps;
-    let x =
+  for (let i=0;i<=steps;i++){
+    const t = i/steps;
+    const x =
       (1-t)*(1-t)*x0 +
       2*(1-t)*t*cx +
       t*t*x1;
 
-    let y =
+    const y =
       (1-t)*(1-t)*y0 +
       2*(1-t)*t*cy +
       t*t*y1;
