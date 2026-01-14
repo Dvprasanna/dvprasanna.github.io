@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-<title>Canvas CAD Engine – v1.0.4</title>
+<title>Canvas CAD Engine – v1.0.5</title>
 
 <style>
 html, body {
@@ -32,11 +31,7 @@ html, body {
   cursor: pointer;
 }
 
-#topbar button:hover {
-  background: #333;
-}
-
-/* ---------- BALANCE METER ---------- */
+/* ---------- BALANCE ---------- */
 #balanceBar {
   flex: 1;
   height: 6px;
@@ -54,18 +49,17 @@ html, body {
   left: 50%;
 }
 
-/* ---------- VERSION ---------- */
-#meta {
-  font-size: 11px;
-  color: #888;
-  font-family: monospace;
-}
-
 /* ---------- CANVAS ---------- */
 canvas {
   display: block;
   background: #000;
   touch-action: none;
+}
+
+#meta {
+  font-size: 11px;
+  color: #888;
+  font-family: monospace;
 }
 </style>
 </head>
@@ -76,11 +70,11 @@ canvas {
   <button id="undoBtn">Undo</button>
   <button id="redoBtn">Redo</button>
   <button id="clearBtn">Clear</button>
+  <button id="gridBtn">Grid</button>
+  <button id="exportPngBtn">PNG</button>
+  <button id="exportSvgBtn">SVG</button>
 
-  <div id="balanceBar">
-    <div id="balanceNeedle"></div>
-  </div>
-
+  <div id="balanceBar"><div id="balanceNeedle"></div></div>
   <div id="meta"></div>
 </div>
 
@@ -89,216 +83,204 @@ canvas {
 <script>
 /* ==================================================
    Canvas CAD Engine
-   Version : 1.0.4
+   Version : 1.0.5
    Author  : dvprasanna
    ================================================== */
 
-const APP_VERSION = "1.0.4";
-const AUTHOR = "dvprasanna";
-document.getElementById("meta").textContent =
-  `v${APP_VERSION} | ${AUTHOR}`;
+meta.textContent = "v1.0.5 | dvprasanna";
 
 const canvas = document.getElementById("cad");
 const ctx = canvas.getContext("2d");
 
-/* ---------- CONFIG ---------- */
 const RECT_GRID = 20;
 const RADIAL_STEP = 20;
 const ANGLE_STEP = Math.PI / 12;
 
+let showGrid = true;
 let drawing = false;
 let startPoint = null;
 let previewPoint = null;
 
-const lines = [];
+const shapes = [];
 const redoStack = [];
 
 /* ---------- RESIZE ---------- */
-function resizeCanvas() {
+function resize() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight * 0.6;
   redraw();
 }
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
+window.addEventListener("resize", resize);
+resize();
 
-/* ---------- GRID CENTER ---------- */
-function gridCenter() {
-  return { x: canvas.width / 2, y: canvas.width / 2 };
-}
+/* ---------- CENTER ---------- */
+const center = () => ({ x: canvas.width / 2, y: canvas.height / 2 });
+const angle = (p,c)=>Math.atan2(p.y-c.y,p.x-c.x);
+const dist = (a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 /* ---------- GRID ---------- */
-function drawRectGrid() {
-  ctx.strokeStyle = "#2a2a2a";
-  for (let x = 0; x <= canvas.width; x += RECT_GRID) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
-  }
-  for (let y = 0; y <= canvas.height; y += RECT_GRID) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(canvas.width, y);
-    ctx.stroke();
-  }
-}
+function drawGrid() {
+  if (!showGrid) return;
 
-function drawCircularGrid() {
-  const { x, y } = gridCenter();
-  ctx.strokeStyle = "#444";
+  ctx.strokeStyle = "#222";
+  for (let x=0;x<=canvas.width;x+=RECT_GRID){
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
+  }
+  for (let y=0;y<=canvas.height;y+=RECT_GRID){
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
+  }
 
+  const c = center();
+  ctx.strokeStyle = "#333";
   ctx.beginPath();
-  ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
-  ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
+  ctx.moveTo(0,c.y); ctx.lineTo(canvas.width,c.y);
+  ctx.moveTo(c.x,0); ctx.lineTo(c.x,canvas.height);
   ctx.stroke();
 
-  for (let r = RADIAL_STEP; r < canvas.width; r += RADIAL_STEP) {
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.stroke();
+  for (let r=RADIAL_STEP;r<canvas.width;r+=RADIAL_STEP){
+    ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2); ctx.stroke();
   }
-}
-
-function drawGrid() {
-  drawRectGrid();
-  drawCircularGrid();
 }
 
 /* ---------- SNAP ---------- */
-function snapRect(px, py) {
-  return {
-    x: Math.round(px / RECT_GRID) * RECT_GRID,
-    y: Math.round(py / RECT_GRID) * RECT_GRID
-  };
+function snapRect(p){
+  return { x:Math.round(p.x/RECT_GRID)*RECT_GRID,
+           y:Math.round(p.y/RECT_GRID)*RECT_GRID };
 }
 
-function snapRadial(px, py) {
-  const { x: cx, y: cy } = gridCenter();
-  const dx = px - cx;
-  const dy = py - cy;
-  const angle =
-    Math.round(Math.atan2(dy, dx) / ANGLE_STEP) * ANGLE_STEP;
-  const radius =
-    Math.round(Math.hypot(dx, dy) / RADIAL_STEP) * RADIAL_STEP;
-  return {
-    x: cx + Math.cos(angle) * radius,
-    y: cy + Math.sin(angle) * radius
-  };
+function snapRadial(p){
+  const c=center();
+  const a=Math.round(angle(p,c)/ANGLE_STEP)*ANGLE_STEP;
+  const r=Math.round(dist(p,c)/RADIAL_STEP)*RADIAL_STEP;
+  return { x:c.x+Math.cos(a)*r, y:c.y+Math.sin(a)*r };
 }
 
-function snapPoint(px, py) {
-  const r = snapRect(px, py);
-  const c = snapRadial(px, py);
-  const dr = Math.hypot(px - r.x, py - r.y);
-  const dc = Math.hypot(px - c.x, py - c.y);
-  return dr <= dc ? { ...r, mode: "rect" } : { ...c, mode: "radial" };
+function snapPoint(p){
+  const r=snapRect(p), c=snapRadial(p);
+  return dist(p,r)<=dist(p,c)?{...r,mode:"rect"}:{...c,mode:"radial"};
 }
 
-/* ---------- REDRAW ---------- */
-function redraw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+/* ---------- DRAW ---------- */
+function redraw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
   drawGrid();
 
-  for (const l of lines) {
-    ctx.strokeStyle = l.color;
-    ctx.lineWidth = 2;
+  for(const s of shapes){
+    ctx.strokeStyle=s.color;
+    ctx.lineWidth=2;
     ctx.beginPath();
-    ctx.moveTo(l.a.x, l.a.y);
-    ctx.lineTo(l.b.x, l.b.y);
+    s.type==="line"
+      ? (ctx.moveTo(s.a.x,s.a.y),ctx.lineTo(s.b.x,s.b.y))
+      : ctx.arc(s.cx,s.cy,s.r,s.a1,s.a2);
     ctx.stroke();
   }
-  updateBalanceMeter();
+  updateBalance();
 }
 
 /* ---------- BALANCE ---------- */
-function updateBalanceMeter() {
-  const cx = canvas.width / 2;
-  let left = 0, right = 0;
-
-  for (const l of lines) {
-    const mid = (l.a.x + l.b.x) / 2;
-    const len = Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y);
-    mid < cx ? left += len : right += len;
+function updateBalance(){
+  const cx=canvas.width/2;
+  let L=0,R=0;
+  for(const s of shapes){
+    const mid=s.type==="line"
+      ? (s.a.x+s.b.x)/2
+      : s.cx+Math.cos((s.a1+s.a2)/2)*s.r;
+    const len=s.type==="line"?dist(s.a,s.b):Math.abs(s.a2-s.a1)*s.r;
+    mid<cx?L+=len:R+=len;
   }
-
-  const total = left + right || 1;
-  const balance = (right - left) / total;
-  document.getElementById("balanceNeedle").style.left =
-    (50 + balance * 50) + "%";
+  balanceNeedle.style.left=(50+(R-L)/(L+R||1)*50)+"%";
 }
 
 /* ---------- INPUT ---------- */
-function getPoint(e) {
-  const r = canvas.getBoundingClientRect();
-  const p = e.touches ? e.touches[0] : e;
-  return { x: p.clientX - r.left, y: p.clientY - r.top };
+function getPoint(e){
+  const r=canvas.getBoundingClientRect();
+  const p=e.touches?e.touches[0]:e;
+  return { x:p.clientX-r.left, y:p.clientY-r.top };
 }
 
-function startDraw(e) {
-  drawing = true;
-  redoStack.length = 0;
-  const p = getPoint(e);
-  startPoint = snapPoint(p.x, p.y);
-  previewPoint = startPoint;
+function startDraw(e){
+  drawing=true; redoStack.length=0;
+  startPoint=snapPoint(getPoint(e));
 }
 
-function moveDraw(e) {
-  if (!drawing) return;
-  const p = getPoint(e);
-  previewPoint = snapPoint(p.x, p.y);
-
+function moveDraw(e){
+  if(!drawing) return;
+  previewPoint=snapPoint(getPoint(e));
   redraw();
-  ctx.setLineDash([6, 6]);
-  ctx.strokeStyle =
-    previewPoint.mode === "rect" ? "#000" : "#ff3333";
+
+  ctx.setLineDash([6,6]);
+  ctx.strokeStyle=previewPoint.mode==="rect"?"#aaa":"#ff6666";
   ctx.beginPath();
-  ctx.moveTo(startPoint.x, startPoint.y);
-  ctx.lineTo(previewPoint.x, previewPoint.y);
-  ctx.stroke();
-  ctx.setLineDash([]);
+
+  if(previewPoint.mode==="rect"){
+    ctx.moveTo(startPoint.x,startPoint.y);
+    ctx.lineTo(previewPoint.x,previewPoint.y);
+  } else {
+    const c=center();
+    ctx.arc(c.x,c.y,dist(startPoint,c),
+      angle(startPoint,c),angle(previewPoint,c));
+  }
+  ctx.stroke(); ctx.setLineDash([]);
 }
 
-function stopDraw() {
-  if (!drawing) return;
-  drawing = false;
+function stopDraw(){
+  if(!drawing) return;
+  drawing=false;
+  const c=center();
 
-  lines.push({
-    a: startPoint,
-    b: previewPoint,
-    color:
-      previewPoint.mode === "rect" ? "#000000" : "#ff3333"
-  });
+  previewPoint.mode==="rect"
+    ? shapes.push({type:"line",a:startPoint,b:previewPoint,color:"#e6e6e6"})
+    : shapes.push({type:"arc",cx:c.x,cy:c.y,
+        r:dist(startPoint,c),
+        a1:angle(startPoint,c),
+        a2:angle(previewPoint,c),
+        color:"#ff3333"});
 
   redraw();
-  startPoint = previewPoint = null;
 }
 
 /* ---------- UI ---------- */
-undoBtn.onclick = () => {
-  if (lines.length) redoStack.push(lines.pop());
-  redraw();
+undoBtn.onclick=()=>{ if(shapes.length) redoStack.push(shapes.pop()); redraw(); };
+redoBtn.onclick=()=>{ if(redoStack.length) shapes.push(redoStack.pop()); redraw(); };
+clearBtn.onclick=()=>{ shapes.length=redoStack.length=0; redraw(); };
+gridBtn.onclick=()=>{ showGrid=!showGrid; redraw(); };
+
+exportPngBtn.onclick=()=>{
+  const a=document.createElement("a");
+  a.download="cad.png";
+  a.href=canvas.toDataURL();
+  a.click();
 };
 
-redoBtn.onclick = () => {
-  if (redoStack.length) lines.push(redoStack.pop());
-  redraw();
-};
-
-clearBtn.onclick = () => {
-  lines.length = redoStack.length = 0;
-  redraw();
+exportSvgBtn.onclick=()=>{
+  let svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">`;
+  for(const s of shapes){
+    if(s.type==="line"){
+      svg+=`<line x1="${s.a.x}" y1="${s.a.y}" x2="${s.b.x}" y2="${s.b.y}" stroke="${s.color}" stroke-width="2"/>`;
+    } else {
+      const d=`M ${s.cx+s.r*Math.cos(s.a1)} ${s.cy+s.r*Math.sin(s.a1)}
+               A ${s.r} ${s.r} 0 0 1
+               ${s.cx+s.r*Math.cos(s.a2)} ${s.cy+s.r*Math.sin(s.a2)}`;
+      svg+=`<path d="${d}" stroke="${s.color}" fill="none" stroke-width="2"/>`;
+    }
+  }
+  svg+="</svg>";
+  const blob=new Blob([svg],{type:"image/svg+xml"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="cad.svg";
+  a.click();
 };
 
 /* ---------- EVENTS ---------- */
-canvas.addEventListener("mousedown", startDraw);
-canvas.addEventListener("mousemove", moveDraw);
-canvas.addEventListener("mouseup", stopDraw);
-canvas.addEventListener("mouseleave", stopDraw);
+canvas.addEventListener("mousedown",startDraw);
+canvas.addEventListener("mousemove",moveDraw);
+canvas.addEventListener("mouseup",stopDraw);
+canvas.addEventListener("mouseleave",stopDraw);
 
-canvas.addEventListener("touchstart", startDraw, { passive: false });
-canvas.addEventListener("touchmove", moveDraw, { passive: false });
-canvas.addEventListener("touchend", stopDraw);
+canvas.addEventListener("touchstart",startDraw,{passive:false});
+canvas.addEventListener("touchmove",moveDraw,{passive:false});
+canvas.addEventListener("touchend",stopDraw);
 </script>
 
 </body>
