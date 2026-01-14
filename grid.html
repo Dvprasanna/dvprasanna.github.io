@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Canvas CAD Engine – v1.0.5</title>
+<title>Canvas CAD Engine – v1.0.5-fixed</title>
 
 <style>
 html, body {
@@ -13,7 +13,6 @@ html, body {
   font-family: system-ui, sans-serif;
 }
 
-/* ---------- TOP BAR ---------- */
 #topbar {
   display: flex;
   align-items: center;
@@ -31,7 +30,6 @@ html, body {
   cursor: pointer;
 }
 
-/* ---------- BALANCE ---------- */
 #balanceBar {
   flex: 1;
   height: 6px;
@@ -49,7 +47,6 @@ html, body {
   left: 50%;
 }
 
-/* ---------- CANVAS ---------- */
 canvas {
   display: block;
   background: #000;
@@ -70,38 +67,28 @@ canvas {
   <button id="undoBtn">Undo</button>
   <button id="redoBtn">Redo</button>
   <button id="clearBtn">Clear</button>
-  <button id="gridBtn">Grid</button>
-  <button id="exportPngBtn">PNG</button>
-  <button id="exportSvgBtn">SVG</button>
-
   <div id="balanceBar"><div id="balanceNeedle"></div></div>
-  <div id="meta"></div>
+  <div id="meta">v1.0.5-fixed | dvprasanna</div>
 </div>
 
 <canvas id="cad"></canvas>
 
 <script>
-/* ==================================================
+/* ================================
    Canvas CAD Engine
-   Version : 1.0.5
+   Version : 1.0.5-fixed
    Author  : dvprasanna
-   ================================================== */
-
-meta.textContent = "v1.0.5 | dvprasanna";
+   ================================ */
 
 const canvas = document.getElementById("cad");
 const ctx = canvas.getContext("2d");
 
-const RECT_GRID = 20;
-const RADIAL_STEP = 20;
-const ANGLE_STEP = Math.PI / 12;
-
-let showGrid = true;
+const GRID = 20;
 let drawing = false;
 let startPoint = null;
 let previewPoint = null;
 
-const shapes = [];
+const lines = [];
 const redoStack = [];
 
 /* ---------- RESIZE ---------- */
@@ -113,65 +100,47 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-/* ---------- CENTER ---------- */
-const center = () => ({ x: canvas.width / 2, y: canvas.height / 2 });
-const angle = (p,c)=>Math.atan2(p.y-c.y,p.x-c.x);
-const dist = (a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
-
 /* ---------- GRID ---------- */
+function center() {
+  return { x: canvas.width / 2, y: canvas.height / 2 };
+}
+
 function drawGrid() {
-  if (!showGrid) return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
   ctx.strokeStyle = "#222";
-  for (let x=0;x<=canvas.width;x+=RECT_GRID){
+  for(let x=0;x<=canvas.width;x+=GRID){
     ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
   }
-  for (let y=0;y<=canvas.height;y+=RECT_GRID){
+  for(let y=0;y<=canvas.height;y+=GRID){
     ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
   }
 
-  const c = center();
-  ctx.strokeStyle = "#333";
+  const c=center();
+  ctx.strokeStyle="#333";
   ctx.beginPath();
   ctx.moveTo(0,c.y); ctx.lineTo(canvas.width,c.y);
   ctx.moveTo(c.x,0); ctx.lineTo(c.x,canvas.height);
   ctx.stroke();
-
-  for (let r=RADIAL_STEP;r<canvas.width;r+=RADIAL_STEP){
-    ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2); ctx.stroke();
-  }
 }
 
 /* ---------- SNAP ---------- */
-function snapRect(p){
-  return { x:Math.round(p.x/RECT_GRID)*RECT_GRID,
-           y:Math.round(p.y/RECT_GRID)*RECT_GRID };
-}
-
-function snapRadial(p){
-  const c=center();
-  const a=Math.round(angle(p,c)/ANGLE_STEP)*ANGLE_STEP;
-  const r=Math.round(dist(p,c)/RADIAL_STEP)*RADIAL_STEP;
-  return { x:c.x+Math.cos(a)*r, y:c.y+Math.sin(a)*r };
-}
-
-function snapPoint(p){
-  const r=snapRect(p), c=snapRadial(p);
-  return dist(p,r)<=dist(p,c)?{...r,mode:"rect"}:{...c,mode:"radial"};
+function snap(p){
+  return {
+    x: Math.round(p.x/GRID)*GRID,
+    y: Math.round(p.y/GRID)*GRID
+  };
 }
 
 /* ---------- DRAW ---------- */
 function redraw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
   drawGrid();
-
-  for(const s of shapes){
-    ctx.strokeStyle=s.color;
+  for(const l of lines){
+    ctx.strokeStyle=l.color;
     ctx.lineWidth=2;
     ctx.beginPath();
-    s.type==="line"
-      ? (ctx.moveTo(s.a.x,s.a.y),ctx.lineTo(s.b.x,s.b.y))
-      : ctx.arc(s.cx,s.cy,s.r,s.a1,s.a2);
+    ctx.moveTo(l.a.x,l.a.y);
+    ctx.lineTo(l.b.x,l.b.y);
     ctx.stroke();
   }
   updateBalance();
@@ -181,11 +150,9 @@ function redraw(){
 function updateBalance(){
   const cx=canvas.width/2;
   let L=0,R=0;
-  for(const s of shapes){
-    const mid=s.type==="line"
-      ? (s.a.x+s.b.x)/2
-      : s.cx+Math.cos((s.a1+s.a2)/2)*s.r;
-    const len=s.type==="line"?dist(s.a,s.b):Math.abs(s.a2-s.a1)*s.r;
+  for(const l of lines){
+    const mid=(l.a.x+l.b.x)/2;
+    const len=Math.hypot(l.b.x-l.a.x,l.b.y-l.a.y);
     mid<cx?L+=len:R+=len;
   }
   balanceNeedle.style.left=(50+(R-L)/(L+R||1)*50)+"%";
@@ -199,78 +166,50 @@ function getPoint(e){
 }
 
 function startDraw(e){
-  drawing=true; redoStack.length=0;
-  startPoint=snapPoint(getPoint(e));
+  e.preventDefault();
+  drawing=true;
+  redoStack.length=0;
+  startPoint=snap(getPoint(e));
+  previewPoint=startPoint;   // CRITICAL FIX
 }
 
 function moveDraw(e){
   if(!drawing) return;
-  previewPoint=snapPoint(getPoint(e));
+  e.preventDefault();
+
+  previewPoint=snap(getPoint(e));
   redraw();
 
   ctx.setLineDash([6,6]);
-  ctx.strokeStyle=previewPoint.mode==="rect"?"#aaa":"#ff6666";
+  ctx.strokeStyle="#aaa";
   ctx.beginPath();
-
-  if(previewPoint.mode==="rect"){
-    ctx.moveTo(startPoint.x,startPoint.y);
-    ctx.lineTo(previewPoint.x,previewPoint.y);
-  } else {
-    const c=center();
-    ctx.arc(c.x,c.y,dist(startPoint,c),
-      angle(startPoint,c),angle(previewPoint,c));
-  }
-  ctx.stroke(); ctx.setLineDash([]);
+  ctx.moveTo(startPoint.x,startPoint.y);
+  ctx.lineTo(previewPoint.x,previewPoint.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
 }
 
-function stopDraw(){
+function stopDraw(e){
   if(!drawing) return;
+  e.preventDefault();
   drawing=false;
-  const c=center();
 
-  previewPoint.mode==="rect"
-    ? shapes.push({type:"line",a:startPoint,b:previewPoint,color:"#e6e6e6"})
-    : shapes.push({type:"arc",cx:c.x,cy:c.y,
-        r:dist(startPoint,c),
-        a1:angle(startPoint,c),
-        a2:angle(previewPoint,c),
-        color:"#ff3333"});
+  if(!previewPoint) return;
 
+  lines.push({
+    a:startPoint,
+    b:previewPoint,
+    color:"#e6e6e6"
+  });
+
+  startPoint=previewPoint=null;
   redraw();
 }
 
 /* ---------- UI ---------- */
-undoBtn.onclick=()=>{ if(shapes.length) redoStack.push(shapes.pop()); redraw(); };
-redoBtn.onclick=()=>{ if(redoStack.length) shapes.push(redoStack.pop()); redraw(); };
-clearBtn.onclick=()=>{ shapes.length=redoStack.length=0; redraw(); };
-gridBtn.onclick=()=>{ showGrid=!showGrid; redraw(); };
-
-exportPngBtn.onclick=()=>{
-  const a=document.createElement("a");
-  a.download="cad.png";
-  a.href=canvas.toDataURL();
-  a.click();
-};
-
-exportSvgBtn.onclick=()=>{
-  let svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">`;
-  for(const s of shapes){
-    if(s.type==="line"){
-      svg+=`<line x1="${s.a.x}" y1="${s.a.y}" x2="${s.b.x}" y2="${s.b.y}" stroke="${s.color}" stroke-width="2"/>`;
-    } else {
-      const d=`M ${s.cx+s.r*Math.cos(s.a1)} ${s.cy+s.r*Math.sin(s.a1)}
-               A ${s.r} ${s.r} 0 0 1
-               ${s.cx+s.r*Math.cos(s.a2)} ${s.cy+s.r*Math.sin(s.a2)}`;
-      svg+=`<path d="${d}" stroke="${s.color}" fill="none" stroke-width="2"/>`;
-    }
-  }
-  svg+="</svg>";
-  const blob=new Blob([svg],{type:"image/svg+xml"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download="cad.svg";
-  a.click();
-};
+undoBtn.onclick=()=>{ if(lines.length) redoStack.push(lines.pop()); redraw(); };
+redoBtn.onclick=()=>{ if(redoStack.length) lines.push(redoStack.pop()); redraw(); };
+clearBtn.onclick=()=>{ lines.length=redoStack.length=0; redraw(); };
 
 /* ---------- EVENTS ---------- */
 canvas.addEventListener("mousedown",startDraw);
