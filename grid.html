@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Canvas CAD Engine – v1.0.2</title>
+
+<title>Canvas CAD Engine – v1.0.4</title>
 
 <style>
 html, body {
@@ -13,13 +14,54 @@ html, body {
   font-family: system-ui, sans-serif;
 }
 
+/* ---------- TOP BAR ---------- */
 #topbar {
-  padding: 8px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #000;
   border-bottom: 1px solid #333;
-  font-size: 14px;
 }
 
+#topbar button {
+  padding: 4px 10px;
+  background: #222;
+  color: #fff;
+  border: 1px solid #444;
+  cursor: pointer;
+}
+
+#topbar button:hover {
+  background: #333;
+}
+
+/* ---------- BALANCE METER ---------- */
+#balanceBar {
+  flex: 1;
+  height: 6px;
+  background: #222;
+  position: relative;
+  margin-left: 10px;
+}
+
+#balanceNeedle {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 12px;
+  background: #00ff66;
+  left: 50%;
+}
+
+/* ---------- VERSION ---------- */
+#meta {
+  font-size: 11px;
+  color: #888;
+  font-family: monospace;
+}
+
+/* ---------- CANVAS ---------- */
 canvas {
   display: block;
   background: #000;
@@ -31,136 +73,232 @@ canvas {
 <body>
 
 <div id="topbar">
-  Canvas CAD Engine — v1.0.2 | dvprasanna
+  <button id="undoBtn">Undo</button>
+  <button id="redoBtn">Redo</button>
+  <button id="clearBtn">Clear</button>
+
+  <div id="balanceBar">
+    <div id="balanceNeedle"></div>
+  </div>
+
+  <div id="meta"></div>
 </div>
 
 <canvas id="cad"></canvas>
 
 <script>
-/* =====================================
+/* ==================================================
    Canvas CAD Engine
-   Version : 1.0.2
+   Version : 1.0.4
    Author  : dvprasanna
-   ===================================== */
+   ================================================== */
+
+const APP_VERSION = "1.0.4";
+const AUTHOR = "dvprasanna";
+document.getElementById("meta").textContent =
+  `v${APP_VERSION} | ${AUTHOR}`;
 
 const canvas = document.getElementById("cad");
 const ctx = canvas.getContext("2d");
 
-/* ===== RESIZE ===== */
-function resize() {
+/* ---------- CONFIG ---------- */
+const RECT_GRID = 20;
+const RADIAL_STEP = 20;
+const ANGLE_STEP = Math.PI / 12;
+
+let drawing = false;
+let startPoint = null;
+let previewPoint = null;
+
+const lines = [];
+const redoStack = [];
+
+/* ---------- RESIZE ---------- */
+function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight * 0.6;
-  drawGrid();
+  redraw();
 }
-window.addEventListener("resize", resize);
-resize();
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 
-/* ===== GRID ===== */
-const GRID = 20;
-
-function center() {
-  return {
-    x: canvas.width / 2,
-    y: canvas.height / 2
-  };
+/* ---------- GRID CENTER ---------- */
+function gridCenter() {
+  return { x: canvas.width / 2, y: canvas.width / 2 };
 }
 
-function drawGrid() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  /* square grid */
-  ctx.strokeStyle = "#222";
-  ctx.lineWidth = 1;
-
-  for (let x = 0; x <= canvas.width; x += GRID) {
+/* ---------- GRID ---------- */
+function drawRectGrid() {
+  ctx.strokeStyle = "#2a2a2a";
+  for (let x = 0; x <= canvas.width; x += RECT_GRID) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, canvas.height);
     ctx.stroke();
   }
-
-  for (let y = 0; y <= canvas.height; y += GRID) {
+  for (let y = 0; y <= canvas.height; y += RECT_GRID) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(canvas.width, y);
     ctx.stroke();
   }
+}
 
-  /* circular reference grid */
-  const c = center();
-  ctx.strokeStyle = "#333";
+function drawCircularGrid() {
+  const { x, y } = gridCenter();
+  ctx.strokeStyle = "#444";
 
   ctx.beginPath();
-  ctx.moveTo(0, c.y);
-  ctx.lineTo(canvas.width, c.y);
-  ctx.moveTo(c.x, 0);
-  ctx.lineTo(c.x, canvas.height);
+  ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
+  ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
   ctx.stroke();
 
-  for (let r = GRID; r < canvas.width; r += GRID) {
+  for (let r = RADIAL_STEP; r < canvas.width; r += RADIAL_STEP) {
     ctx.beginPath();
-    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.stroke();
   }
 }
 
-/* ===== DRAWING ===== */
-let drawing = false;
-let last = null;
+function drawGrid() {
+  drawRectGrid();
+  drawCircularGrid();
+}
 
-function snap(p) {
+/* ---------- SNAP ---------- */
+function snapRect(px, py) {
   return {
-    x: Math.round(p.x / GRID) * GRID,
-    y: Math.round(p.y / GRID) * GRID
+    x: Math.round(px / RECT_GRID) * RECT_GRID,
+    y: Math.round(py / RECT_GRID) * RECT_GRID
   };
 }
 
+function snapRadial(px, py) {
+  const { x: cx, y: cy } = gridCenter();
+  const dx = px - cx;
+  const dy = py - cy;
+  const angle =
+    Math.round(Math.atan2(dy, dx) / ANGLE_STEP) * ANGLE_STEP;
+  const radius =
+    Math.round(Math.hypot(dx, dy) / RADIAL_STEP) * RADIAL_STEP;
+  return {
+    x: cx + Math.cos(angle) * radius,
+    y: cy + Math.sin(angle) * radius
+  };
+}
+
+function snapPoint(px, py) {
+  const r = snapRect(px, py);
+  const c = snapRadial(px, py);
+  const dr = Math.hypot(px - r.x, py - r.y);
+  const dc = Math.hypot(px - c.x, py - c.y);
+  return dr <= dc ? { ...r, mode: "rect" } : { ...c, mode: "radial" };
+}
+
+/* ---------- REDRAW ---------- */
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawGrid();
+
+  for (const l of lines) {
+    ctx.strokeStyle = l.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(l.a.x, l.a.y);
+    ctx.lineTo(l.b.x, l.b.y);
+    ctx.stroke();
+  }
+  updateBalanceMeter();
+}
+
+/* ---------- BALANCE ---------- */
+function updateBalanceMeter() {
+  const cx = canvas.width / 2;
+  let left = 0, right = 0;
+
+  for (const l of lines) {
+    const mid = (l.a.x + l.b.x) / 2;
+    const len = Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y);
+    mid < cx ? left += len : right += len;
+  }
+
+  const total = left + right || 1;
+  const balance = (right - left) / total;
+  document.getElementById("balanceNeedle").style.left =
+    (50 + balance * 50) + "%";
+}
+
+/* ---------- INPUT ---------- */
 function getPoint(e) {
   const r = canvas.getBoundingClientRect();
   const p = e.touches ? e.touches[0] : e;
-  return {
-    x: p.clientX - r.left,
-    y: p.clientY - r.top
-  };
+  return { x: p.clientX - r.left, y: p.clientY - r.top };
 }
 
-function start(e) {
-  e.preventDefault();
+function startDraw(e) {
   drawing = true;
-  last = snap(getPoint(e));
+  redoStack.length = 0;
+  const p = getPoint(e);
+  startPoint = snapPoint(p.x, p.y);
+  previewPoint = startPoint;
 }
 
-function move(e) {
+function moveDraw(e) {
   if (!drawing) return;
-  e.preventDefault();
+  const p = getPoint(e);
+  previewPoint = snapPoint(p.x, p.y);
 
-  const p = snap(getPoint(e));
-
-  ctx.strokeStyle = "#e6e6e6";
-  ctx.lineWidth = 2;
-
+  redraw();
+  ctx.setLineDash([6, 6]);
+  ctx.strokeStyle =
+    previewPoint.mode === "rect" ? "#000" : "#ff3333";
   ctx.beginPath();
-  ctx.moveTo(last.x, last.y);
-  ctx.lineTo(p.x, p.y);
+  ctx.moveTo(startPoint.x, startPoint.y);
+  ctx.lineTo(previewPoint.x, previewPoint.y);
   ctx.stroke();
-
-  last = p;
+  ctx.setLineDash([]);
 }
 
-function stop() {
+function stopDraw() {
+  if (!drawing) return;
   drawing = false;
-  last = null;
+
+  lines.push({
+    a: startPoint,
+    b: previewPoint,
+    color:
+      previewPoint.mode === "rect" ? "#000000" : "#ff3333"
+  });
+
+  redraw();
+  startPoint = previewPoint = null;
 }
 
-/* ===== EVENTS ===== */
-canvas.addEventListener("mousedown", start);
-canvas.addEventListener("mousemove", move);
-canvas.addEventListener("mouseup", stop);
-canvas.addEventListener("mouseleave", stop);
+/* ---------- UI ---------- */
+undoBtn.onclick = () => {
+  if (lines.length) redoStack.push(lines.pop());
+  redraw();
+};
 
-canvas.addEventListener("touchstart", start, { passive: false });
-canvas.addEventListener("touchmove", move, { passive: false });
-canvas.addEventListener("touchend", stop);
+redoBtn.onclick = () => {
+  if (redoStack.length) lines.push(redoStack.pop());
+  redraw();
+};
+
+clearBtn.onclick = () => {
+  lines.length = redoStack.length = 0;
+  redraw();
+};
+
+/* ---------- EVENTS ---------- */
+canvas.addEventListener("mousedown", startDraw);
+canvas.addEventListener("mousemove", moveDraw);
+canvas.addEventListener("mouseup", stopDraw);
+canvas.addEventListener("mouseleave", stopDraw);
+
+canvas.addEventListener("touchstart", startDraw, { passive: false });
+canvas.addEventListener("touchmove", moveDraw, { passive: false });
+canvas.addEventListener("touchend", stopDraw);
 </script>
 
 </body>
