@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Canvas CAD Engine – v1.0.7</title>
+<title>Canvas CAD Engine – v1.0.8</title>
 
 <style>
 html, body {
@@ -84,12 +84,12 @@ canvas {
 <script>
 /* ==================================================
    Canvas CAD Engine
-   Version : 1.0.7
+   Version : 1.0.8
    Author  : dvprasanna
    ================================================== */
 
 /* ===== META ===== */
-const APP_VERSION = "1.0.7";
+const APP_VERSION = "1.0.8";
 const AUTHOR = "dvprasanna";
 
 /* ===== DOM ===== */
@@ -165,7 +165,7 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-/* ===== THEME APPLY ===== */
+/* ===== APPLY THEME ===== */
 function applyTheme() {
   const t = THEMES[THEME];
 
@@ -189,7 +189,12 @@ function applyTheme() {
 applyTheme();
 
 /* ===== GEOMETRY HELPERS ===== */
-const center = () => ({ x: canvas.width / 2, y: canvas.width / 2 });
+/* 🔧 FIXED: center Y is now canvas.height / 2 */
+const center = () => ({
+  x: canvas.width / 2,
+  y: canvas.height / 2
+});
+
 const angle = (p, c) => Math.atan2(p.y - c.y, p.x - c.x);
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
