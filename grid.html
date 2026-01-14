@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Canvas CAD Engine – V1.0.1</title>
+<title>Canvas CAD Engine – V1.0.2</title>
 
 <style>
 html, body {
@@ -22,13 +22,13 @@ canvas {
 </head>
 
 <body>
-v 1.01
+v 1.02
 <canvas id="cad"></canvas>
 
 <script>
 /* =====================================
    Canvas CAD Engine
-   Version: 1.0.1
+   Version: 1.0.2
    ===================================== */
 
 const canvas = document.getElementById("cad");
@@ -40,15 +40,16 @@ const RADIAL_STEP = 20;
 const ANGLE_STEP = Math.PI / 12; // 15°
 
 let drawing = false;
-let lastPoint = null;
+let startPoint = null;
+let previewPoint = null;
+const lines = []; // stored geometry
 
 // ---------- RESIZE ----------
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight * 0.6;
-  drawGrid();
+  redraw();
 }
-
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
@@ -56,11 +57,11 @@ resizeCanvas();
 function gridCenter() {
   return {
     x: canvas.width / 2,
-    y: canvas.width / 2   // W/2 from top (by design)
+    y: canvas.width / 2
   };
 }
 
-// ---------- GRID DRAWING ----------
+// ---------- GRID ----------
 function drawRectGrid() {
   ctx.strokeStyle = "#2a2a2a";
   ctx.lineWidth = 1;
@@ -82,11 +83,9 @@ function drawRectGrid() {
 
 function drawCircularGrid() {
   const { x, y } = gridCenter();
-
   ctx.strokeStyle = "#444";
-  ctx.lineWidth = 1;
 
-  // Axes
+  // axes
   ctx.beginPath();
   ctx.moveTo(0, y);
   ctx.lineTo(canvas.width, y);
@@ -94,14 +93,14 @@ function drawCircularGrid() {
   ctx.lineTo(x, canvas.height);
   ctx.stroke();
 
-  // Circles
+  // circles
   for (let r = RADIAL_STEP; r < canvas.width; r += RADIAL_STEP) {
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // Angle lines
+  // angles
   for (let a = 0; a < Math.PI * 2; a += ANGLE_STEP) {
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -114,7 +113,6 @@ function drawCircularGrid() {
 }
 
 function drawGrid() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawRectGrid();
   drawCircularGrid();
 }
@@ -122,7 +120,6 @@ function drawGrid() {
 // ---------- SNAP ----------
 function snapPoint(px, py) {
   const { x: cx, y: cy } = gridCenter();
-
   const dx = px - cx;
   const dy = py - cy;
 
@@ -138,6 +135,22 @@ function snapPoint(px, py) {
   };
 }
 
+// ---------- REDRAW ----------
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawGrid();
+
+  ctx.strokeStyle = "#00ff66";
+  ctx.lineWidth = 2;
+
+  for (const l of lines) {
+    ctx.beginPath();
+    ctx.moveTo(l.a.x, l.a.y);
+    ctx.lineTo(l.b.x, l.b.y);
+    ctx.stroke();
+  }
+}
+
 // ---------- INPUT ----------
 function getPoint(e) {
   const rect = canvas.getBoundingClientRect();
@@ -151,29 +164,35 @@ function getPoint(e) {
 function startDraw(e) {
   drawing = true;
   const p = getPoint(e);
-  lastPoint = snapPoint(p.x, p.y);
+  startPoint = snapPoint(p.x, p.y);
+  previewPoint = startPoint;
 }
 
 function moveDraw(e) {
   if (!drawing) return;
 
   const p = getPoint(e);
-  const snap = snapPoint(p.x, p.y);
+  previewPoint = snapPoint(p.x, p.y);
 
-  ctx.strokeStyle = "#00ff66";
-  ctx.lineWidth = 2;
+  redraw();
 
+  ctx.setLineDash([6, 6]);
   ctx.beginPath();
-  ctx.moveTo(lastPoint.x, lastPoint.y);
-  ctx.lineTo(snap.x, snap.y);
+  ctx.moveTo(startPoint.x, startPoint.y);
+  ctx.lineTo(previewPoint.x, previewPoint.y);
   ctx.stroke();
-
-  lastPoint = snap;
+  ctx.setLineDash([]);
 }
 
 function stopDraw() {
+  if (!drawing) return;
   drawing = false;
-  lastPoint = null;
+
+  lines.push({ a: startPoint, b: previewPoint });
+  redraw();
+
+  startPoint = null;
+  previewPoint = null;
 }
 
 // ---------- EVENTS ----------
