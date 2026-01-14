@@ -3,66 +3,32 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Canvas CAD Engine – v1.1.2</title>
+<title>Canvas CAD Engine – v1.0.6</title>
 
 <style>
-/* ===== GLOBAL SAFETY ===== */
-* {
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
-
 html, body {
   margin: 0;
+  background: #111;
+  color: #fff;
   font-family: system-ui, sans-serif;
 }
 
-/* ===== TOOLBAR ===== */
-#toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid;
+#topbar {
+  padding: 8px;
+  text-align: center;
+  border-bottom: 1px solid #333;
 }
 
-#toolbar button {
-  padding: 4px 10px;
+button {
+  padding: 6px 14px;
   background: transparent;
-  border: 1px solid;
-  cursor: pointer;
+  color: #fff;
+  border: 1px solid #444;
 }
 
-#meta {
-  margin-left: auto;
-  font-size: 11px;
-  font-family: monospace;
-}
-
-/* ===== BALANCE ===== */
-#balanceRow {
-  display: flex;
-  justify-content: center;
-  padding: 6px 0;
-}
-
-#balanceBar {
-  width: 60%;
-  height: 6px;
-  position: relative;
-}
-
-#balanceNeedle {
-  position: absolute;
-  top: -3px;
-  width: 2px;
-  height: 12px;
-}
-
-/* ===== CANVAS ===== */
 canvas {
   display: block;
+  background: #000;
   touch-action: none;
 }
 </style>
@@ -70,276 +36,127 @@ canvas {
 
 <body>
 
-<div id="toolbar">
-  <button id="undoBtn">Undo</button>
-  <button id="redoBtn">Redo</button>
-  <button id="clearBtn">Clear</button>
-  <button id="themeBtn">Theme</button>
-  <div id="meta"></div>
-</div>
-
-<div id="balanceRow">
-  <div id="balanceBar">
-    <div id="balanceNeedle"></div>
-  </div>
+<div id="topbar">
+  Canvas CAD Engine — v1.0.6 | dvprasanna
+  <button onclick="clearCanvas()">Clear</button>
 </div>
 
 <canvas id="cad"></canvas>
 
 <script>
-/* ==================================================
+/* =====================================
    Canvas CAD Engine
-   Version : 1.1.2
+   Version : 1.0.6
    Author  : dvprasanna
-   ================================================== */
+   ===================================== */
 
-const APP_VERSION = "1.1.2";
-const AUTHOR = "dvprasanna";
-
-/* ===== DOM ===== */
 const canvas = document.getElementById("cad");
 const ctx = canvas.getContext("2d");
-canvas.oncontextmenu = e => e.preventDefault();
-
-const meta = document.getElementById("meta");
-const toolbar = document.getElementById("toolbar");
-const balanceBar = document.getElementById("balanceBar");
-const balanceNeedle = document.getElementById("balanceNeedle");
-
-const undoBtn = document.getElementById("undoBtn");
-const redoBtn = document.getElementById("redoBtn");
-const clearBtn = document.getElementById("clearBtn");
-const themeBtn = document.getElementById("themeBtn");
-
-meta.textContent = `v${APP_VERSION} | ${AUTHOR}`;
-
-/* ===== THEMES ===== */
-const THEMES = {
-  dark: {
-    body:"#111", canvas:"#0b0b0b", ui:"#000", border:"#333", text:"#fff",
-    rectGrid:"#242424", circGrid:"#3a3a3a",
-    lineRect:"#e6e6e6", lineRadial:"#ff4d4d",
-    previewRect:"#cccccc", previewRadial:"#ff8080",
-    balanceBg:"#222", needle:"#00ff66"
-  },
-  light: {
-    body:"#f5f5f5", canvas:"#fff", ui:"#f0f0f0", border:"#ccc", text:"#000",
-    rectGrid:"#dddddd", circGrid:"#bbbbbb",
-    lineRect:"#000", lineRadial:"#cc0000",
-    previewRect:"#666", previewRadial:"#ff6666",
-    balanceBg:"#ddd", needle:"#008800"
-  }
-};
-
-let THEME = "dark";
-
-/* ===== CONFIG ===== */
-const RECT_GRID = 20;
-const RADIAL_STEP = 20;
-const ANGLE_STEP = Math.PI / 12;
-
-let drawing = false;
-let startPoint = null;
-let previewPoint = null;
-
-const shapes = [];
-const redoStack = [];
 
 /* ===== RESIZE ===== */
 function resize() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight * 0.6;
-  redraw();
+  drawGrid();
 }
 window.addEventListener("resize", resize);
 resize();
 
-/* ===== THEME ===== */
-function applyTheme() {
-  const t = THEMES[THEME];
-  document.body.style.background = t.body;
-  canvas.style.background = t.canvas;
+/* ===== GRID SETTINGS ===== */
+const GRID = 20;
 
-  toolbar.style.background = t.ui;
-  toolbar.style.borderBottomColor = t.border;
-  toolbar.style.color = t.text;
-
-  document.querySelectorAll("#toolbar button").forEach(b => {
-    b.style.color = t.text;
-    b.style.borderColor = t.border;
-  });
-
-  balanceBar.style.background = t.balanceBg;
-  balanceNeedle.style.background = t.needle;
-
-  redraw();
-}
-applyTheme();
-
-/* ===== GEOMETRY ===== */
-const center = () => ({ x: canvas.width / 2, y: canvas.height / 2 });
-const angle = (p,c) => Math.atan2(p.y - c.y, p.x - c.x);
-const dist  = (a,b) => Math.hypot(a.x - b.x, a.y - b.y);
-
-/* ===== GRID ===== */
-function drawGrid() {
-  const t = THEMES[THEME];
-  ctx.strokeStyle = t.rectGrid;
-
-  for (let x=0; x<=canvas.width; x+=RECT_GRID) {
-    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
-  }
-  for (let y=0; y<=canvas.height; y+=RECT_GRID) {
-    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
-  }
-
-  const c = center();
-  ctx.strokeStyle = t.circGrid;
-  ctx.beginPath();
-  ctx.moveTo(0,c.y); ctx.lineTo(canvas.width,c.y);
-  ctx.moveTo(c.x,0); ctx.lineTo(c.x,canvas.height);
-  ctx.stroke();
-
-  for (let r=RADIAL_STEP; r<canvas.width; r+=RADIAL_STEP) {
-    ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2); ctx.stroke();
-  }
-}
-
-/* ===== SNAP ===== */
-function snapRect(p) {
+/* ===== CENTER ===== */
+function center() {
   return {
-    x: Math.round(p.x/RECT_GRID)*RECT_GRID,
-    y: Math.round(p.y/RECT_GRID)*RECT_GRID
+    x: canvas.width / 2,
+    y: canvas.height / 2
   };
 }
 
-function snapRadial(p) {
-  const c = center();
-  const a = Math.round(angle(p,c)/ANGLE_STEP)*ANGLE_STEP;
-  const r = Math.round(dist(p,c)/RADIAL_STEP)*RADIAL_STEP;
-  return { x: c.x + Math.cos(a)*r, y: c.y + Math.sin(a)*r };
-}
+/* ===== GRID DRAW ===== */
+function drawGrid() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-function snapPoint(p) {
-  const r = snapRect(p);
-  const c = snapRadial(p);
-  return dist(p,r) <= dist(p,c)
-    ? { ...r, mode:"rect" }
-    : { ...c, mode:"radial" };
-}
-
-/* ===== RENDER ===== */
-function redraw() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawGrid();
-
-  for (const s of shapes) {
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth = 2;
+  // square grid
+  ctx.strokeStyle = "#222";
+  for (let x = 0; x <= canvas.width; x += GRID) {
     ctx.beginPath();
-    if (s.type === "line") {
-      ctx.moveTo(s.a.x,s.a.y);
-      ctx.lineTo(s.b.x,s.b.y);
-    } else {
-      ctx.arc(s.cx,s.cy,s.r,s.a1,s.a2);
-    }
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= canvas.height; y += GRID) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
     ctx.stroke();
   }
 
-  updateBalance();
-}
+  // circular grid
+  const c = center();
+  ctx.strokeStyle = "#333";
 
-/* ===== BALANCE ===== */
-function updateBalance() {
-  const cx = canvas.width/2;
-  let L=0, R=0;
+  ctx.beginPath();
+  ctx.moveTo(0, c.y);
+  ctx.lineTo(canvas.width, c.y);
+  ctx.moveTo(c.x, 0);
+  ctx.lineTo(c.x, canvas.height);
+  ctx.stroke();
 
-  for (const s of shapes) {
-    const mid = s.type==="line"
-      ? (s.a.x+s.b.x)/2
-      : s.cx + Math.cos((s.a1+s.a2)/2)*s.r;
-
-    const len = s.type==="line"
-      ? dist(s.a,s.b)
-      : Math.abs(s.a2-s.a1)*s.r;
-
-    mid < cx ? L+=len : R+=len;
+  for (let r = GRID; r < canvas.width; r += GRID) {
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.stroke();
   }
-
-  balanceNeedle.style.left =
-    (50 + (R-L)/(L+R || 1)*50) + "%";
 }
 
-/* ===== INPUT ===== */
+/* ===== DRAWING ===== */
+let drawing = false;
+let last = null;
+
+function snap(p) {
+  return {
+    x: Math.round(p.x / GRID) * GRID,
+    y: Math.round(p.y / GRID) * GRID
+  };
+}
+
 function getPoint(e) {
   const r = canvas.getBoundingClientRect();
-  if (e.touches) {
-    return {
-      x: e.touches[0].clientX - r.left,
-      y: e.touches[0].clientY - r.top
-    };
-  }
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
+  const p = e.touches ? e.touches[0] : e;
+  return {
+    x: p.clientX - r.left,
+    y: p.clientY - r.top
+  };
 }
 
 function start(e) {
-  if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
   drawing = true;
-  redoStack.length = 0;
-  startPoint = snapPoint(getPoint(e));
-  previewPoint = startPoint;
+  last = snap(getPoint(e));
 }
 
 function move(e) {
   if (!drawing) return;
   e.preventDefault();
 
-  previewPoint = snapPoint(getPoint(e));
-  redraw();
+  const p = snap(getPoint(e));
 
-  ctx.setLineDash([6,6]);
-  ctx.strokeStyle =
-    previewPoint.mode==="rect"
-      ? THEMES[THEME].previewRect
-      : THEMES[THEME].previewRadial;
+  ctx.strokeStyle = "#e6e6e6";
+  ctx.lineWidth = 2;
 
   ctx.beginPath();
-  if (previewPoint.mode==="rect") {
-    ctx.moveTo(startPoint.x,startPoint.y);
-    ctx.lineTo(previewPoint.x,previewPoint.y);
-  } else {
-    const c = center();
-    ctx.arc(c.x,c.y,dist(startPoint,c),
-      angle(startPoint,c), angle(previewPoint,c));
-  }
+  ctx.moveTo(last.x, last.y);
+  ctx.lineTo(p.x, p.y);
   ctx.stroke();
-  ctx.setLineDash([]);
+
+  last = p;
 }
 
-function stop(e) {
-  if (!drawing) return;
+function stop() {
   drawing = false;
-
-  const c = center();
-  if (previewPoint.mode==="rect") {
-    shapes.push({ type:"line", a:startPoint, b:previewPoint,
-      color: THEMES[THEME].lineRect });
-  } else {
-    shapes.push({ type:"arc", cx:c.x, cy:c.y,
-      r:dist(startPoint,c),
-      a1:angle(startPoint,c),
-      a2:angle(previewPoint,c),
-      color: THEMES[THEME].lineRadial });
-  }
-  redraw();
+  last = null;
 }
-
-/* ===== UI ===== */
-undoBtn.onclick = () => { if (shapes.length) redoStack.push(shapes.pop()); redraw(); };
-redoBtn.onclick = () => { if (redoStack.length) shapes.push(redoStack.pop()); redraw(); };
-clearBtn.onclick = () => { shapes.length = redoStack.length = 0; redraw(); };
-themeBtn.onclick = () => { THEME = THEME==="dark" ? "light" : "dark"; applyTheme(); };
 
 /* ===== EVENTS ===== */
 canvas.addEventListener("mousedown", start);
@@ -347,10 +164,14 @@ canvas.addEventListener("mousemove", move);
 canvas.addEventListener("mouseup", stop);
 canvas.addEventListener("mouseleave", stop);
 
-canvas.addEventListener("touchstart", start, {passive:false});
-canvas.addEventListener("touchmove", move, {passive:false});
+canvas.addEventListener("touchstart", start, { passive: false });
+canvas.addEventListener("touchmove", move, { passive: false });
 canvas.addEventListener("touchend", stop);
-canvas.addEventListener("touchcancel", stop);
+
+/* ===== CLEAR ===== */
+function clearCanvas() {
+  drawGrid();
+}
 </script>
 
 </body>
