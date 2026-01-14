@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Canvas CAD Engine – V1.0.2</title>
+<title>Canvas CAD Engine – V1.0.3</title>
 
 <style>
 html, body {
@@ -13,6 +13,28 @@ html, body {
   font-family: system-ui, sans-serif;
 }
 
+/* ---- UI ---- */
+#toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: #000;
+  border-bottom: 1px solid #333;
+}
+
+#toolbar button {
+  padding: 6px 12px;
+  background: #222;
+  color: #fff;
+  border: 1px solid #444;
+  cursor: pointer;
+}
+
+#toolbar button:hover {
+  background: #333;
+}
+
+/* ---- Canvas ---- */
 canvas {
   display: block;
   background: #000;
@@ -22,13 +44,19 @@ canvas {
 </head>
 
 <body>
-v 1.02
+v 1.03
+<div id="toolbar">
+  <button id="undoBtn">Undo</button>
+  <button id="redoBtn">Redo</button>
+  <button id="clearBtn">Clear</button>
+</div>
+
 <canvas id="cad"></canvas>
 
 <script>
 /* =====================================
    Canvas CAD Engine
-   Version: 1.0.2
+   Version: 1.0.3
    ===================================== */
 
 const canvas = document.getElementById("cad");
@@ -42,7 +70,10 @@ const ANGLE_STEP = Math.PI / 12; // 15°
 let drawing = false;
 let startPoint = null;
 let previewPoint = null;
-const lines = []; // stored geometry
+
+// geometry stacks
+const lines = [];
+const redoStack = [];
 
 // ---------- RESIZE ----------
 function resizeCanvas() {
@@ -85,7 +116,6 @@ function drawCircularGrid() {
   const { x, y } = gridCenter();
   ctx.strokeStyle = "#444";
 
-  // axes
   ctx.beginPath();
   ctx.moveTo(0, y);
   ctx.lineTo(canvas.width, y);
@@ -93,14 +123,12 @@ function drawCircularGrid() {
   ctx.lineTo(x, canvas.height);
   ctx.stroke();
 
-  // circles
   for (let r = RADIAL_STEP; r < canvas.width; r += RADIAL_STEP) {
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // angles
   for (let a = 0; a < Math.PI * 2; a += ANGLE_STEP) {
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -118,14 +146,20 @@ function drawGrid() {
 }
 
 // ---------- SNAP ----------
-function snapPoint(px, py) {
+function snapRect(px, py) {
+  return {
+    x: Math.round(px / RECT_GRID) * RECT_GRID,
+    y: Math.round(py / RECT_GRID) * RECT_GRID
+  };
+}
+
+function snapRadial(px, py) {
   const { x: cx, y: cy } = gridCenter();
   const dx = px - cx;
   const dy = py - cy;
 
   const angle =
     Math.round(Math.atan2(dy, dx) / ANGLE_STEP) * ANGLE_STEP;
-
   const radius =
     Math.round(Math.hypot(dx, dy) / RADIAL_STEP) * RADIAL_STEP;
 
@@ -135,15 +169,29 @@ function snapPoint(px, py) {
   };
 }
 
+// decide which grid dominates → sets color
+function snapPoint(px, py) {
+  const r = snapRect(px, py);
+  const c = snapRadial(px, py);
+
+  const dr = Math.hypot(px - r.x, py - r.y);
+  const dc = Math.hypot(px - c.x, py - c.y);
+
+  if (dr <= dc) {
+    return { ...r, mode: "rect" };
+  } else {
+    return { ...c, mode: "radial" };
+  }
+}
+
 // ---------- REDRAW ----------
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGrid();
 
-  ctx.strokeStyle = "#00ff66";
-  ctx.lineWidth = 2;
-
   for (const l of lines) {
+    ctx.strokeStyle = l.color;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(l.a.x, l.a.y);
     ctx.lineTo(l.b.x, l.b.y);
@@ -163,6 +211,8 @@ function getPoint(e) {
 
 function startDraw(e) {
   drawing = true;
+  redoStack.length = 0;
+
   const p = getPoint(e);
   startPoint = snapPoint(p.x, p.y);
   previewPoint = startPoint;
@@ -177,6 +227,10 @@ function moveDraw(e) {
   redraw();
 
   ctx.setLineDash([6, 6]);
+  ctx.strokeStyle =
+    previewPoint.mode === "rect" ? "#000" : "#ff3333";
+  ctx.lineWidth = 2;
+
   ctx.beginPath();
   ctx.moveTo(startPoint.x, startPoint.y);
   ctx.lineTo(previewPoint.x, previewPoint.y);
@@ -188,12 +242,36 @@ function stopDraw() {
   if (!drawing) return;
   drawing = false;
 
-  lines.push({ a: startPoint, b: previewPoint });
-  redraw();
+  const color =
+    previewPoint.mode === "rect" ? "#000000" : "#ff3333";
 
+  lines.push({
+    a: startPoint,
+    b: previewPoint,
+    color
+  });
+
+  redraw();
   startPoint = null;
   previewPoint = null;
 }
+
+// ---------- UI ACTIONS ----------
+document.getElementById("undoBtn").onclick = () => {
+  if (lines.length) redoStack.push(lines.pop());
+  redraw();
+};
+
+document.getElementById("redoBtn").onclick = () => {
+  if (redoStack.length) lines.push(redoStack.pop());
+  redraw();
+};
+
+document.getElementById("clearBtn").onclick = () => {
+  lines.length = 0;
+  redoStack.length = 0;
+  redraw();
+};
 
 // ---------- EVENTS ----------
 canvas.addEventListener("mousedown", startDraw);
