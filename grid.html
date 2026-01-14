@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Canvas CAD Engine – v1.0.6</title>
+<title>Canvas CAD Engine – v1.0.2</title>
 
 <style>
 html, body {
@@ -17,13 +17,7 @@ html, body {
   padding: 8px;
   text-align: center;
   border-bottom: 1px solid #333;
-}
-
-button {
-  padding: 6px 14px;
-  background: transparent;
-  color: #fff;
-  border: 1px solid #444;
+  font-size: 14px;
 }
 
 canvas {
@@ -37,8 +31,7 @@ canvas {
 <body>
 
 <div id="topbar">
-  Canvas CAD Engine — v1.0.6 | dvprasanna
-  <button onclick="clearCanvas()">Clear</button>
+  Canvas CAD Engine — v1.0.2 | dvprasanna
 </div>
 
 <canvas id="cad"></canvas>
@@ -46,7 +39,7 @@ canvas {
 <script>
 /* =====================================
    Canvas CAD Engine
-   Version : 1.0.6
+   Version : 1.0.2
    Author  : dvprasanna
    ===================================== */
 
@@ -62,10 +55,9 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-/* ===== GRID SETTINGS ===== */
+/* ===== GRID ===== */
 const GRID = 20;
 
-/* ===== CENTER ===== */
 function center() {
   return {
     x: canvas.width / 2,
@@ -73,18 +65,20 @@ function center() {
   };
 }
 
-/* ===== GRID DRAW ===== */
 function drawGrid() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // square grid
+  /* square grid */
   ctx.strokeStyle = "#222";
+  ctx.lineWidth = 1;
+
   for (let x = 0; x <= canvas.width; x += GRID) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, canvas.height);
     ctx.stroke();
   }
+
   for (let y = 0; y <= canvas.height; y += GRID) {
     ctx.beginPath();
     ctx.moveTo(0, y);
@@ -92,7 +86,7 @@ function drawGrid() {
     ctx.stroke();
   }
 
-  // circular grid
+  /* circular reference grid */
   const c = center();
   ctx.strokeStyle = "#333";
 
@@ -167,11 +161,6 @@ canvas.addEventListener("mouseleave", stop);
 canvas.addEventListener("touchstart", start, { passive: false });
 canvas.addEventListener("touchmove", move, { passive: false });
 canvas.addEventListener("touchend", stop);
-
-/* ===== CLEAR ===== */
-function clearCanvas() {
-  drawGrid();
-}
 </script>
 
 </body>
