@@ -1,23 +1,23 @@
-<!DOCTYPE html>  
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Canvas CAD Engine – V1</title>
+<title>Canvas CAD Engine – V1.0.1</title>
 
 <style>
-  html, body {
-    margin: 0;
-    background: #111;
-    color: #fff;
-    font-family: system-ui, sans-serif;
-  }
+html, body {
+  margin: 0;
+  background: #111;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+}
 
-  canvas {
-    display: block;
-    background: #000;
-    touch-action: none;
-  }
+canvas {
+  display: block;
+  background: #000;
+  touch-action: none;
+}
 </style>
 </head>
 
@@ -26,53 +26,53 @@
 <canvas id="cad"></canvas>
 
 <script>
-/* ===============================
+/* =====================================
    Canvas CAD Engine
-   Version: 1.0.0
-   =============================== */
+   Version: 1.0.1
+   ===================================== */
 
 const canvas = document.getElementById("cad");
 const ctx = canvas.getContext("2d");
 
-function resize() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight * 0.6;
-}
-resize();
-window.addEventListener("resize", resize);
+// ---------- CONFIG ----------
+const RECT_GRID = 20;
+const RADIAL_STEP = 20;
+const ANGLE_STEP = Math.PI / 12; // 15°
 
-// --- Core reference ---
+let drawing = false;
+let lastPoint = null;
+
+// ---------- RESIZE ----------
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight * 0.6;
+  drawGrid();
+}
+
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+
+// ---------- GRID CENTER ----------
 function gridCenter() {
   return {
     x: canvas.width / 2,
-    y: canvas.width / 2   // IMPORTANT: W/2 from top
+    y: canvas.width / 2   // W/2 from top (by design)
   };
 }
 
-// --- Grid settings ---
-const rectGrid = 20;
-const radialStep = 20;
-const angleStep = Math.PI / 12; // 15°
-
-let drawing = false;
-let last = null;
-
-// ===============================
-// Drawing helpers
-// ===============================
-
+// ---------- GRID DRAWING ----------
 function drawRectGrid() {
-  ctx.strokeStyle = "#222";
+  ctx.strokeStyle = "#2a2a2a";
   ctx.lineWidth = 1;
 
-  for (let x = 0; x < canvas.width; x += rectGrid) {
+  for (let x = 0; x <= canvas.width; x += RECT_GRID) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, canvas.height);
     ctx.stroke();
   }
 
-  for (let y = 0; y < canvas.height; y += rectGrid) {
+  for (let y = 0; y <= canvas.height; y += RECT_GRID) {
     ctx.beginPath();
     ctx.moveTo(0, y);
     ctx.lineTo(canvas.width, y);
@@ -83,10 +83,10 @@ function drawRectGrid() {
 function drawCircularGrid() {
   const { x, y } = gridCenter();
 
-  ctx.strokeStyle = "#333";
+  ctx.strokeStyle = "#444";
   ctx.lineWidth = 1;
 
-  // axes
+  // Axes
   ctx.beginPath();
   ctx.moveTo(0, y);
   ctx.lineTo(canvas.width, y);
@@ -94,15 +94,15 @@ function drawCircularGrid() {
   ctx.lineTo(x, canvas.height);
   ctx.stroke();
 
-  // circles
-  for (let r = radialStep; r < canvas.width; r += radialStep) {
+  // Circles
+  for (let r = RADIAL_STEP; r < canvas.width; r += RADIAL_STEP) {
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // angle lines
-  for (let a = 0; a < Math.PI * 2; a += angleStep) {
+  // Angle lines
+  for (let a = 0; a < Math.PI * 2; a += ANGLE_STEP) {
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(
@@ -113,14 +113,24 @@ function drawCircularGrid() {
   }
 }
 
+function drawGrid() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawRectGrid();
+  drawCircularGrid();
+}
+
+// ---------- SNAP ----------
 function snapPoint(px, py) {
   const { x: cx, y: cy } = gridCenter();
 
   const dx = px - cx;
   const dy = py - cy;
 
-  const angle  = Math.round(Math.atan2(dy, dx) / angleStep) * angleStep;
-  const radius = Math.round(Math.hypot(dx, dy) / radialStep) * radialStep;
+  const angle =
+    Math.round(Math.atan2(dy, dx) / ANGLE_STEP) * ANGLE_STEP;
+
+  const radius =
+    Math.round(Math.hypot(dx, dy) / RADIAL_STEP) * RADIAL_STEP;
 
   return {
     x: cx + Math.cos(angle) * radius,
@@ -128,71 +138,53 @@ function snapPoint(px, py) {
   };
 }
 
-// ===============================
-// Interaction
-// ===============================
-
-function start(e) {
-  drawing = true;
-  const p = getPoint(e);
-  last = snapPoint(p.x, p.y);
+// ---------- INPUT ----------
+function getPoint(e) {
+  const rect = canvas.getBoundingClientRect();
+  const p = e.touches ? e.touches[0] : e;
+  return {
+    x: p.clientX - rect.left,
+    y: p.clientY - rect.top
+  };
 }
 
-function move(e) {
+function startDraw(e) {
+  drawing = true;
+  const p = getPoint(e);
+  lastPoint = snapPoint(p.x, p.y);
+}
+
+function moveDraw(e) {
   if (!drawing) return;
 
   const p = getPoint(e);
   const snap = snapPoint(p.x, p.y);
 
-  ctx.strokeStyle = "#0f0";
+  ctx.strokeStyle = "#00ff66";
   ctx.lineWidth = 2;
 
   ctx.beginPath();
-  ctx.moveTo(last.x, last.y);
+  ctx.moveTo(lastPoint.x, lastPoint.y);
   ctx.lineTo(snap.x, snap.y);
   ctx.stroke();
 
-  last = snap;
+  lastPoint = snap;
 }
 
-function stop() {
+function stopDraw() {
   drawing = false;
-  last = null;
+  lastPoint = null;
 }
 
-function getPoint(e) {
-  const rect = canvas.getBoundingClientRect();
-  const t = e.touches ? e.touches[0] : e;
-  return {
-    x: t.clientX - rect.left,
-    y: t.clientY - rect.top
-  };
-}
+// ---------- EVENTS ----------
+canvas.addEventListener("mousedown", startDraw);
+canvas.addEventListener("mousemove", moveDraw);
+canvas.addEventListener("mouseup", stopDraw);
+canvas.addEventListener("mouseleave", stopDraw);
 
-// ===============================
-// Render loop
-// ===============================
-
-function render() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawRectGrid();
-  drawCircularGrid();
-  requestAnimationFrame(render);
-}
-render();
-
-// ===============================
-// Events
-// ===============================
-
-canvas.addEventListener("mousedown", start);
-canvas.addEventListener("mousemove", move);
-canvas.addEventListener("mouseup", stop);
-canvas.addEventListener("mouseleave", stop);
-
-canvas.addEventListener("touchstart", start, { passive: false });
-canvas.addEventListener("touchmove", move, { passive: false });
-canvas.addEventListener("touchend", stop);
+canvas.addEventListener("touchstart", startDraw, { passive: false });
+canvas.addEventListener("touchmove", moveDraw, { passive: false });
+canvas.addEventListener("touchend", stopDraw);
 
 </script>
 
