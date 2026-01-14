@@ -11,7 +11,7 @@ html, body {
   font-family: system-ui, sans-serif;
 }
 
-/* ===== ROW 1 : TOOLBAR ===== */
+/* ===== TOOLBAR ===== */
 #toolbar {
   display: flex;
   align-items: center;
@@ -22,12 +22,18 @@ html, body {
 
 #toolbar button {
   padding: 4px 10px;
-  cursor: pointer;
-  border: 1px solid;
   background: transparent;
+  border: 1px solid;
+  cursor: pointer;
 }
 
-/* ===== ROW 2 : BALANCE (CENTERED) ===== */
+#meta {
+  margin-left: auto;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+/* ===== BALANCE ROW ===== */
 #balanceRow {
   display: flex;
   justify-content: center;
@@ -47,13 +53,6 @@ html, body {
   height: 12px;
 }
 
-/* ===== META ===== */
-#meta {
-  margin-left: auto;
-  font-size: 11px;
-  font-family: monospace;
-}
-
 /* ===== CANVAS ===== */
 canvas {
   display: block;
@@ -64,7 +63,7 @@ canvas {
 
 <body>
 
-<!-- ROW 1 -->
+<!-- TOOLBAR -->
 <div id="toolbar">
   <button id="undoBtn">Undo</button>
   <button id="redoBtn">Redo</button>
@@ -73,7 +72,7 @@ canvas {
   <div id="meta"></div>
 </div>
 
-<!-- ROW 2 -->
+<!-- BALANCE -->
 <div id="balanceRow">
   <div id="balanceBar">
     <div id="balanceNeedle"></div>
@@ -89,8 +88,24 @@ canvas {
    Author  : dvprasanna
    ================================================== */
 
+/* ===== META ===== */
 const APP_VERSION = "1.0.7";
 const AUTHOR = "dvprasanna";
+
+/* ===== DOM ===== */
+const canvas = document.getElementById("cad");
+const ctx = canvas.getContext("2d");
+
+const meta = document.getElementById("meta");
+const toolbar = document.getElementById("toolbar");
+const balanceBar = document.getElementById("balanceBar");
+const balanceNeedle = document.getElementById("balanceNeedle");
+
+const undoBtn = document.getElementById("undoBtn");
+const redoBtn = document.getElementById("redoBtn");
+const clearBtn = document.getElementById("clearBtn");
+const themeBtn = document.getElementById("themeBtn");
+
 meta.textContent = `v${APP_VERSION} | ${AUTHOR}`;
 
 /* ===== THEMES ===== */
@@ -118,20 +133,16 @@ const THEMES = {
     text: "#000",
     rectGrid: "#dddddd",
     circGrid: "#bbbbbb",
-    lineRect: "#000",
+    lineRect: "#000000",
     lineRadial: "#cc0000",
-    previewRect: "#666",
+    previewRect: "#666666",
     previewRadial: "#ff6666",
-    balanceBg: "#ddd",
+    balanceBg: "#dddddd",
     needle: "#008800"
   }
 };
 
 let THEME = "dark";
-
-/* ===== CANVAS ===== */
-const canvas = document.getElementById("cad");
-const ctx = canvas.getContext("2d");
 
 /* ===== CONFIG ===== */
 const RECT_GRID = 20;
@@ -154,9 +165,10 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-/* ===== APPLY THEME ===== */
+/* ===== THEME APPLY ===== */
 function applyTheme() {
   const t = THEMES[THEME];
+
   document.body.style.background = t.body;
   canvas.style.background = t.canvas;
 
@@ -164,7 +176,7 @@ function applyTheme() {
   toolbar.style.borderBottomColor = t.border;
   toolbar.style.color = t.text;
 
-  document.querySelectorAll("button").forEach(b => {
+  document.querySelectorAll("#toolbar button").forEach(b => {
     b.style.color = t.text;
     b.style.borderColor = t.border;
   });
@@ -177,11 +189,9 @@ function applyTheme() {
 applyTheme();
 
 /* ===== GEOMETRY HELPERS ===== */
-function center() {
-  return { x: canvas.width / 2, y: canvas.width / 2 };
-}
+const center = () => ({ x: canvas.width / 2, y: canvas.width / 2 });
 const angle = (p, c) => Math.atan2(p.y - c.y, p.x - c.x);
-const dist  = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /* ===== GRID ===== */
 function drawGrid() {
@@ -189,22 +199,33 @@ function drawGrid() {
   ctx.strokeStyle = t.rectGrid;
 
   for (let x = 0; x <= canvas.width; x += RECT_GRID) {
-    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
   }
+
   for (let y = 0; y <= canvas.height; y += RECT_GRID) {
-    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
   }
 
   const c = center();
   ctx.strokeStyle = t.circGrid;
 
   ctx.beginPath();
-  ctx.moveTo(0,c.y); ctx.lineTo(canvas.width,c.y);
-  ctx.moveTo(c.x,0); ctx.lineTo(c.x,canvas.height);
+  ctx.moveTo(0, c.y);
+  ctx.lineTo(canvas.width, c.y);
+  ctx.moveTo(c.x, 0);
+  ctx.lineTo(c.x, canvas.height);
   ctx.stroke();
 
   for (let r = RADIAL_STEP; r < canvas.width; r += RADIAL_STEP) {
-    ctx.beginPath(); ctx.arc(c.x,c.y,r,0,Math.PI*2); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.stroke();
   }
 }
 
@@ -218,122 +239,164 @@ function snapRect(p) {
 
 function snapRadial(p) {
   const c = center();
-  const a = Math.round(angle(p,c)/ANGLE_STEP)*ANGLE_STEP;
-  const r = Math.round(dist(p,c)/RADIAL_STEP)*RADIAL_STEP;
-  return { x: c.x + Math.cos(a)*r, y: c.y + Math.sin(a)*r };
+  const a = Math.round(angle(p, c) / ANGLE_STEP) * ANGLE_STEP;
+  const r = Math.round(dist(p, c) / RADIAL_STEP) * RADIAL_STEP;
+  return { x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r };
 }
 
 function snapPoint(p) {
   const r = snapRect(p);
   const c = snapRadial(p);
-  return dist(p,r) <= dist(p,c) ? { ...r, mode:"rect" } : { ...c, mode:"radial" };
+  return dist(p, r) <= dist(p, c)
+    ? { ...r, mode: "rect" }
+    : { ...c, mode: "radial" };
 }
 
 /* ===== REDRAW ===== */
 function redraw() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawGrid();
 
   for (const s of shapes) {
     ctx.strokeStyle = s.color;
     ctx.lineWidth = 2;
     ctx.beginPath();
+
     if (s.type === "line") {
-      ctx.moveTo(s.a.x,s.a.y);
-      ctx.lineTo(s.b.x,s.b.y);
+      ctx.moveTo(s.a.x, s.a.y);
+      ctx.lineTo(s.b.x, s.b.y);
     } else {
-      ctx.arc(s.cx,s.cy,s.r,s.a1,s.a2);
+      ctx.arc(s.cx, s.cy, s.r, s.a1, s.a2);
     }
+
     ctx.stroke();
   }
+
   updateBalance();
 }
 
 /* ===== BALANCE ===== */
 function updateBalance() {
-  const cx = canvas.width/2;
-  let L=0,R=0;
+  const cx = canvas.width / 2;
+  let L = 0, R = 0;
+
   for (const s of shapes) {
-    const m = s.type==="line"
-      ? (s.a.x+s.b.x)/2
-      : s.cx + Math.cos((s.a1+s.a2)/2)*s.r;
-    const len = s.type==="line" ? dist(s.a,s.b) : Math.abs(s.a2-s.a1)*s.r;
-    m < cx ? L+=len : R+=len;
+    const midX = s.type === "line"
+      ? (s.a.x + s.b.x) / 2
+      : s.cx + Math.cos((s.a1 + s.a2) / 2) * s.r;
+
+    const len = s.type === "line"
+      ? dist(s.a, s.b)
+      : Math.abs(s.a2 - s.a1) * s.r;
+
+    midX < cx ? L += len : R += len;
   }
-  const t = L+R || 1;
-  balanceNeedle.style.left = (50 + (R-L)/t*50) + "%";
+
+  const total = L + R || 1;
+  balanceNeedle.style.left =
+    (50 + (R - L) / total * 50) + "%";
 }
 
 /* ===== INPUT ===== */
-function point(e){
+function getPoint(e) {
   const r = canvas.getBoundingClientRect();
   const p = e.touches ? e.touches[0] : e;
-  return { x:p.clientX-r.left, y:p.clientY-r.top };
+  return { x: p.clientX - r.left, y: p.clientY - r.top };
 }
 
-function start(e){
-  drawing=true; redoStack.length=0;
-  startPoint = snapPoint(point(e));
+function start(e) {
+  drawing = true;
+  redoStack.length = 0;
+  startPoint = snapPoint(getPoint(e));
   previewPoint = startPoint;
 }
 
-function move(e){
-  if(!drawing) return;
-  previewPoint = snapPoint(point(e));
+function move(e) {
+  if (!drawing) return;
+  previewPoint = snapPoint(getPoint(e));
   redraw();
 
-  ctx.setLineDash([6,6]);
-  ctx.strokeStyle = previewPoint.mode==="rect"
+  ctx.setLineDash([6, 6]);
+  ctx.strokeStyle = previewPoint.mode === "rect"
     ? THEMES[THEME].previewRect
     : THEMES[THEME].previewRadial;
 
   ctx.beginPath();
-  if(previewPoint.mode==="rect"){
-    ctx.moveTo(startPoint.x,startPoint.y);
-    ctx.lineTo(previewPoint.x,previewPoint.y);
+  if (previewPoint.mode === "rect") {
+    ctx.moveTo(startPoint.x, startPoint.y);
+    ctx.lineTo(previewPoint.x, previewPoint.y);
   } else {
-    const c=center();
-    ctx.arc(c.x,c.y,dist(startPoint,c),
-      angle(startPoint,c), angle(previewPoint,c));
+    const c = center();
+    ctx.arc(
+      c.x,
+      c.y,
+      dist(startPoint, c),
+      angle(startPoint, c),
+      angle(previewPoint, c)
+    );
   }
   ctx.stroke();
   ctx.setLineDash([]);
 }
 
-function stop(){
-  if(!drawing) return;
-  drawing=false;
+function stop() {
+  if (!drawing) return;
+  drawing = false;
 
-  const c=center();
-  if(previewPoint.mode==="rect"){
-    shapes.push({type:"line",a:startPoint,b:previewPoint,
-      color:THEMES[THEME].lineRect});
+  const c = center();
+
+  if (previewPoint.mode === "rect") {
+    shapes.push({
+      type: "line",
+      a: startPoint,
+      b: previewPoint,
+      color: THEMES[THEME].lineRect
+    });
   } else {
     shapes.push({
-      type:"arc",cx:c.x,cy:c.y,
-      r:dist(startPoint,c),
-      a1:angle(startPoint,c),
-      a2:angle(previewPoint,c),
-      color:THEMES[THEME].lineRadial
+      type: "arc",
+      cx: c.x,
+      cy: c.y,
+      r: dist(startPoint, c),
+      a1: angle(startPoint, c),
+      a2: angle(previewPoint, c),
+      color: THEMES[THEME].lineRadial
     });
   }
+
   redraw();
 }
 
 /* ===== UI ===== */
-undoBtn.onclick=()=>{ if(shapes.length) redoStack.push(shapes.pop()); redraw(); };
-redoBtn.onclick=()=>{ if(redoStack.length) shapes.push(redoStack.pop()); redraw(); };
-clearBtn.onclick=()=>{ shapes.length=redoStack.length=0; redraw(); };
-themeBtn.onclick=()=>{ THEME=THEME==="dark"?"light":"dark"; applyTheme(); };
+undoBtn.onclick = () => {
+  if (shapes.length) redoStack.push(shapes.pop());
+  redraw();
+};
+
+redoBtn.onclick = () => {
+  if (redoStack.length) shapes.push(redoStack.pop());
+  redraw();
+};
+
+clearBtn.onclick = () => {
+  shapes.length = redoStack.length = 0;
+  redraw();
+};
+
+themeBtn.onclick = () => {
+  THEME = THEME === "dark" ? "light" : "dark";
+  applyTheme();
+};
 
 /* ===== EVENTS ===== */
-canvas.addEventListener("mousedown",start);
-canvas.addEventListener("mousemove",move);
-canvas.addEventListener("mouseup",stop);
-canvas.addEventListener("mouseleave",stop);
-canvas.addEventListener("touchstart",start,{passive:false});
-canvas.addEventListener("touchmove",move,{passive:false});
-canvas.addEventListener("touchend",stop);
+canvas.addEventListener("mousedown", start);
+canvas.addEventListener("mousemove", move);
+canvas.addEventListener("mouseup", stop);
+canvas.addEventListener("mouseleave", stop);
+
+canvas.addEventListener("touchstart", start, { passive: false });
+canvas.addEventListener("touchmove", move, { passive: false });
+canvas.addEventListener("touchend", stop);
 </script>
 
 </body>
