@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Rect → Ellipse with Mask (v1.0)</title>
+
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: #fff;
+    font-family: system-ui, sans-serif;
+  }
+  canvas {
+    display: block;
+    background: #000;
+    touch-action: none;
+  }
+</style>
+</head>
+
+<body>
+<canvas id="c"></canvas>
+
+<script>
+/* ============================
+   CONFIG
+============================ */
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+resize();
+window.addEventListener("resize", resize);
+
+/* ============================
+   DATA MODEL
+============================ */
+const shapes = [];
+let current = null;
+let mode = "draw"; // draw | idle
+
+function createShape(x, y) {
+  return {
+    rect: { x, y, w: 0, h: 0 },
+    ellipse: null,
+    mask: { x, y, w: 0, h: 0 },
+    mode: "rect" // rect | ellipse
+  };
+}
+
+/* ============================
+   EVENTS
+============================ */
+canvas.addEventListener("pointerdown", e => {
+  const { x, y } = pos(e);
+  current = createShape(x, y);
+  shapes.push(current);
+  mode = "draw";
+});
+
+canvas.addEventListener("pointermove", e => {
+  if (!current) return;
+  const { x, y } = pos(e);
+  current.rect.w = x - current.rect.x;
+  current.rect.h = y - current.rect.y;
+  current.mask.w = current.rect.w;
+  current.mask.h = current.rect.h;
+});
+
+canvas.addEventListener("pointerup", () => {
+  current = null;
+  mode = "idle";
+});
+
+canvas.addEventListener("dblclick", e => {
+  const { x, y } = pos(e);
+  shapes.forEach(s => {
+    if (insideRect(x, y, s.rect)) {
+      convertToEllipse(s);
+    }
+  });
+});
+
+/* ============================
+   LOGIC
+============================ */
+function convertToEllipse(s) {
+  const r = s.rect;
+  s.ellipse = {
+    cx: r.x + r.w / 2,
+    cy: r.y + r.h / 2,
+    rx: Math.abs(r.w / 2),
+    ry: Math.abs(r.h / 2)
+  };
+  s.mask = { ...r };
+  s.mode = "ellipse";
+}
+
+/* ============================
+   DRAW LOOP
+============================ */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  shapes.forEach(s => {
+    ctx.save();
+
+    // apply mask
+    ctx.beginPath();
+    ctx.rect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
+    ctx.clip();
+
+    // draw rectangle (construction)
+    ctx.strokeStyle = "#444";
+    ctx.strokeRect(s.rect.x, s.rect.y, s.rect.w, s.rect.h);
+
+    // draw ellipse if exists
+    if (s.mode === "ellipse" && s.ellipse) {
+      ctx.beginPath();
+      ctx.ellipse(
+        s.ellipse.cx,
+        s.ellipse.cy,
+        s.ellipse.rx,
+        s.ellipse.ry,
+        0, 0, Math.PI * 2
+      );
+      ctx.strokeStyle = "#00ffcc";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  });
+
+  requestAnimationFrame(draw);
+}
+draw();
+
+/* ============================
+   HELPERS
+============================ */
+function pos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function insideRect(x, y, r) {
+  return (
+    x >= r.x &&
+    x <= r.x + r.w &&
+    y >= r.y &&
+    y <= r.y + r.h
+  );
+}
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+</script>
+</body>
+</html>
