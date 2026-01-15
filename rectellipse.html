@@ -3,18 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Rect → Ellipse with Mask (v1.1)</title>
+<title>Rect → Ellipse Overlay (v1.2)</title>
 
 <style>
   body {
     margin: 0;
-    background: #111;
-    color: #fff;
-    font-family: system-ui, sans-serif;
+    background: #000; /* black bg */
   }
   canvas {
     display: block;
-    background: #000;
+    background: #000; /* black bg */
     touch-action: none;
   }
 </style>
@@ -32,17 +30,14 @@ window.addEventListener("resize", resize);
 
 const shapes = [];
 let current = null;
-let selected = null;
-let resizingMask = false;
 
 /* ============================
-   SHAPE
+   SHAPE MODEL
 ============================ */
 function createShape(x, y) {
   return {
     rect: { x, y, w: 0, h: 0 },
     ellipse: null,
-    mask: { x, y, w: 0, h: 0 },
     mode: "rect"
   };
 }
@@ -52,47 +47,19 @@ function createShape(x, y) {
 ============================ */
 canvas.addEventListener("pointerdown", e => {
   const p = pos(e);
-
-  selected = null;
-  resizingMask = false;
-
-  // check mask handle first
-  for (let s of shapes) {
-    if (onMaskHandle(p, s)) {
-      selected = s;
-      resizingMask = true;
-      return;
-    }
-    if (insideRect(p.x, p.y, s.rect)) {
-      selected = s;
-      return;
-    }
-  }
-
-  // draw new rect
   current = createShape(p.x, p.y);
   shapes.push(current);
 });
 
 canvas.addEventListener("pointermove", e => {
+  if (!current) return;
   const p = pos(e);
-
-  if (current) {
-    current.rect.w = p.x - current.rect.x;
-    current.rect.h = p.y - current.rect.y;
-    current.mask.w = current.rect.w;
-    current.mask.h = current.rect.h;
-  }
-
-  if (resizingMask && selected) {
-    selected.mask.w = p.x - selected.mask.x;
-    selected.mask.h = p.y - selected.mask.y;
-  }
+  current.rect.w = p.x - current.rect.x;
+  current.rect.h = p.y - current.rect.y;
 });
 
 canvas.addEventListener("pointerup", () => {
   current = null;
-  resizingMask = false;
 });
 
 canvas.addEventListener("dblclick", e => {
@@ -115,7 +82,6 @@ function convertToEllipse(s) {
     rx: Math.abs(r.w / 2),
     ry: Math.abs(r.h / 2)
   };
-  s.mask = { ...r };
   s.mode = "ellipse";
 }
 
@@ -126,19 +92,14 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   shapes.forEach(s => {
-    ctx.save();
 
-    // mask
-    ctx.beginPath();
-    ctx.rect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
-    ctx.clip();
-
-    // rectangle
-    ctx.strokeStyle = "#444";
+    /* rectangle (base) */
+    ctx.strokeStyle = "#555";
+    ctx.lineWidth = 1;
     ctx.strokeRect(s.rect.x, s.rect.y, s.rect.w, s.rect.h);
 
-    // ellipse
-    if (s.mode === "ellipse") {
+    /* ellipse overlay */
+    if (s.mode === "ellipse" && s.ellipse) {
       ctx.beginPath();
       ctx.ellipse(
         s.ellipse.cx,
@@ -147,15 +108,13 @@ function draw() {
         s.ellipse.ry,
         0, 0, Math.PI * 2
       );
+      ctx.fillStyle = "rgba(0, 255, 200, 0.12)";
       ctx.strokeStyle = "#00ffcc";
       ctx.lineWidth = 2;
+      ctx.fill();
       ctx.stroke();
     }
 
-    ctx.restore();
-
-    // mask handle
-    drawHandle(s);
   });
 
   requestAnimationFrame(draw);
@@ -165,26 +124,6 @@ draw();
 /* ============================
    HELPERS
 ============================ */
-function drawHandle(s) {
-  const size = 8;
-  ctx.fillStyle = "#ff0";
-  ctx.fillRect(
-    s.mask.x + s.mask.w - size,
-    s.mask.y + s.mask.h - size,
-    size, size
-  );
-}
-
-function onMaskHandle(p, s) {
-  const size = 8;
-  return (
-    p.x >= s.mask.x + s.mask.w - size &&
-    p.x <= s.mask.x + s.mask.w &&
-    p.y >= s.mask.y + s.mask.h - size &&
-    p.y <= s.mask.y + s.mask.h
-  );
-}
-
 function pos(e) {
   const r = canvas.getBoundingClientRect();
   return { x: e.clientX - r.left, y: e.clientY - r.top };
