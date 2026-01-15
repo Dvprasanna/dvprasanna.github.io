@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Rect → Ellipse Overlay (v1.2)</title>
+<title>Rect → Ellipse Clipping Mask (v1.3)</title>
 
 <style>
   body {
     margin: 0;
-    background: #000; /* black bg */
+    background: #000;
   }
   canvas {
     display: block;
-    background: #000; /* black bg */
+    background: #000;
     touch-action: none;
   }
 </style>
@@ -28,6 +28,8 @@ const ctx = canvas.getContext("2d");
 resize();
 window.addEventListener("resize", resize);
 
+const COLOR = "#00ffcc";
+
 const shapes = [];
 let current = null;
 
@@ -38,6 +40,7 @@ function createShape(x, y) {
   return {
     rect: { x, y, w: 0, h: 0 },
     ellipse: null,
+    mask: { x, y, w: 0, h: 0 },
     mode: "rect"
   };
 }
@@ -56,6 +59,8 @@ canvas.addEventListener("pointermove", e => {
   const p = pos(e);
   current.rect.w = p.x - current.rect.x;
   current.rect.h = p.y - current.rect.y;
+  current.mask.w = current.rect.w;
+  current.mask.h = current.rect.h;
 });
 
 canvas.addEventListener("pointerup", () => {
@@ -82,6 +87,7 @@ function convertToEllipse(s) {
     rx: Math.abs(r.w / 2),
     ry: Math.abs(r.h / 2)
   };
+  s.mask = { ...r };
   s.mode = "ellipse";
 }
 
@@ -92,13 +98,19 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   shapes.forEach(s => {
+    ctx.save();
 
-    /* rectangle (base) */
-    ctx.strokeStyle = "#555";
+    /* clipping mask */
+    ctx.beginPath();
+    ctx.rect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
+    ctx.clip();
+
+    /* rectangle */
+    ctx.strokeStyle = COLOR;
     ctx.lineWidth = 1;
     ctx.strokeRect(s.rect.x, s.rect.y, s.rect.w, s.rect.h);
 
-    /* ellipse overlay */
+    /* ellipse */
     if (s.mode === "ellipse" && s.ellipse) {
       ctx.beginPath();
       ctx.ellipse(
@@ -108,13 +120,12 @@ function draw() {
         s.ellipse.ry,
         0, 0, Math.PI * 2
       );
-      ctx.fillStyle = "rgba(0, 255, 200, 0.12)";
-      ctx.strokeStyle = "#00ffcc";
+      ctx.strokeStyle = COLOR;
       ctx.lineWidth = 2;
-      ctx.fill();
       ctx.stroke();
     }
 
+    ctx.restore();
   });
 
   requestAnimationFrame(draw);
