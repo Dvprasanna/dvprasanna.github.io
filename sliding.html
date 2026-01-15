@@ -1,63 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sliding Puzzle – Image</title>
+<title>Sliding Puzzle</title>
 
 <style>
-  body{
-    margin:0;
-    background:#111;
-    color:#fff;
-    font-family:system-ui, sans-serif;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-  }
+body{
+  margin:0;
+  background:#111;
+  color:#fff;
+  font-family:system-ui, sans-serif;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
 
-  h2{ margin:10px 0 6px; }
+h2{ margin:10px 0 6px; }
 
-  #controls{
-    margin:8px;
-    text-align:center;
-  }
+#controls{
+  text-align:center;
+  margin:6px;
+}
 
-  #puzzle{
-    display:grid;
-    grid-template-columns:repeat(3, 100px);
-    grid-template-rows:repeat(4, 75px);
-    gap:6px;
-    margin:10px 0;
-    touch-action:manipulation;
-  }
+#puzzle{
+  display:grid;
+  grid-template-columns:repeat(3, 100px);
+  grid-template-rows:repeat(4, 75px);
+  gap:6px;
+  margin:10px 0;
+  touch-action:manipulation;
+}
 
-  .tile{
-    background:#eee;
-    color:#000;
-    font-size:26px;
-    font-weight:600;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    border-radius:6px;
-    box-shadow:inset 0 0 0 2px #222;
-    cursor:pointer;
-    user-select:none;
-    background-size:300px 300px;
-  }
+.tile{
+  background:#eee;
+  color:#000;
+  font-size:26px;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:6px;
+  box-shadow:inset 0 0 0 2px #222;
+  cursor:pointer;
+  user-select:none;
+  background-size:300px 300px;
+}
 
-  .blank{
-    background:none !important;
-    box-shadow:none;
-    cursor:default;
-  }
+.blank{
+  background:none !important;
+  box-shadow:none;
+  cursor:default;
+}
 
-  button,input{
-    margin:4px;
-    padding:6px 12px;
-    font-size:14px;
-  }
+button,input{
+  margin:4px;
+  padding:6px 12px;
+  font-size:14px;
+}
 </style>
 </head>
 
@@ -70,11 +70,21 @@
   <br>
   <button onclick="shuffle()">Shuffle</button>
   <button onclick="resetPuzzle()">Reset</button>
+  <button onclick="toggleMusic()">Play / Pause Music</button>
 </div>
 
 <div id="puzzle"></div>
 
 <script>
+/* =========================================================
+   PROJECT INFO
+   ---------------------------------------------------------
+   Sliding Puzzle (3×4)
+   Version: v1.3.0
+   Created by: YOUR NAME HERE
+   Contact / Link: OPTIONAL
+   ========================================================= */
+
 /* ===== CONFIG ===== */
 const COLS = 3;
 const ROWS = 4;
@@ -83,7 +93,9 @@ const SIZE = COLS * ROWS;
 /* ===== STATE ===== */
 let tiles = [...Array(SIZE - 1).keys()].map(i => i + 1);
 tiles.push(0);
+
 let imgURL = null;
+let bgMusic = null;
 
 const puzzle = document.getElementById("puzzle");
 
@@ -96,7 +108,7 @@ function render(){
   tiles.forEach((val, i)=>{
     const div = document.createElement("div");
     div.className = "tile" + (val === 0 ? " blank" : "");
-    
+
     if(val !== 0){
       if(imgURL){
         const x = (val - 1) % COLS;
@@ -113,8 +125,10 @@ function render(){
   });
 }
 
-/* ===== MOVE LOGIC ===== */
+/* ===== MOVE ===== */
 function tryMove(i){
+  initMusic(); // unlock audio on first interaction
+
   const blank = tiles.indexOf(0);
   const x1 = i % COLS, y1 = Math.floor(i / COLS);
   const x2 = blank % COLS, y2 = Math.floor(blank / COLS);
@@ -131,6 +145,29 @@ function loadImage(e){
   if(!file) return;
   imgURL = URL.createObjectURL(file);
   render();
+}
+
+/* ===== MUSIC (iOS SAFE) ===== */
+function initMusic(){
+  if(bgMusic) return;
+
+  bgMusic = new Audio(
+    "https://cdn.pixabay.com/download/audio/2022/03/15/audio_9c1e8b6f2d.mp3"
+  );
+  bgMusic.loop = true;
+  bgMusic.volume = 0.25;
+  bgMusic.play().catch(()=>{});
+}
+
+function toggleMusic(){
+  initMusic();
+  if(!bgMusic) return;
+
+  if(bgMusic.paused){
+    bgMusic.play();
+  }else{
+    bgMusic.pause();
+  }
 }
 
 /* ===== SHUFFLE ===== */
@@ -152,7 +189,7 @@ function resetPuzzle(){
   render();
 }
 
-/* ===== SOLVABILITY ===== */
+/* ===== SOLVABLE CHECK ===== */
 function isSolvable(){
   let inv = 0;
   for(let i = 0; i < tiles.length; i++){
@@ -165,6 +202,5 @@ function isSolvable(){
 }
 </script>
 
-<!-- Version: v1.1.0 -->
 </body>
 </html>
