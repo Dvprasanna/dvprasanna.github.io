@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Rect → Ellipse Mask Editor (v1.8)</title>
+<title>Rect → Ellipse Mask Editor (v2.0)</title>
 
 <style>
   body {
@@ -37,15 +37,18 @@ const MASK_VISIBLE = "#666";
 const HANDLE_VISIBLE = "#fff";
 
 const HANDLE = 8;
-const DRAG_THRESHOLD = 4;
+const DRAG_THRESHOLD = 6;
 
 const shapes = [];
+
+let pointerDown = false;
+let startPoint = null;
+let pendingCreate = false;
 
 let current = null;
 let selected = null;
 let activeMask = null;
 let activeHandle = null;
-let dragStart = null;
 let offset = { x: 0, y: 0 };
 
 /* =========================
@@ -66,12 +69,16 @@ function createShape(x, y) {
 canvas.addEventListener("pointerdown", e => {
   const p = pos(e);
 
-  selected = null;
+  pointerDown = true;
+  startPoint = p;
+  pendingCreate = true;
+
+  current = null;
   activeMask = null;
   activeHandle = null;
-  current = null;
-  dragStart = p;
+  selected = null;
 
+  // hit test (topmost first)
   for (let i = shapes.length - 1; i >= 0; i--) {
     const s = shapes[i];
 
@@ -80,6 +87,7 @@ canvas.addEventListener("pointerdown", e => {
       selected = s;
       activeMask = s;
       activeHandle = h;
+      pendingCreate = false;
       return;
     }
 
@@ -88,193 +96,26 @@ canvas.addEventListener("pointerdown", e => {
       activeMask = s;
       offset.x = p.x - s.mask.x;
       offset.y = p.y - s.mask.y;
+      pendingCreate = false;
       return;
     }
 
     if (inside(p, s.rect)) {
       selected = s;
+      pendingCreate = false;
       return;
     }
   }
+  // blank click → deselect only
 });
 
 canvas.addEventListener("pointermove", e => {
+  if (!pointerDown) return;
+
   const p = pos(e);
 
-  if (!current && dragStart) {
-    const dx = p.x - dragStart.x;
-    const dy = p.y - dragStart.y;
-    if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
-      current = createShape(dragStart.x, dragStart.y);
-      shapes.push(current);
-      selected = current;
-    }
-  }
-
-  if (current) {
-    current.rect.w = p.x - current.rect.x;
-    current.rect.h = p.y - current.rect.y;
-    current.mask.w = current.rect.w;
-    current.mask.h = current.rect.h;
-  }
-
-  if (activeMask && activeHandle !== null) {
-    resizeMask(activeMask.mask, p, activeHandle);
-  }
-
-  if (activeMask && activeHandle === null) {
-    activeMask.mask.x = p.x - offset.x;
-    activeMask.mask.y = p.y - offset.y;
-  }
-});
-
-canvas.addEventListener("pointerup", () => {
-  current = null;
-  activeMask = null;
-  activeHandle = null;
-  dragStart = null;
-});
-
-canvas.addEventListener("dblclick", e => {
-  const p = pos(e);
-  shapes.forEach(s => {
-    if (inside(p, s.rect)) {
-      convertToEllipse(s);
-      selected = s;
-    }
-  });
-});
-
-/* =========================
-   LOGIC
-========================= */
-function convertToEllipse(s) {
-  const r = s.rect;
-  s.ellipse = {
-    cx: r.x + r.w / 2,
-    cy: r.y + r.h / 2,
-    rx: Math.abs(r.w / 2),
-    ry: Math.abs(r.h / 2)
-  };
-  s.mask = { ...r };
-  s.mode = "ellipse";
-}
-
-/* =========================
-   DRAW LOOP
-========================= */
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  shapes.forEach(s => {
-    ctx.save();
-
-    // clipping mask (always active)
-    ctx.beginPath();
-    ctx.rect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
-    ctx.clip();
-
-    // rectangle
-    ctx.strokeStyle = SHAPE_COLOR;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(s.rect.x, s.rect.y, s.rect.w, s.rect.h);
-
-    // ellipse
-    if (s.mode === "ellipse") {
-      ctx.beginPath();
-      ctx.ellipse(
-        s.ellipse.cx,
-        s.ellipse.cy,
-        s.ellipse.rx,
-        s.ellipse.ry,
-        0, 0, Math.PI * 2
-      );
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-
-    ctx.restore();
-
-    // === VISUAL HACK ===
-    const maskColor = (s === selected) ? MASK_VISIBLE : BG;
-    const handleColor = (s === selected) ? HANDLE_VISIBLE : BG;
-
-    // mask border
-    ctx.strokeStyle = maskColor;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
-
-    // handles
-    drawHandles(s.mask, handleColor);
-  });
-
-  requestAnimationFrame(draw);
-}
-draw();
-
-/* =========================
-   HANDLES
-========================= */
-function drawHandles(m, color) {
-  ctx.fillStyle = color;
-  handlePoints(m).forEach(p => {
-    ctx.fillRect(
-      p.x - HANDLE / 2,
-      p.y - HANDLE / 2,
-      HANDLE,
-      HANDLE
-    );
-  });
-}
-
-function handlePoints(m) {
-  return [
-    { x: m.x, y: m.y },
-    { x: m.x + m.w, y: m.y },
-    { x: m.x + m.w, y: m.y + m.h },
-    { x: m.x, y: m.y + m.h }
-  ];
-}
-
-function hitHandle(p, m) {
-  const pts = handlePoints(m);
-  for (let i = 0; i < pts.length; i++) {
-    if (
-      Math.abs(p.x - pts[i].x) <= HANDLE &&
-      Math.abs(p.y - pts[i].y) <= HANDLE
-    ) return i;
-  }
-  return null;
-}
-
-function resizeMask(m, p, h) {
-  if (h === 0) { m.w += m.x - p.x; m.h += m.y - p.y; m.x = p.x; m.y = p.y; }
-  if (h === 1) { m.w = p.x - m.x; m.h += m.y - p.y; m.y = p.y; }
-  if (h === 2) { m.w = p.x - m.x; m.h = p.y - m.y; }
-  if (h === 3) { m.w += m.x - p.x; m.x = p.x; m.h = p.y - m.y; }
-}
-
-/* =========================
-   UTILS
-========================= */
-function pos(e) {
-  const r = canvas.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
-}
-
-function inside(p, r) {
-  return (
-    p.x >= r.x &&
-    p.x <= r.x + r.w &&
-    p.y >= r.y &&
-    p.y <= r.y + r.h
-  );
-}
-
-function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-</script>
-</body>
-</html>
+  // create rect ONLY after drag threshold
+  if (pendingCreate && !current) {
+    const dx = p.x - startPoint.x;
+    const dy = p.y - startPoint.y;
+    if (Math
