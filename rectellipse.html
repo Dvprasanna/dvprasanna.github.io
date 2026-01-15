@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Rect → Ellipse Clipping Mask (v1.4)</title>
+<title>Rect → Ellipse Clipping Mask (v1.5)</title>
 
 <style>
   body {
@@ -29,11 +29,13 @@ resize();
 window.addEventListener("resize", resize);
 
 const COLOR = "#00ffcc";
+const HANDLE_SIZE = 8;
 
 const shapes = [];
 let current = null;
 let activeMask = null;
-let maskOffset = { x: 0, y: 0 };
+let activeHandle = null;
+let offset = { x: 0, y: 0 };
 
 /* ============================
    SHAPE MODEL
@@ -53,18 +55,24 @@ function createShape(x, y) {
 canvas.addEventListener("pointerdown", e => {
   const p = pos(e);
 
-  // check mask hit first (top-most priority)
+  // check handles first (top priority)
   for (let i = shapes.length - 1; i >= 0; i--) {
     const s = shapes[i];
+    const h = hitHandle(p, s.mask);
+    if (h) {
+      activeMask = s;
+      activeHandle = h;
+      return;
+    }
     if (insideRect(p.x, p.y, s.mask)) {
       activeMask = s;
-      maskOffset.x = p.x - s.mask.x;
-      maskOffset.y = p.y - s.mask.y;
+      offset.x = p.x - s.mask.x;
+      offset.y = p.y - s.mask.y;
       return;
     }
   }
 
-  // otherwise start new rectangle
+  // draw new rectangle
   current = createShape(p.x, p.y);
   shapes.push(current);
 });
@@ -79,15 +87,20 @@ canvas.addEventListener("pointermove", e => {
     current.mask.h = current.rect.h;
   }
 
-  if (activeMask) {
-    activeMask.mask.x = p.x - maskOffset.x;
-    activeMask.mask.y = p.y - maskOffset.y;
+  if (activeMask && activeHandle) {
+    resizeMask(activeMask.mask, p, activeHandle);
+  }
+
+  if (activeMask && !activeHandle) {
+    activeMask.mask.x = p.x - offset.x;
+    activeMask.mask.y = p.y - offset.y;
   }
 });
 
 canvas.addEventListener("pointerup", () => {
   current = null;
   activeMask = null;
+  activeHandle = null;
 });
 
 canvas.addEventListener("dblclick", e => {
@@ -134,7 +147,7 @@ function draw() {
     ctx.strokeRect(s.rect.x, s.rect.y, s.rect.w, s.rect.h);
 
     // ellipse
-    if (s.mode === "ellipse" && s.ellipse) {
+    if (s.mode === "ellipse") {
       ctx.beginPath();
       ctx.ellipse(
         s.ellipse.cx,
@@ -149,11 +162,13 @@ function draw() {
 
     ctx.restore();
 
-    // mask outline (visual aid)
-    ctx.setLineDash([6, 4]);
+    // mask outline (solid)
     ctx.strokeStyle = "#666";
+    ctx.lineWidth = 1;
     ctx.strokeRect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
-    ctx.setLineDash([]);
+
+    // handles
+    drawHandles(s.mask);
   });
 
   requestAnimationFrame(draw);
@@ -161,7 +176,61 @@ function draw() {
 draw();
 
 /* ============================
-   HELPERS
+   HANDLE HELPERS
+============================ */
+function drawHandles(m) {
+  const pts = handlePoints(m);
+  ctx.fillStyle = "#fff";
+  pts.forEach(p => {
+    ctx.fillRect(p.x - HANDLE_SIZE/2, p.y - HANDLE_SIZE/2, HANDLE_SIZE, HANDLE_SIZE);
+  });
+}
+
+function handlePoints(m) {
+  return [
+    { x: m.x, y: m.y },
+    { x: m.x + m.w, y: m.y },
+    { x: m.x + m.w, y: m.y + m.h },
+    { x: m.x, y: m.y + m.h }
+  ];
+}
+
+function hitHandle(p, m) {
+  const pts = handlePoints(m);
+  for (let i = 0; i < pts.length; i++) {
+    if (
+      Math.abs(p.x - pts[i].x) <= HANDLE_SIZE &&
+      Math.abs(p.y - pts[i].y) <= HANDLE_SIZE
+    ) return i;
+  }
+  return null;
+}
+
+function resizeMask(m, p, h) {
+  if (h === 0) { // top-left
+    m.w += m.x - p.x;
+    m.h += m.y - p.y;
+    m.x = p.x;
+    m.y = p.y;
+  }
+  if (h === 1) { // top-right
+    m.w = p.x - m.x;
+    m.h += m.y - p.y;
+    m.y = p.y;
+  }
+  if (h === 2) { // bottom-right
+    m.w = p.x - m.x;
+    m.h = p.y - m.y;
+  }
+  if (h === 3) { // bottom-left
+    m.w += m.x - p.x;
+    m.x = p.x;
+    m.h = p.y - m.y;
+  }
+}
+
+/* ============================
+   UTIL
 ============================ */
 function pos(e) {
   const r = canvas.getBoundingClientRect();
