@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Rect → Ellipse Clipping Mask (v1.3)</title>
+<title>Rect → Ellipse Clipping Mask (v1.4)</title>
 
 <style>
   body {
@@ -32,6 +32,8 @@ const COLOR = "#00ffcc";
 
 const shapes = [];
 let current = null;
+let activeMask = null;
+let maskOffset = { x: 0, y: 0 };
 
 /* ============================
    SHAPE MODEL
@@ -50,21 +52,42 @@ function createShape(x, y) {
 ============================ */
 canvas.addEventListener("pointerdown", e => {
   const p = pos(e);
+
+  // check mask hit first (top-most priority)
+  for (let i = shapes.length - 1; i >= 0; i--) {
+    const s = shapes[i];
+    if (insideRect(p.x, p.y, s.mask)) {
+      activeMask = s;
+      maskOffset.x = p.x - s.mask.x;
+      maskOffset.y = p.y - s.mask.y;
+      return;
+    }
+  }
+
+  // otherwise start new rectangle
   current = createShape(p.x, p.y);
   shapes.push(current);
 });
 
 canvas.addEventListener("pointermove", e => {
-  if (!current) return;
   const p = pos(e);
-  current.rect.w = p.x - current.rect.x;
-  current.rect.h = p.y - current.rect.y;
-  current.mask.w = current.rect.w;
-  current.mask.h = current.rect.h;
+
+  if (current) {
+    current.rect.w = p.x - current.rect.x;
+    current.rect.h = p.y - current.rect.y;
+    current.mask.w = current.rect.w;
+    current.mask.h = current.rect.h;
+  }
+
+  if (activeMask) {
+    activeMask.mask.x = p.x - maskOffset.x;
+    activeMask.mask.y = p.y - maskOffset.y;
+  }
 });
 
 canvas.addEventListener("pointerup", () => {
   current = null;
+  activeMask = null;
 });
 
 canvas.addEventListener("dblclick", e => {
@@ -100,17 +123,17 @@ function draw() {
   shapes.forEach(s => {
     ctx.save();
 
-    /* clipping mask */
+    // clipping mask
     ctx.beginPath();
     ctx.rect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
     ctx.clip();
 
-    /* rectangle */
+    // rectangle
     ctx.strokeStyle = COLOR;
     ctx.lineWidth = 1;
     ctx.strokeRect(s.rect.x, s.rect.y, s.rect.w, s.rect.h);
 
-    /* ellipse */
+    // ellipse
     if (s.mode === "ellipse" && s.ellipse) {
       ctx.beginPath();
       ctx.ellipse(
@@ -120,12 +143,17 @@ function draw() {
         s.ellipse.ry,
         0, 0, Math.PI * 2
       );
-      ctx.strokeStyle = COLOR;
       ctx.lineWidth = 2;
       ctx.stroke();
     }
 
     ctx.restore();
+
+    // mask outline (visual aid)
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = "#666";
+    ctx.strokeRect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
+    ctx.setLineDash([]);
   });
 
   requestAnimationFrame(draw);
