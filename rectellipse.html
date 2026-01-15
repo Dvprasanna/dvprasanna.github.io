@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Rect → Ellipse Clipping Mask (v1.5)</title>
+<title>Rect → Ellipse Clipping Mask (v1.6)</title>
 
 <style>
   body {
@@ -35,6 +35,7 @@ const shapes = [];
 let current = null;
 let activeMask = null;
 let activeHandle = null;
+let selectedShape = null;
 let offset = { x: 0, y: 0 };
 
 /* ============================
@@ -55,26 +56,37 @@ function createShape(x, y) {
 canvas.addEventListener("pointerdown", e => {
   const p = pos(e);
 
-  // check handles first (top priority)
+  activeMask = null;
+  activeHandle = null;
+  selectedShape = null;
+
+  // check handles & mask first
   for (let i = shapes.length - 1; i >= 0; i--) {
     const s = shapes[i];
     const h = hitHandle(p, s.mask);
-    if (h) {
+    if (h !== null) {
+      selectedShape = s;
       activeMask = s;
       activeHandle = h;
       return;
     }
     if (insideRect(p.x, p.y, s.mask)) {
+      selectedShape = s;
       activeMask = s;
       offset.x = p.x - s.mask.x;
       offset.y = p.y - s.mask.y;
       return;
     }
+    if (insideRect(p.x, p.y, s.rect)) {
+      selectedShape = s;
+      return;
+    }
   }
 
-  // draw new rectangle
+  // blank space → draw new rect
   current = createShape(p.x, p.y);
   shapes.push(current);
+  selectedShape = current;
 });
 
 canvas.addEventListener("pointermove", e => {
@@ -87,11 +99,11 @@ canvas.addEventListener("pointermove", e => {
     current.mask.h = current.rect.h;
   }
 
-  if (activeMask && activeHandle) {
+  if (activeMask && activeHandle !== null) {
     resizeMask(activeMask.mask, p, activeHandle);
   }
 
-  if (activeMask && !activeHandle) {
+  if (activeMask && activeHandle === null) {
     activeMask.mask.x = p.x - offset.x;
     activeMask.mask.y = p.y - offset.y;
   }
@@ -108,6 +120,7 @@ canvas.addEventListener("dblclick", e => {
   shapes.forEach(s => {
     if (insideRect(p.x, p.y, s.rect)) {
       convertToEllipse(s);
+      selectedShape = s;
     }
   });
 });
@@ -136,7 +149,7 @@ function draw() {
   shapes.forEach(s => {
     ctx.save();
 
-    // clipping mask
+    // clipping mask (always active)
     ctx.beginPath();
     ctx.rect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
     ctx.clip();
@@ -162,13 +175,13 @@ function draw() {
 
     ctx.restore();
 
-    // mask outline (solid)
-    ctx.strokeStyle = "#666";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
-
-    // handles
-    drawHandles(s.mask);
+    // mask UI only if selected
+    if (s === selectedShape) {
+      ctx.strokeStyle = "#666";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
+      drawHandles(s.mask);
+    }
   });
 
   requestAnimationFrame(draw);
@@ -182,7 +195,12 @@ function drawHandles(m) {
   const pts = handlePoints(m);
   ctx.fillStyle = "#fff";
   pts.forEach(p => {
-    ctx.fillRect(p.x - HANDLE_SIZE/2, p.y - HANDLE_SIZE/2, HANDLE_SIZE, HANDLE_SIZE);
+    ctx.fillRect(
+      p.x - HANDLE_SIZE / 2,
+      p.y - HANDLE_SIZE / 2,
+      HANDLE_SIZE,
+      HANDLE_SIZE
+    );
   });
 }
 
@@ -207,26 +225,10 @@ function hitHandle(p, m) {
 }
 
 function resizeMask(m, p, h) {
-  if (h === 0) { // top-left
-    m.w += m.x - p.x;
-    m.h += m.y - p.y;
-    m.x = p.x;
-    m.y = p.y;
-  }
-  if (h === 1) { // top-right
-    m.w = p.x - m.x;
-    m.h += m.y - p.y;
-    m.y = p.y;
-  }
-  if (h === 2) { // bottom-right
-    m.w = p.x - m.x;
-    m.h = p.y - m.y;
-  }
-  if (h === 3) { // bottom-left
-    m.w += m.x - p.x;
-    m.x = p.x;
-    m.h = p.y - m.y;
-  }
+  if (h === 0) { m.w += m.x - p.x; m.h += m.y - p.y; m.x = p.x; m.y = p.y; }
+  if (h === 1) { m.w = p.x - m.x; m.h += m.y - p.y; m.y = p.y; }
+  if (h === 2) { m.w = p.x - m.x; m.h = p.y - m.y; }
+  if (h === 3) { m.w += m.x - p.x; m.x = p.x; m.h = p.y - m.y; }
 }
 
 /* ============================
