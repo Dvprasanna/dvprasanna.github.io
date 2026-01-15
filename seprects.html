@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Non-Overlapping Rectangles</title>
+
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: #fff;
+    font-family: system-ui, sans-serif;
+    text-align: center;
+  }
+  canvas {
+    display: block;
+    margin: 20px auto;
+    background: #000;
+    border: 1px solid #444;
+    touch-action: none;
+  }
+</style>
+</head>
+
+<body>
+<h3>Draw rectangles — overlaps auto-resolve</h3>
+<canvas id="c" width="360" height="500"></canvas>
+
+<script>
+/* =========================
+   Non-Overlapping Rects
+   Version: 1.0
+   ========================= */
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+let rects = [];
+let drawing = false;
+let startX = 0, startY = 0;
+let current = null;
+
+/* ---------- Geometry ---------- */
+
+function normalize(r) {
+  let x = Math.min(r.x, r.x + r.w);
+  let y = Math.min(r.y, r.y + r.h);
+  let w = Math.abs(r.w);
+  let h = Math.abs(r.h);
+  return { x, y, w, h };
+}
+
+function overlaps(a, b) {
+  return (
+    a.x < b.x + b.w &&
+    a.x + a.w > b.x &&
+    a.y < b.y + b.h &&
+    a.y + a.h > b.y
+  );
+}
+
+/* ---------- Core logic ---------- */
+
+function resolveOverlap(candidate) {
+  let r = normalize(candidate);
+
+  for (let other of rects) {
+    let o = normalize(other);
+
+    if (!overlaps(r, o)) continue;
+
+    // Resolve by shrinking toward origin
+    let rightGap  = (o.x) - r.x;
+    let leftGap   = (o.x + o.w) - r.x;
+    let bottomGap = (o.y) - r.y;
+    let topGap    = (o.y + o.h) - r.y;
+
+    if (r.w > r.h) {
+      // horizontal preference
+      r.w = Math.max(0, rightGap);
+    } else {
+      // vertical preference
+      r.h = Math.max(0, bottomGap);
+    }
+  }
+
+  return r;
+}
+
+/* ---------- Rendering ---------- */
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let r of rects) {
+    ctx.strokeStyle = "#0f0";
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+  }
+
+  if (current) {
+    ctx.strokeStyle = "#fff";
+    ctx.strokeRect(current.x, current.y, current.w, current.h);
+  }
+}
+
+/* ---------- Input ---------- */
+
+function pointerPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const p = e.touches ? e.touches[0] : e;
+  return {
+    x: p.clientX - rect.left,
+    y: p.clientY - rect.top
+  };
+}
+
+function start(e) {
+  e.preventDefault();
+  const p = pointerPos(e);
+  drawing = true;
+  startX = p.x;
+  startY = p.y;
+  current = { x: startX, y: startY, w: 0, h: 0 };
+}
+
+function move(e) {
+  if (!drawing) return;
+  e.preventDefault();
+  const p = pointerPos(e);
+  current.w = p.x - startX;
+  current.h = p.y - startY;
+  draw();
+}
+
+function end(e) {
+  if (!drawing) return;
+  drawing = false;
+
+  let resolved = resolveOverlap(current);
+
+  if (resolved.w > 2 && resolved.h > 2) {
+    rects.push(resolved);
+  }
+
+  current = null;
+  draw();
+}
+
+/* ---------- Events ---------- */
+
+canvas.addEventListener("mousedown", start);
+canvas.addEventListener("mousemove", move);
+canvas.addEventListener("mouseup", end);
+
+canvas.addEventListener("touchstart", start, { passive: false });
+canvas.addEventListener("touchmove", move, { passive: false });
+canvas.addEventListener("touchend", end);
+
+draw();
+</script>
+</body>
+</html>
