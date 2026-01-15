@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Rect → Ellipse Clipping Mask (v1.6)</title>
+<title>Rect → Ellipse Mask Editor (v1.7)</title>
 
 <style>
   body {
@@ -22,6 +22,9 @@
 <canvas id="c"></canvas>
 
 <script>
+/* =========================
+   SETUP
+========================= */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
@@ -29,18 +32,22 @@ resize();
 window.addEventListener("resize", resize);
 
 const COLOR = "#00ffcc";
-const HANDLE_SIZE = 8;
+const HANDLE = 8;
+const DRAG_THRESHOLD = 4;
 
 const shapes = [];
+
 let current = null;
+let selected = null;
 let activeMask = null;
 let activeHandle = null;
-let selectedShape = null;
+
+let dragStart = null;
 let offset = { x: 0, y: 0 };
 
-/* ============================
-   SHAPE MODEL
-============================ */
+/* =========================
+   SHAPE FACTORY
+========================= */
 function createShape(x, y) {
   return {
     rect: { x, y, w: 0, h: 0 },
@@ -50,48 +57,63 @@ function createShape(x, y) {
   };
 }
 
-/* ============================
+/* =========================
    EVENTS
-============================ */
+========================= */
 canvas.addEventListener("pointerdown", e => {
   const p = pos(e);
 
+  // reset state
+  current = null;
   activeMask = null;
   activeHandle = null;
-  selectedShape = null;
+  selected = null;
+  dragStart = p;
 
-  // check handles & mask first
+  // hit test topmost first
   for (let i = shapes.length - 1; i >= 0; i--) {
     const s = shapes[i];
+
     const h = hitHandle(p, s.mask);
     if (h !== null) {
-      selectedShape = s;
+      selected = s;
       activeMask = s;
       activeHandle = h;
       return;
     }
-    if (insideRect(p.x, p.y, s.mask)) {
-      selectedShape = s;
+
+    if (inside(p, s.mask)) {
+      selected = s;
       activeMask = s;
       offset.x = p.x - s.mask.x;
       offset.y = p.y - s.mask.y;
       return;
     }
-    if (insideRect(p.x, p.y, s.rect)) {
-      selectedShape = s;
+
+    if (inside(p, s.rect)) {
+      selected = s;
       return;
     }
   }
 
-  // blank space → draw new rect
-  current = createShape(p.x, p.y);
-  shapes.push(current);
-  selectedShape = current;
+  // blank space → deselect only
 });
 
 canvas.addEventListener("pointermove", e => {
   const p = pos(e);
 
+  // delayed rectangle creation
+  if (!current && dragStart) {
+    const dx = p.x - dragStart.x;
+    const dy = p.y - dragStart.y;
+    if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      current = createShape(dragStart.x, dragStart.y);
+      shapes.push(current);
+      selected = current;
+    }
+  }
+
+  // drawing rectangle
   if (current) {
     current.rect.w = p.x - current.rect.x;
     current.rect.h = p.y - current.rect.y;
@@ -99,10 +121,12 @@ canvas.addEventListener("pointermove", e => {
     current.mask.h = current.rect.h;
   }
 
+  // resizing mask
   if (activeMask && activeHandle !== null) {
     resizeMask(activeMask.mask, p, activeHandle);
   }
 
+  // moving mask
   if (activeMask && activeHandle === null) {
     activeMask.mask.x = p.x - offset.x;
     activeMask.mask.y = p.y - offset.y;
@@ -113,21 +137,22 @@ canvas.addEventListener("pointerup", () => {
   current = null;
   activeMask = null;
   activeHandle = null;
+  dragStart = null;
 });
 
 canvas.addEventListener("dblclick", e => {
   const p = pos(e);
   shapes.forEach(s => {
-    if (insideRect(p.x, p.y, s.rect)) {
+    if (inside(p, s.rect)) {
       convertToEllipse(s);
-      selectedShape = s;
+      selected = s;
     }
   });
 });
 
-/* ============================
+/* =========================
    LOGIC
-============================ */
+========================= */
 function convertToEllipse(s) {
   const r = s.rect;
   s.ellipse = {
@@ -140,9 +165,9 @@ function convertToEllipse(s) {
   s.mode = "ellipse";
 }
 
-/* ============================
+/* =========================
    DRAW LOOP
-============================ */
+========================= */
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -175,10 +200,9 @@ function draw() {
 
     ctx.restore();
 
-    // mask UI only if selected
-    if (s === selectedShape) {
+    // selection UI only
+    if (s === selected) {
       ctx.strokeStyle = "#666";
-      ctx.lineWidth = 1;
       ctx.strokeRect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
       drawHandles(s.mask);
     }
@@ -188,18 +212,17 @@ function draw() {
 }
 draw();
 
-/* ============================
-   HANDLE HELPERS
-============================ */
+/* =========================
+   HANDLES
+========================= */
 function drawHandles(m) {
-  const pts = handlePoints(m);
-  ctx.fillStyle = "#fff";
-  pts.forEach(p => {
+  handlePoints(m).forEach(p => {
+    ctx.fillStyle = "#fff";
     ctx.fillRect(
-      p.x - HANDLE_SIZE / 2,
-      p.y - HANDLE_SIZE / 2,
-      HANDLE_SIZE,
-      HANDLE_SIZE
+      p.x - HANDLE / 2,
+      p.y - HANDLE / 2,
+      HANDLE,
+      HANDLE
     );
   });
 }
@@ -217,8 +240,8 @@ function hitHandle(p, m) {
   const pts = handlePoints(m);
   for (let i = 0; i < pts.length; i++) {
     if (
-      Math.abs(p.x - pts[i].x) <= HANDLE_SIZE &&
-      Math.abs(p.y - pts[i].y) <= HANDLE_SIZE
+      Math.abs(p.x - pts[i].x) <= HANDLE &&
+      Math.abs(p.y - pts[i].y) <= HANDLE
     ) return i;
   }
   return null;
@@ -231,20 +254,20 @@ function resizeMask(m, p, h) {
   if (h === 3) { m.w += m.x - p.x; m.x = p.x; m.h = p.y - m.y; }
 }
 
-/* ============================
-   UTIL
-============================ */
+/* =========================
+   UTILS
+========================= */
 function pos(e) {
   const r = canvas.getBoundingClientRect();
   return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
-function insideRect(x, y, r) {
+function inside(p, r) {
   return (
-    x >= r.x &&
-    x <= r.x + r.w &&
-    y >= r.y &&
-    y <= r.y + r.h
+    p.x >= r.x &&
+    p.x <= r.x + r.w &&
+    p.y >= r.y &&
+    p.y <= r.y + r.h
   );
 }
 
