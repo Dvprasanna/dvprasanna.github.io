@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Rect → Ellipse Mask Editor (v1.7)</title>
+<title>Rect → Ellipse Mask Editor (v1.8)</title>
 
 <style>
   body {
@@ -31,7 +31,11 @@ const ctx = canvas.getContext("2d");
 resize();
 window.addEventListener("resize", resize);
 
-const COLOR = "#00ffcc";
+const BG = "#000";
+const SHAPE_COLOR = "#00ffcc";
+const MASK_VISIBLE = "#666";
+const HANDLE_VISIBLE = "#fff";
+
 const HANDLE = 8;
 const DRAG_THRESHOLD = 4;
 
@@ -41,7 +45,6 @@ let current = null;
 let selected = null;
 let activeMask = null;
 let activeHandle = null;
-
 let dragStart = null;
 let offset = { x: 0, y: 0 };
 
@@ -63,14 +66,12 @@ function createShape(x, y) {
 canvas.addEventListener("pointerdown", e => {
   const p = pos(e);
 
-  // reset state
-  current = null;
+  selected = null;
   activeMask = null;
   activeHandle = null;
-  selected = null;
+  current = null;
   dragStart = p;
 
-  // hit test topmost first
   for (let i = shapes.length - 1; i >= 0; i--) {
     const s = shapes[i];
 
@@ -95,14 +96,11 @@ canvas.addEventListener("pointerdown", e => {
       return;
     }
   }
-
-  // blank space → deselect only
 });
 
 canvas.addEventListener("pointermove", e => {
   const p = pos(e);
 
-  // delayed rectangle creation
   if (!current && dragStart) {
     const dx = p.x - dragStart.x;
     const dy = p.y - dragStart.y;
@@ -113,7 +111,6 @@ canvas.addEventListener("pointermove", e => {
     }
   }
 
-  // drawing rectangle
   if (current) {
     current.rect.w = p.x - current.rect.x;
     current.rect.h = p.y - current.rect.y;
@@ -121,12 +118,10 @@ canvas.addEventListener("pointermove", e => {
     current.mask.h = current.rect.h;
   }
 
-  // resizing mask
   if (activeMask && activeHandle !== null) {
     resizeMask(activeMask.mask, p, activeHandle);
   }
 
-  // moving mask
   if (activeMask && activeHandle === null) {
     activeMask.mask.x = p.x - offset.x;
     activeMask.mask.y = p.y - offset.y;
@@ -180,7 +175,7 @@ function draw() {
     ctx.clip();
 
     // rectangle
-    ctx.strokeStyle = COLOR;
+    ctx.strokeStyle = SHAPE_COLOR;
     ctx.lineWidth = 1;
     ctx.strokeRect(s.rect.x, s.rect.y, s.rect.w, s.rect.h);
 
@@ -200,12 +195,17 @@ function draw() {
 
     ctx.restore();
 
-    // selection UI only
-    if (s === selected) {
-      ctx.strokeStyle = "#666";
-      ctx.strokeRect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
-      drawHandles(s.mask);
-    }
+    // === VISUAL HACK ===
+    const maskColor = (s === selected) ? MASK_VISIBLE : BG;
+    const handleColor = (s === selected) ? HANDLE_VISIBLE : BG;
+
+    // mask border
+    ctx.strokeStyle = maskColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(s.mask.x, s.mask.y, s.mask.w, s.mask.h);
+
+    // handles
+    drawHandles(s.mask, handleColor);
   });
 
   requestAnimationFrame(draw);
@@ -215,9 +215,9 @@ draw();
 /* =========================
    HANDLES
 ========================= */
-function drawHandles(m) {
+function drawHandles(m, color) {
+  ctx.fillStyle = color;
   handlePoints(m).forEach(p => {
-    ctx.fillStyle = "#fff";
     ctx.fillRect(
       p.x - HANDLE / 2,
       p.y - HANDLE / 2,
