@@ -7,7 +7,7 @@
 
 <style>
 /* ===============================
-   CANVAS DRAW – UI v1.1
+   CANVAS DRAW – UI v1.2
    =============================== */
 
 :root{
@@ -49,6 +49,8 @@ html,body{
   border-bottom:1px solid var(--border);
 }
 
+/* ---------- BUTTONS ---------- */
+
 button{
   background:var(--surface2);
   color:var(--text);
@@ -72,23 +74,26 @@ button.primary{
   justify-content:center;
   align-items:center;
   padding:16px;
+  overflow:hidden; /* prevents horizontal spill */
 }
 
-/* OUTER FRAME (visual placement) */
+/* OUTER FRAME */
 .canvas-frame{
   background:#000;
   padding:12px;
   border-radius:14px;
   border:2px solid #3a3a3a;
+  max-width:100%;
 }
 
 /* ACTUAL CANVAS */
 canvas{
   display:block;
   background:#000;
-  border:1px solid #4ea1ff;   /* CANVAS BORDER */
+  border:1px solid #4ea1ff;
   border-radius:6px;
   touch-action:none;
+  max-width:100%;
 }
 
 /* ---------- CONTEXT ---------- */
@@ -132,24 +137,45 @@ canvas{
 
 <script>
 /* ===============================
-   CANVAS CORE – v1.1
+   CANVAS CORE – v1.2
    =============================== */
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const DPR = window.devicePixelRatio || 1;
-
-const W = 600;
-const H = 800;
 const HOTZONE = 50;
 
+let W = 0;
+let H = 0;
+
+/* ---------- RESPONSIVE SIZE ---------- */
+
+function computeCanvasSize(){
+  const stagePadding = 16 * 2;     // .stage padding
+  const framePadding = 12 * 2;     // .canvas-frame padding
+  const maxWidth = 600;
+  const aspect = 4 / 5;            // width : height
+
+  const available =
+    window.innerWidth - stagePadding - framePadding;
+
+  W = Math.min(maxWidth, available);
+  H = Math.round(W / aspect);
+}
+
 function resizeCanvas(){
+  computeCanvasSize();
+
   canvas.width = W * DPR;
   canvas.height = H * DPR;
   canvas.style.width = W + 'px';
   canvas.style.height = H + 'px';
+
   ctx.setTransform(DPR,0,0,DPR,0,0);
+  redraw();
 }
+
+window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 /* ---------- STATE ---------- */
@@ -289,7 +315,7 @@ canvas.addEventListener('pointerup', e=>{
 },{passive:false});
 
 /* ===============================
-   Version: Canvas Draw v1.1
+   Version: Canvas Draw v1.2
    =============================== */
 </script>
 
