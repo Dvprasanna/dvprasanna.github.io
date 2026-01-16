@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Independent Line Segments</title>
+<style>
+  body { margin:0; background:#fff; }
+  canvas { display:block; margin:auto; touch-action:none; }
+</style>
+</head>
+<body>
+
+<canvas id="c" width="600" height="300"></canvas>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+const THICK = 14;
+
+// original line
+const line = {
+  x1: 120, y1: 150,
+  x2: 480, y2: 150
+};
+
+let anchor = null;
+let angleLeft = 0;
+let angleRight = 0;
+
+// ---- DRAW ----
+function draw() {
+  ctx.clearRect(0,0,600,300);
+
+  if (!anchor) {
+    drawThick(line.x1, line.y1, line.x2, line.y2);
+    return;
+  }
+
+  // anchor
+  ctx.beginPath();
+  ctx.arc(anchor.x, anchor.y, 6, 0, Math.PI*2);
+  ctx.strokeStyle = "red";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // LEFT SEGMENT
+  ctx.save();
+  ctx.translate(anchor.x, anchor.y);
+  ctx.rotate(angleLeft);
+  drawThick(
+    line.x1 - anchor.x,
+    line.y1 - anchor.y,
+    0, 0
+  );
+  ctx.restore();
+
+  // RIGHT SEGMENT
+  ctx.save();
+  ctx.translate(anchor.x, anchor.y);
+  ctx.rotate(angleRight);
+  drawThick(
+    0, 0,
+    line.x2 - anchor.x,
+    line.y2 - anchor.y
+  );
+  ctx.restore();
+}
+
+// ---- DRAW THICK LINE SEGMENT ----
+function drawThick(x1,y1,x2,y2){
+  const len = Math.hypot(x2-x1, y2-y1);
+  const ang = Math.atan2(y2-y1, x2-x1);
+
+  ctx.save();
+  ctx.translate(x1,y1);
+  ctx.rotate(ang);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, -THICK/2, len, THICK);
+  ctx.restore();
+}
+
+// ---- SET ANCHOR ----
+canvas.addEventListener("pointerdown", e=>{
+  const r = canvas.getBoundingClientRect();
+  const px = e.clientX - r.left;
+  const py = e.clientY - r.top;
+  anchor = project(px, py, line);
+  angleLeft = 0;
+  angleRight = 0;
+  draw();
+});
+
+// demo motion (shows independence)
+setInterval(()=>{
+  if (!anchor) return;
+  angleLeft += 0.015;
+  angleRight -= 0.02;
+  draw();
+}, 30);
+
+// ---- PROJECT POINT TO LINE ----
+function project(px, py, L){
+  const vx = L.x2 - L.x1;
+  const vy = L.y2 - L.y1;
+  const t = ((px - L.x1)*vx + (py - L.y1)*vy) / (vx*vx + vy*vy);
+  return {
+    x: L.x1 + t*vx,
+    y: L.y1 + t*vy
+  };
+}
+
+draw();
+</script>
+
+</body>
+</html>
