@@ -6,75 +6,98 @@
 <title>Segmented Code Editor</title>
 
 <style>
-  html, body {
-    margin: 0;
-    height: 100%;
-    background: #111;
-    color: #eee;
-    font-family: system-ui, sans-serif;
-  }
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #111;
+  color: #eee;
+  font-family: system-ui, sans-serif;
+}
 
-  #bar {
-    display: flex;
-    gap: 6px;
-    padding: 8px;
-    background: #000;
-    border-bottom: 1px solid #333;
-  }
+/* ================= TOP BAR ================= */
+#bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  background: #000;
+  border-bottom: 1px solid #333;
+}
 
-  button {
-    padding: 6px 10px;
-    background: #222;
-    color: #eee;
-    border: 1px solid #444;
-  }
+button {
+  padding: 6px 10px;
+  background: #222;
+  color: #eee;
+  border: 1px solid #444;
+}
 
-  button.active {
-    background: #444;
-  }
+button.active {
+  background: #444;
+}
 
-  #msg {
-    margin-left: auto;
-    font-size: 12px;
-    color: #aaa;
-  }
+#msg {
+  margin-left: auto;
+  font-size: 12px;
+  color: #aaa;
+}
 
-  #wrap {
-    position: relative;
-    height: calc(100% - 44px);
-  }
+/* ================= EDITOR ================= */
+#wrap {
+  position: relative;
+  height: calc(100% - 44px);
+}
 
-  textarea, pre {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    padding: 12px;
-    font-family: monospace;
-    font-size: 14px;
-    line-height: 1.4;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
+/* Base editor */
+textarea {
+  position: absolute;
+  inset: 0;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  border: none;
+  outline: none;
+  resize: none;
+  background: #111;
+  color: #eee;
+}
 
-  textarea {
-    background: transparent;
-    color: transparent;
-    caret-color: #fff;
-    border: none;
-    outline: none;
-    resize: none;
-    z-index: 2;
-  }
+/* Overlay (DESKTOP ONLY) */
+pre {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background: #111;
+  color: #eee;
+  pointer-events: none;
+}
 
-  pre {
-    background: #111;
-    color: #eee;
-    z-index: 1;
-  }
+/* Highlight */
+.hl {
+  background: rgba(80, 120, 255, 0.25);
+}
 
-  .hl {
-    background: rgba(80, 120, 255, 0.25);
-  }
+/* ===== Overlay mode ===== */
+.overlay textarea {
+  color: transparent;
+  caret-color: #fff;
+  background: transparent;
+  z-index: 2;
+}
+
+.overlay pre {
+  z-index: 1;
+}
+
+/* ===== iOS SAFE MODE ===== */
+.ios pre {
+  display: none;
+}
 </style>
 </head>
 
@@ -94,8 +117,12 @@
 </div>
 
 <script>
-/* ===================== STATE ===================== */
+/* ================= PLATFORM ================= */
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+if (!isIOS) document.body.classList.add("overlay");
+if (isIOS) document.body.classList.add("ios");
 
+/* ================= STATE ================= */
 let mode = "html";
 let fullDoc = `<!DOCTYPE html>
 <html>
@@ -107,11 +134,15 @@ body {
 </style>
 </head>
 <body>
+
+<h1>Hello</h1>
+
 <script>
 function test() {
   console.log("hi");
 }
 </script>
+
 </body>
 </html>`;
 
@@ -119,46 +150,45 @@ const edit = document.getElementById("edit");
 const view = document.getElementById("view");
 const msg  = document.getElementById("msg");
 
-/* ===================== SEGMENTS ===================== */
-
+/* ================= SEGMENTS ================= */
 function getSegments(doc) {
   const html = doc
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "");
+    .replace(/<script[\\s\\S]*?<\\/script>/gi, "")
+    .replace(/<style[\\s\\S]*?<\\/style>/gi, "");
 
-  const js = (doc.match(/<script[^>]*>([\s\S]*?)<\/script>/i) || ["",""])[1];
-  const css = (doc.match(/<style[^>]*>([\s\S]*?)<\/style>/i) || ["",""])[1];
+  const js  = (doc.match(/<script[^>]*>([\\s\\S]*?)<\\/script>/i) || ["",""])[1];
+  const css = (doc.match(/<style[^>]*>([\\s\\S]*?)<\\/style>/i) || ["",""])[1];
 
   return { html, js, css };
 }
 
 function setSegment(doc, mode, content) {
   if (mode === "html") {
-    return doc.replace(
-      /(.*?)(<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>)/is,
-      content + "$2"
-    );
+    return doc
+      .replace(/<script[\\s\\S]*?<\\/script>/gi, "")
+      .replace(/<style[\\s\\S]*?<\\/style>/gi, "")
+      .replace(/<\\/head>/i, content + "\n</head>");
   }
 
   if (mode === "js") {
     return doc.replace(
-      /(<script[^>]*>)[\s\S]*?(<\/script>)/i,
-      `$1\n${content}\n$2`
+      /(<script[^>]*>)[\\s\\S]*?(<\\/script>)/i,
+      "$1\n" + content + "\n$2"
     );
   }
 
   if (mode === "css") {
     return doc.replace(
-      /(<style[^>]*>)[\s\S]*?(<\/style>)/i,
-      `$1\n${content}\n$2`
+      /(<style[^>]*>)[\\s\\S]*?(<\\/style>)/i,
+      "$1\n" + content + "\n$2"
     );
   }
 }
 
-/* ===================== BLOCK DETECTION ===================== */
-
+/* ================= BLOCK DETECTION ================= */
 function findBraceBlock(text, pos) {
-  let start = pos, depth = 0;
+  let start = -1, depth = 0;
+
   for (let i = pos; i >= 0; i--) {
     if (text[i] === "}") depth++;
     if (text[i] === "{") {
@@ -167,22 +197,20 @@ function findBraceBlock(text, pos) {
     }
   }
 
+  if (start === -1) return null;
+
   depth = 0;
-  let end = pos;
-  for (let i = pos; i < text.length; i++) {
+  for (let i = start; i < text.length; i++) {
     if (text[i] === "{") depth++;
     if (text[i] === "}") {
-      if (depth === 0) { end = i + 1; break; }
       depth--;
+      if (depth === 0) return { start, end: i + 1 };
     }
   }
-
-  if (start < end) return { start, end };
   return null;
 }
 
-/* ===================== RENDER ===================== */
-
+/* ================= RENDER ================= */
 function render() {
   const segs = getSegments(fullDoc);
   edit.value = segs[mode] || "";
@@ -190,6 +218,8 @@ function render() {
 }
 
 function highlight() {
+  if (isIOS) return; // critical fix
+
   const text = edit.value;
   const pos = edit.selectionStart;
 
@@ -204,19 +234,18 @@ function highlight() {
 
   msg.textContent = "";
   view.innerHTML =
-    escape(text.slice(0, block.start)) +
-    `<span class="hl">${escape(text.slice(block.start, block.end))}</span>` +
-    escape(text.slice(block.end));
+    esc(text.slice(0, block.start)) +
+    `<span class="hl">${esc(text.slice(block.start, block.end))}</span>` +
+    esc(text.slice(block.end));
 }
 
-function escape(s) {
-  return s.replace(/[&<>]/g, m =>
-    ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[m])
-  );
+function esc(s) {
+  return s.replace(/[&<>]/g, m => (
+    { "&":"&amp;", "<":"&lt;", ">":"&gt;" }[m]
+  ));
 }
 
-/* ===================== EVENTS ===================== */
-
+/* ================= EVENTS ================= */
 edit.addEventListener("input", () => {
   fullDoc = setSegment(fullDoc, mode, edit.value);
   highlight();
@@ -249,7 +278,7 @@ document.getElementById("replace").onclick = async () => {
   edit.dispatchEvent(new Event("input"));
 };
 
-/* ===================== INIT ===================== */
+/* ================= INIT ================= */
 render();
 </script>
 
