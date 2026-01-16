@@ -1,121 +1,148 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Table Maker + Editor</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Interactive Web Experiments</title>
+
 <style>
-  body{font-family:system-ui;margin:18px;background:#fff;color:#111}
-  .c{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
-  button,select{padding:7px 11px;border-radius:6px;border:1px solid #bbb;background:#f8f9fa;cursor:pointer}
-  button:hover,select:hover{opacity:.9}
-  button.p{background:#0366d6;color:#fff;border-color:#0366d6}
-  #e{min-height:300px;border:1px dashed #ccc;padding:14px;border-radius:8px;outline:none}
-  #o{width:100%;height:130px;margin-top:10px;padding:8px;font-family:monospace;box-sizing:border-box}
-  table{margin:12px 0;border-collapse:collapse}
-  td{border:1px solid #999;padding:6px 10px;min-width:50px}
-  hr{margin:16px 0;border:0;border-top:2px solid #ddd}
-  .g{margin-right:16px}
-  .l{font-weight:500;color:#555;font-size:13px}
+:root{
+  --bg:#0e0e0e;
+  --fg:#eaeaea;
+  --muted:#888;
+  --border:#2a2a2a;
+  --stable:#2ecc71;
+  --mid:#f1c40f;
+  --exp:#e67e22;
+}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--fg);
+  font-family:system-ui, sans-serif;
+}
+header{
+  padding:20px;
+  border-bottom:1px solid var(--border);
+}
+h1{margin:0;font-size:22px;}
+.subtitle{color:var(--muted);font-size:14px;}
+.stats{
+  display:flex;
+  gap:20px;
+  padding:16px;
+  border-bottom:1px solid var(--border);
+}
+.stat{
+  font-size:14px;
+}
+main{
+  padding:16px;
+}
+.group{
+  margin-bottom:24px;
+}
+.group h2{
+  font-size:16px;
+  border-bottom:1px solid var(--border);
+  padding-bottom:6px;
+}
+.app{
+  display:flex;
+  justify-content:space-between;
+  padding:6px 0;
+  border-bottom:1px dashed var(--border);
+}
+.app a{
+  color:#9cdcfe;
+  text-decoration:none;
+}
+.badge{
+  font-size:12px;
+  padding:2px 8px;
+  border-radius:10px;
+}
+.s5{background:var(--stable);}
+.s4{background:#27ae60;}
+.s3{background:var(--mid);}
+.s2{background:var(--exp);}
+footer{
+  padding:12px;
+  color:var(--muted);
+  border-top:1px solid var(--border);
+  font-size:12px;
+}
 </style>
 </head>
+
 <body>
 
-<h1 style="margin:0 0 10px;font-size:18px">Table Maker + Editor</h1>
+<header>
+  <h1>Interactive Web Experiments</h1>
+  <div class="subtitle">Canvas, text, balance, motion — structured explorations</div>
+</header>
 
-<div class="c">
-  <div class="g"><span class="l">Size:</span>
-    <select id="s">
-      <option value="">Normal</option>
-      <option value="h1">Title</option>
-      <option value="h2">Subtitle</option>
-      <option value="p">Body</option>
-    </select>
-  </div>
-  <button id="hr">Line (HR)</button>
-  <div class="g"><span class="l">Table:</span>
-    <button id="al">Left</button>
-    <button id="ac">Center</button>
-    <button id="ar">Right</button>
-  </div>
-  <div style="flex:1"></div>
-  <button class="p" id="mt">Make Table</button>
-  <button id="mc">Make Columns</button>
-  <button id="sa">Select All</button>
-  <button id="ex">Export CSV</button>
-  <button id="cp">Copy CSV</button>
-  <button id="cl">Clear</button>
+<div class="stats">
+  <div class="stat">Total Apps: <strong>22</strong></div>
+  <div class="stat">Stable (4–5): <strong>12</strong></div>
+  <div class="stat">Experimental: <strong>10</strong></div>
+  <div class="stat">Core Engines: <strong>4</strong></div>
 </div>
 
-<div id="e" contenteditable spellcheck="false">
-Paste text → select lines → Make Table
+<main>
+
+<!-- DRAWING -->
+<div class="group">
+<h2>Drawing & Geometry</h2>
+<div class="app"><a href="draw.html">draw.html</a><span class="badge s4">4</span></div>
+<div class="app"><a href="drawdoodle.html">drawdoodle.html</a><span class="badge s4">4</span></div>
+<div class="app"><a href="linex.html">linex.html</a><span class="badge s4">4</span></div>
+<div class="app"><a href="drawx.html">drawx.html</a><span class="badge s3">3</span></div>
+<div class="app"><a href="drawy.html">drawy.html</a><span class="badge s3">3</span></div>
+<div class="app"><a href="mycurve.html">mycurve.html</a><span class="badge s3">3</span></div>
+<div class="app"><a href="p_curve.html">p_curve.html</a><span class="badge s2">2</span></div>
 </div>
 
-<textarea id="o" placeholder="CSV appears here"></textarea>
+<!-- GRID -->
+<div class="group">
+<h2>Grid, Balance & Perception</h2>
+<div class="app"><a href="grid.html">grid.html</a><span class="badge s5">5</span></div>
+<div class="app"><a href="perfect.html">perfect.html</a><span class="badge s4">4</span></div>
+<div class="app"><a href="scanner.html">scanner.html</a><span class="badge s3">3</span></div>
+</div>
 
-<script>
-const e = document.getElementById('e'), o = document.getElementById('o');
-const sel = () => window.getSelection();
-const exec = (cmd, val=null) => (document.execCommand(cmd,false,val), e.focus());
+<!-- ANIMATION -->
+<div class="group">
+<h2>Animation & Motion</h2>
+<div class="app"><a href="anim1.html">anim1.html</a><span class="badge s3">3</span></div>
+<div class="app"><a href="anim2.html">anim2.html</a><span class="badge s3">3</span></div>
+<div class="app"><a href="sliding.html">sliding.html</a><span class="badge s3">3</span></div>
+<div class="app"><a href="slidingv1.html">slidingv1.html</a><span class="badge s4">4</span></div>
+</div>
 
-// Text Size
-document.getElementById('s').onchange = function() {
-  exec('formatBlock', this.value ? '<'+this.value+'>' : '<div>');
-  this.value = '';
-};
+<!-- TEXT -->
+<div class="group">
+<h2>Text & Utilities</h2>
+<div class="app"><a href="textv2.html">textv2.html</a><span class="badge s5">5</span></div>
+<div class="app"><a href="alarmc.html">alarmc.html</a><span class="badge s4">4</span></div>
+<div class="app"><a href="xgame.html">xgame.html</a><span class="badge s3">3</span></div>
+</div>
 
-// HR
-document.getElementById('hr').onclick = () => exec('insertHorizontalRule');
+<!-- SYSTEM -->
+<div class="group">
+<h2>Visual / System</h2>
+<div class="app"><a href="drawtext.html">drawtext.html</a><span class="badge s3">3</span></div>
+<div class="app"><a href="drawtextc.html">drawtextc.html</a><span class="badge s4">4</span></div>
+<div class="app"><a href="image.html">image.html</a><span class="badge s3">3</span></div>
+<div class="app"><a href="site.html">site.html</a><span class="badge s4">4</span></div>
+</div>
 
-// Table Align
-const align = a => {
-  const t = sel().rangeCount ? sel().getRangeAt(0).commonAncestorContainer.closest('table') : null;
-  if (!t) return alert('Click inside a table first');
-  t.style.cssText = a==='c' ? 'margin:'auto';display:table' : a==='r' ? 'margin-left:auto;display:table' : 'margin-right:auto;display:table';
-};
-document.getElementById('al').onclick = () => align('l');
-document.getElementById('ac').onclick = () => align('c');
-document.getElementById('ar').onclick = () => align('r');
+</main>
 
-// Make Table
-document.getElementById('mt').onclick = () => {
-  const lines = sel().toString().trim().split(/\r?\n/).filter(Boolean);
-  if (!lines.length) return alert('Select lines');
-  const tbl = document.createElement('table');
-  lines.forEach(t => {
-    const tr = tbl.insertRow();
-    tr.insertCell().innerHTML = t.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'})[c]);
-  });
-  sel().getRangeAt(0).insertNode(tbl);
-  e.focus();
-};
+<footer>
+  GitHub Pages • v1.0 • Structured experimentation
+</footer>
 
-// Make Columns
-document.getElementById('mc').onclick = () => {
-  const r = sel().getRangeAt(0);
-  const td = r.commonAncestorContainer.closest?.('td');
-  if (!td) return alert('Click inside a cell');
-  const left = r.toString() || r.cloneRange().setStart(td,0).toString();
-  const right = r.toString() ? (r.cloneRange().setStart(td,0).setEnd(r.startContainer,r.startOffset).toString() +
-                               r.cloneRange().setStart(r.endContainer,r.endOffset).setEnd(td,td.childNodes.length).toString()) : 
-                               r.cloneRange().setStart(r.endContainer,r.endOffset).setEnd(td,td.childNodes.length).toString();
-  td.innerHTML = left.trim().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'})[c]);
-  const n = td.parentNode.insertCell(td.cellIndex+1);
-  n.innerHTML = right.trim().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'})[c]);
-};
-
-// Select All / Export / Copy / Clear
-document.getElementById('sa').onclick = () => (range=document.createRange(), range.selectNodeContents(e), sel().removeAllRanges(), sel().addRange(range));
-document.getElementById('ex').onclick = () => {
-  const rows = [...e.querySelectorAll('table tr')].length ? 
-    [...e.querySelectorAll('table tr')].map(tr => [...tr.cells].map(c=>c.innerText.replace(/"/g,'""')).map(c=>c.includes(',')||c.includes('\n')||c.includes('"')?'"'+c+'"':c).join(',')).join('\n') :
-    e.innerText.trim().split('\n').map(l=>l.trim()).filter(Boolean).join('\n');
-  o.value = rows;
-};
-document.getElementById('cp').onclick = () => navigator.clipboard.writeText(o.value).then(()=>alert('Copied!'));
-document.getElementById('cl').onclick = () => (e.innerHTML='<br>', o.value='', e.focus());
-
-// Keep focus
-document.querySelectorAll('button,select').forEach(b=>b.addEventListener('mouseup',()=>setTimeout(()=>e.focus(),10)));
-</script>
 </body>
 </html>
