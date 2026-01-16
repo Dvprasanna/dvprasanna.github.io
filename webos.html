@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Interaction Engine v1</title>
+<title>Interaction Engine v1.1</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -11,21 +11,81 @@
     background: #111;
     color: #eee;
     font-family: system-ui, sans-serif;
+    display: flex;
+    height: 100vh;
+  }
+
+  #panel {
+    width: 260px;
+    background: #1a1a1a;
+    border-right: 1px solid #333;
+    padding: 10px;
+    box-sizing: border-box;
+  }
+
+  #panel h3 {
+    margin: 6px 0 10px;
+    font-size: 14px;
+  }
+
+  #rulesList button {
+    width: 100%;
+    margin-bottom: 6px;
+    padding: 6px;
+    background: #222;
+    color: #eee;
+    border: 1px solid #333;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  #rulesList button.active {
+    background: #333;
+  }
+
+  label {
+    font-size: 12px;
+    margin-top: 8px;
+    display: block;
+  }
+
+  input, select, textarea {
+    width: 100%;
+    margin-top: 4px;
+    background: #000;
+    color: #0f0;
+    border: 1px solid #333;
+    padding: 4px;
+    box-sizing: border-box;
+    font-family: monospace;
+    font-size: 12px;
+  }
+
+  textarea {
+    height: 120px;
+  }
+
+  #applyBtn {
+    margin-top: 8px;
+    width: 100%;
+    padding: 6px;
+    background: #0a0;
+    color: #000;
+    border: none;
+    cursor: pointer;
   }
 
   #stage {
-    width: 100vw;
-    height: 100vh;
+    flex: 1;
     background: #000;
-    border: 2px solid #333;
-    touch-action: none;
     position: relative;
+    touch-action: none;
   }
 
   .dot {
     position: absolute;
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     background: #0f0;
     border-radius: 50%;
     transform: translate(-50%, -50%);
@@ -35,42 +95,94 @@
 
 <body>
 
+<!-- ================= PANEL ================= -->
+<div id="panel">
+  <h3>Rules</h3>
+  <div id="rulesList"></div>
+
+  <label>Target</label>
+  <input id="targetInput">
+
+  <label>Event</label>
+  <select id="eventInput">
+    <option>click</option>
+    <option>dblclick</option>
+    <option>drag</option>
+  </select>
+
+  <label>Code</label>
+  <textarea id="codeInput"></textarea>
+
+  <button id="applyBtn">Apply</button>
+</div>
+
+<!-- ================= STAGE ================= -->
 <div id="stage"></div>
 
 <script>
-/* ===============================
-   INTERACTION RULES (CONFIG)
-   =============================== */
+/* ================= RULES ================= */
 
 const rules = [
   {
+    id: 1,
     target: "#stage",
     event: "click",
-    code: `
-      drawDot(e.clientX, e.clientY);
-    `
+    code: "drawDot(e.clientX, e.clientY);"
   },
   {
+    id: 2,
     target: "#stage",
     event: "dblclick",
-    code: `
-      clearStage();
-    `
+    code: "clearStage();"
   },
   {
+    id: 3,
     target: "#stage",
     event: "drag",
-    code: `
-      drawDot(e.clientX, e.clientY);
-    `
+    code: "drawDot(e.clientX, e.clientY);"
   }
 ];
 
-/* ===============================
-   ENGINE CORE
-   =============================== */
+let selectedRule = null;
 
-const stage = document.querySelector("#stage");
+/* ================= UI ================= */
+
+const rulesList = document.getElementById("rulesList");
+const targetInput = document.getElementById("targetInput");
+const eventInput = document.getElementById("eventInput");
+const codeInput = document.getElementById("codeInput");
+
+function renderRules() {
+  rulesList.innerHTML = "";
+  rules.forEach(r => {
+    const btn = document.createElement("button");
+    btn.textContent = r.event;
+    btn.onclick = () => selectRule(r.id);
+    if (selectedRule && selectedRule.id === r.id) {
+      btn.classList.add("active");
+    }
+    rulesList.appendChild(btn);
+  });
+}
+
+function selectRule(id) {
+  selectedRule = rules.find(r => r.id === id);
+  targetInput.value = selectedRule.target;
+  eventInput.value = selectedRule.event;
+  codeInput.value = selectedRule.code;
+  renderRules();
+}
+
+document.getElementById("applyBtn").onclick = () => {
+  if (!selectedRule) return;
+  selectedRule.target = targetInput.value;
+  selectedRule.event = eventInput.value;
+  selectedRule.code = codeInput.value;
+};
+
+/* ================= ENGINE ================= */
+
+const stage = document.getElementById("stage");
 let dragging = false;
 
 function execute(code, event) {
@@ -81,36 +193,8 @@ function execute(code, event) {
     clearStage,
     log: console.log
   };
-
-  new Function("ctx", `
-    with(ctx){
-      ${code}
-    }
-  `)(ctx);
+  new Function("ctx", `with(ctx){${code}}`)(ctx);
 }
-
-/* ===============================
-   EVENT BINDINGS
-   =============================== */
-
-stage.addEventListener("click", e => runRules("click", e));
-stage.addEventListener("dblclick", e => runRules("dblclick", e));
-
-stage.addEventListener("pointerdown", e => {
-  dragging = true;
-});
-
-stage.addEventListener("pointermove", e => {
-  if (dragging) runRules("drag", e);
-});
-
-stage.addEventListener("pointerup", () => {
-  dragging = false;
-});
-
-/* ===============================
-   RULE DISPATCHER
-   =============================== */
 
 function runRules(type, event) {
   rules.forEach(rule => {
@@ -120,21 +204,31 @@ function runRules(type, event) {
   });
 }
 
-/* ===============================
-   API FUNCTIONS (SAFE)
-   =============================== */
+stage.addEventListener("click", e => runRules("click", e));
+stage.addEventListener("dblclick", e => runRules("dblclick", e));
+
+stage.addEventListener("pointerdown", () => dragging = true);
+stage.addEventListener("pointermove", e => dragging && runRules("drag", e));
+stage.addEventListener("pointerup", () => dragging = false);
+
+/* ================= API ================= */
 
 function drawDot(x, y) {
-  const dot = document.createElement("div");
-  dot.className = "dot";
-  dot.style.left = x + "px";
-  dot.style.top = y + "px";
-  stage.appendChild(dot);
+  const d = document.createElement("div");
+  d.className = "dot";
+  d.style.left = x + "px";
+  d.style.top = y + "px";
+  stage.appendChild(d);
 }
 
 function clearStage() {
   stage.innerHTML = "";
 }
+
+/* ================= INIT ================= */
+
+selectRule(1);
+renderRules();
 </script>
 
 </body>
