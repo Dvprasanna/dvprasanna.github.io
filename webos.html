@@ -110,9 +110,10 @@
 </head>
 
 <body>
-
+v 1.4
 <!-- ============ TOP BAR ============ -->
 <div id="topbar">
+  <button id="clearBtn">Clear</button>
   <button id="drawBtn">Draw</button>
   <button id="panBtn">Pan</button>
   <button id="toggleEditor">Editor</button>
@@ -132,7 +133,11 @@
 
 <script>
 /* ============ STATE ============ */
+const clearBtn = document.getElementById("clearBtn");
 
+clearBtn.onclick = () => {
+  stage.innerHTML = "";
+};
 let currentTool = "draw";
 let dragging = false;
 let editorOpen = false;
