@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Segmented Code Editor</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Segmented Editor</title>
 
 <style>
 html, body {
@@ -14,7 +14,7 @@ html, body {
   font-family: system-ui, sans-serif;
 }
 
-/* ================= TOP BAR ================= */
+/* ===== Top Bar ===== */
 #bar {
   display: flex;
   gap: 6px;
@@ -40,29 +40,13 @@ button.active {
   color: #aaa;
 }
 
-/* ================= EDITOR ================= */
+/* ===== Editor ===== */
 #wrap {
   position: relative;
   height: calc(100% - 44px);
 }
 
-/* Base editor */
-textarea {
-  position: absolute;
-  inset: 0;
-  padding: 12px;
-  font-family: monospace;
-  font-size: 14px;
-  line-height: 1.4;
-  border: none;
-  outline: none;
-  resize: none;
-  background: #111;
-  color: #eee;
-}
-
-/* Overlay (DESKTOP ONLY) */
-pre {
+textarea, pre {
   position: absolute;
   inset: 0;
   margin: 0;
@@ -72,6 +56,19 @@ pre {
   line-height: 1.4;
   white-space: pre-wrap;
   word-wrap: break-word;
+}
+
+/* Real editor */
+textarea {
+  background: #111;
+  color: #eee;
+  border: none;
+  outline: none;
+  resize: none;
+}
+
+/* Overlay (desktop only) */
+pre {
   background: #111;
   color: #eee;
   pointer-events: none;
@@ -79,22 +76,21 @@ pre {
 
 /* Highlight */
 .hl {
-  background: rgba(80, 120, 255, 0.25);
+  background: rgba(80,120,255,0.25);
 }
 
-/* ===== Overlay mode ===== */
+/* Overlay mode */
 .overlay textarea {
   color: transparent;
   caret-color: #fff;
   background: transparent;
   z-index: 2;
 }
-
 .overlay pre {
   z-index: 1;
 }
 
-/* ===== iOS SAFE MODE ===== */
+/* iOS safe mode */
 .ios pre {
   display: none;
 }
@@ -113,17 +109,23 @@ pre {
 
 <div id="wrap">
   <pre id="view"></pre>
-  <textarea id="edit" spellcheck="false"></textarea>
+  <textarea
+    id="edit"
+    autocomplete="off"
+    autocorrect="off"
+    autocapitalize="off"
+    spellcheck="false"
+  ></textarea>
 </div>
 
 <script>
 /* ================= PLATFORM ================= */
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-if (!isIOS) document.body.classList.add("overlay");
-if (isIOS) document.body.classList.add("ios");
+document.body.classList.add(isIOS ? "ios" : "overlay");
 
 /* ================= STATE ================= */
 let mode = "html";
+
 let fullDoc = `<!DOCTYPE html>
 <html>
 <head>
@@ -152,35 +154,35 @@ const msg  = document.getElementById("msg");
 
 /* ================= SEGMENTS ================= */
 function getSegments(doc) {
-  const html = doc
-    .replace(/<script[\\s\\S]*?<\\/script>/gi, "")
-    .replace(/<style[\\s\\S]*?<\\/style>/gi, "");
+  return {
+    html: doc
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, ""),
 
-  const js  = (doc.match(/<script[^>]*>([\\s\\S]*?)<\\/script>/i) || ["",""])[1];
-  const css = (doc.match(/<style[^>]*>([\\s\\S]*?)<\\/style>/i) || ["",""])[1];
-
-  return { html, js, css };
+    js:  (doc.match(/<script[^>]*>([\s\S]*?)<\/script>/i) || ["",""])[1],
+    css: (doc.match(/<style[^>]*>([\s\S]*?)<\/style>/i) || ["",""])[1]
+  };
 }
 
 function setSegment(doc, mode, content) {
   if (mode === "html") {
     return doc
-      .replace(/<script[\\s\\S]*?<\\/script>/gi, "")
-      .replace(/<style[\\s\\S]*?<\\/style>/gi, "")
-      .replace(/<\\/head>/i, content + "\n</head>");
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<\/head>/i, content + "\n</head>");
   }
 
   if (mode === "js") {
     return doc.replace(
-      /(<script[^>]*>)[\\s\\S]*?(<\\/script>)/i,
-      "$1\n" + content + "\n$2"
+      /(<script[^>]*>)[\s\S]*?(<\/script>)/i,
+      `$1\n${content}\n$2`
     );
   }
 
   if (mode === "css") {
     return doc.replace(
-      /(<style[^>]*>)[\\s\\S]*?(<\\/style>)/i,
-      "$1\n" + content + "\n$2"
+      /(<style[^>]*>)[\s\S]*?(<\/style>)/i,
+      `$1\n${content}\n$2`
     );
   }
 }
@@ -196,7 +198,6 @@ function findBraceBlock(text, pos) {
       depth--;
     }
   }
-
   if (start === -1) return null;
 
   depth = 0;
@@ -218,12 +219,12 @@ function render() {
 }
 
 function highlight() {
-  if (isIOS) return; // critical fix
+  if (isIOS) return;
 
   const text = edit.value;
   const pos = edit.selectionStart;
-
   let block = null;
+
   if (mode !== "html") block = findBraceBlock(text, pos);
 
   if (!block) {
@@ -269,7 +270,7 @@ document.getElementById("replace").onclick = async () => {
   const block = mode === "html" ? null : findBraceBlock(text, pos);
 
   if (!block) {
-    msg.textContent = "Cannot replace: no block";
+    msg.textContent = "Cannot replace block";
     return;
   }
 
@@ -279,8 +280,10 @@ document.getElementById("replace").onclick = async () => {
 };
 
 /* ================= INIT ================= */
+edit.value = ""; // disable Safari restore
 render();
 </script>
-
+version 1.1
 </body>
+
 </html>
