@@ -126,65 +126,57 @@ document.body.classList.add(isIOS ? "ios" : "overlay");
 /* ================= STATE ================= */
 let mode = "html";
 
-let fullDoc = `<!DOCTYPE html>
-<html>
-<head>
-<style>
-body {
-  background: black;
-}
-</style>
-</head>
-<body>
-
-<h1>Hello</h1>
-
-<script>
-function test() {
-  console.log("hi");
-}
-</script>
-
-</body>
-</html>`;
+let fullDoc = "<!DOCTYPE html>\n<html>\n<head>\n<style>\nbody {\n  background: black;\n}\n</style>\n</head>\n<body>\n\n<h1>Hello</h1>\n\n<script>\nfunction test() {\n  console.log(\"hi\");\n}\n</script>\n\n</body>\n</html>";
 
 const edit = document.getElementById("edit");
 const view = document.getElementById("view");
 const msg  = document.getElementById("msg");
 
+/* ================= REGEX (SAFE) ================= */
+const RX_SCRIPT_ALL = new RegExp("<script[\\s\\S]*?<\\/script>", "gi");
+const RX_STYLE_ALL  = new RegExp("<style[\\s\\S]*?<\\/style>", "gi");
+const RX_SCRIPT_ONE = new RegExp("<script[^>]*>([\\s\\S]*?)<\\/script>", "i");
+const RX_STYLE_ONE  = new RegExp("<style[^>]*>([\\s\\S]*?)<\\/style>", "i");
+
 /* ================= SEGMENTS ================= */
 function getSegments(doc) {
-  return {
-    html: doc
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, ""),
+  const html = doc
+    .replace(RX_SCRIPT_ALL, "")
+    .replace(RX_STYLE_ALL, "");
 
-    js:  (doc.match(/<script[^>]*>([\s\S]*?)<\/script>/i) || ["",""])[1],
-    css: (doc.match(/<style[^>]*>([\s\S]*?)<\/style>/i) || ["",""])[1]
+  const jsMatch  = doc.match(RX_SCRIPT_ONE);
+  const cssMatch = doc.match(RX_STYLE_ONE);
+
+  return {
+    html: html,
+    js:  jsMatch  ? jsMatch[1]  : "",
+    css: cssMatch ? cssMatch[1] : ""
   };
 }
 
 function setSegment(doc, mode, content) {
   if (mode === "html") {
     return doc
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(RX_SCRIPT_ALL, "")
+      .replace(RX_STYLE_ALL, "")
       .replace(/<\/head>/i, content + "\n</head>");
   }
 
   if (mode === "js") {
     return doc.replace(
-      /(<script[^>]*>)[\s\S]*?(<\/script>)/i,
-      `$1\n${content}\n$2`
+      RX_SCRIPT_ONE,
+      "<script>\n" + content + "\n</script>"
     );
   }
 
   if (mode === "css") {
     return doc.replace(
-      /(<style[^>]*>)[\s\S]*?(<\/style>)/i,
-      `$1\n${content}\n$2`
+      RX_STYLE_ONE,
+      "<style>\n" + content + "\n</style>"
     );
   }
+
+  return doc;
 }
 
 /* ================= BLOCK DETECTION ================= */
@@ -223,10 +215,14 @@ function highlight() {
 
   const text = edit.value;
   const pos = edit.selectionStart;
-  let block = null;
 
-  if (mode !== "html") block = findBraceBlock(text, pos);
+  if (mode === "html") {
+    view.textContent = text;
+    msg.textContent = "";
+    return;
+  }
 
+  const block = findBraceBlock(text, pos);
   if (!block) {
     view.textContent = text;
     msg.textContent = "No valid block";
@@ -236,7 +232,9 @@ function highlight() {
   msg.textContent = "";
   view.innerHTML =
     esc(text.slice(0, block.start)) +
-    `<span class="hl">${esc(text.slice(block.start, block.end))}</span>` +
+    "<span class=\"hl\">" +
+    esc(text.slice(block.start, block.end)) +
+    "</span>" +
     esc(text.slice(block.end));
 }
 
@@ -265,9 +263,11 @@ document.querySelectorAll("button[data-mode]").forEach(b => {
 });
 
 document.getElementById("replace").onclick = async () => {
+  if (mode === "html") return;
+
   const text = edit.value;
   const pos = edit.selectionStart;
-  const block = mode === "html" ? null : findBraceBlock(text, pos);
+  const block = findBraceBlock(text, pos);
 
   if (!block) {
     msg.textContent = "Cannot replace block";
@@ -280,10 +280,9 @@ document.getElementById("replace").onclick = async () => {
 };
 
 /* ================= INIT ================= */
-edit.value = ""; // disable Safari restore
+edit.value = "";     // disable Safari restore
 render();
 </script>
-version 1.1
-</body>
 
+</body>
 </html>
