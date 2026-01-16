@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Interaction Engine v1.1</title>
+<title>Interaction Engine v1.2</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -15,6 +15,7 @@
     height: 100vh;
   }
 
+  /* ================= PANEL ================= */
   #panel {
     width: 260px;
     background: #1a1a1a;
@@ -23,12 +24,12 @@
     box-sizing: border-box;
   }
 
-  #panel h3 {
-    margin: 6px 0 10px;
+  h3 {
     font-size: 14px;
+    margin: 10px 0 6px;
   }
 
-  #rulesList button {
+  button {
     width: 100%;
     margin-bottom: 6px;
     padding: 6px;
@@ -36,17 +37,17 @@
     color: #eee;
     border: 1px solid #333;
     cursor: pointer;
-    text-align: left;
   }
 
-  #rulesList button.active {
-    background: #333;
+  button.active {
+    background: #0a0;
+    color: #000;
   }
 
   label {
     font-size: 12px;
-    margin-top: 8px;
     display: block;
+    margin-top: 8px;
   }
 
   input, select, textarea {
@@ -65,27 +66,27 @@
     height: 120px;
   }
 
-  #applyBtn {
-    margin-top: 8px;
-    width: 100%;
-    padding: 6px;
-    background: #0a0;
-    color: #000;
-    border: none;
-    cursor: pointer;
+  /* ================= STAGE ================= */
+  #stageWrapper {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
   }
 
   #stage {
-    flex: 1;
+    width: 2000px;
+    height: 2000px;
     background: #000;
-    position: relative;
+    position: absolute;
+    top: 0;
+    left: 0;
     touch-action: none;
   }
 
   .dot {
     position: absolute;
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
     background: #0f0;
     border-radius: 50%;
     transform: translate(-50%, -50%);
@@ -97,121 +98,117 @@
 
 <!-- ================= PANEL ================= -->
 <div id="panel">
-  <h3>Rules</h3>
-  <div id="rulesList"></div>
+  <h3>Tool</h3>
+  <button id="drawBtn">Draw</button>
+  <button id="panBtn">Pan</button>
 
-  <label>Target</label>
-  <input id="targetInput">
+  <h3>Rule</h3>
 
   <label>Event</label>
   <select id="eventInput">
-    <option>click</option>
-    <option>dblclick</option>
-    <option>drag</option>
+    <option value="drag">drag</option>
   </select>
 
-  <label>Code</label>
+  <label>Code (editable)</label>
   <textarea id="codeInput"></textarea>
 
-  <button id="applyBtn">Apply</button>
+  <button id="applyBtn">Apply Code</button>
 </div>
 
 <!-- ================= STAGE ================= -->
-<div id="stage"></div>
+<div id="stageWrapper">
+  <div id="stage"></div>
+</div>
 
 <script>
-/* ================= RULES ================= */
+/* ================= STATE ================= */
 
-const rules = [
-  {
-    id: 1,
-    target: "#stage",
-    event: "click",
-    code: "drawDot(e.clientX, e.clientY);"
-  },
-  {
-    id: 2,
-    target: "#stage",
-    event: "dblclick",
-    code: "clearStage();"
-  },
-  {
-    id: 3,
-    target: "#stage",
-    event: "drag",
-    code: "drawDot(e.clientX, e.clientY);"
-  }
-];
+let currentTool = "draw";
+let dragging = false;
 
-let selectedRule = null;
+let panX = 0, panY = 0;
+let lastX = 0, lastY = 0;
+
+/* ================= RULE ================= */
+
+const rule = {
+  event: "drag",
+  code: "drawDot(e.x, e.y);"
+};
 
 /* ================= UI ================= */
 
-const rulesList = document.getElementById("rulesList");
-const targetInput = document.getElementById("targetInput");
-const eventInput = document.getElementById("eventInput");
+const drawBtn = document.getElementById("drawBtn");
+const panBtn = document.getElementById("panBtn");
 const codeInput = document.getElementById("codeInput");
 
-function renderRules() {
-  rulesList.innerHTML = "";
-  rules.forEach(r => {
-    const btn = document.createElement("button");
-    btn.textContent = r.event;
-    btn.onclick = () => selectRule(r.id);
-    if (selectedRule && selectedRule.id === r.id) {
-      btn.classList.add("active");
-    }
-    rulesList.appendChild(btn);
-  });
+function updateToolUI() {
+  drawBtn.classList.toggle("active", currentTool === "draw");
+  panBtn.classList.toggle("active", currentTool === "pan");
 }
 
-function selectRule(id) {
-  selectedRule = rules.find(r => r.id === id);
-  targetInput.value = selectedRule.target;
-  eventInput.value = selectedRule.event;
-  codeInput.value = selectedRule.code;
-  renderRules();
-}
+drawBtn.onclick = () => {
+  currentTool = "draw";
+  updateToolUI();
+};
+
+panBtn.onclick = () => {
+  currentTool = "pan";
+  updateToolUI();
+};
+
+codeInput.value = rule.code;
 
 document.getElementById("applyBtn").onclick = () => {
-  if (!selectedRule) return;
-  selectedRule.target = targetInput.value;
-  selectedRule.event = eventInput.value;
-  selectedRule.code = codeInput.value;
+  rule.code = codeInput.value;
 };
 
 /* ================= ENGINE ================= */
 
 const stage = document.getElementById("stage");
-let dragging = false;
 
 function execute(code, event) {
   const ctx = {
     e: event,
-    stage,
     drawDot,
-    clearStage,
+    drawSquare,
     log: console.log
   };
   new Function("ctx", `with(ctx){${code}}`)(ctx);
 }
 
-function runRules(type, event) {
-  rules.forEach(rule => {
-    if (rule.event !== type) return;
-    if (!event.target.matches(rule.target)) return;
-    execute(rule.code, event);
-  });
-}
+stage.addEventListener("pointerdown", e => {
+  dragging = true;
+  lastX = e.clientX;
+  lastY = e.clientY;
+});
 
-stage.addEventListener("click", e => runRules("click", e));
-stage.addEventListener("dblclick", e => runRules("dblclick", e));
+stage.addEventListener("pointermove", e => {
+  if (!dragging) return;
 
-stage.addEventListener("pointerdown", () => dragging = true);
-stage.addEventListener("pointermove", e => dragging && runRules("drag", e));
+  if (currentTool === "draw") {
+    execute(rule.code, {
+      x: e.offsetX,
+      y: e.offsetY,
+      shiftKey: e.shiftKey
+    });
+  }
+
+  if (currentTool === "pan") {
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    panX += dx;
+    panY += dy;
+    stage.style.transform = `translate(${panX}px, ${panY}px)`;
+    lastX = e.clientX;
+    lastY = e.clientY;
+  }
+});
+
 stage.addEventListener("pointerup", () => dragging = false);
+stage.addEventListener("pointerleave", () => dragging = false);
 
-/* ================= API ================= */
+/* ================= DRAW API ================= */
 
 function drawDot(x, y) {
   const d = document.createElement("div");
@@ -221,14 +218,20 @@ function drawDot(x, y) {
   stage.appendChild(d);
 }
 
-function clearStage() {
-  stage.innerHTML = "";
+function drawSquare(x, y) {
+  const s = document.createElement("div");
+  s.style.position = "absolute";
+  s.style.width = "8px";
+  s.style.height = "8px";
+  s.style.left = x + "px";
+  s.style.top = y + "px";
+  s.style.background = "#0f0";
+  stage.appendChild(s);
 }
 
 /* ================= INIT ================= */
 
-selectRule(1);
-renderRules();
+updateToolUI();
 </script>
 
 </body>
