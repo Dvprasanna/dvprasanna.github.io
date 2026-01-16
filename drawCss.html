@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Draw Tool</title>
+
+<style>
+/* ===============================
+   UI BASELINE – v1.0
+   =============================== */
+
+:root {
+  --bg: #0f0f0f;
+  --surface: #181818;
+  --surface-2: #202020;
+  --text: #eaeaea;
+  --muted: #9a9a9a;
+  --primary: #4ea1ff;
+  --border: #2a2a2a;
+  --radius: 12px;
+  --space: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ===============================
+   LAYOUT
+   =============================== */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ---------- TOP BAR ---------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space) * 2);
+  padding: calc(var(--space) * 2);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.group {
+  display: flex;
+  gap: var(--space);
+}
+
+/* ---------- BUTTONS ---------- */
+
+button {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 14px;
+  min-width: 44px;
+}
+
+button.primary {
+  background: var(--primary);
+  color: #000;
+  border-color: transparent;
+}
+
+button.ghost {
+  background: transparent;
+}
+
+button.icon {
+  padding: 10px;
+}
+
+/* ---------- CANVAS STAGE ---------- */
+
+.stage {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: calc(var(--space) * 3);
+}
+
+.canvas-frame {
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: calc(var(--space) * 2);
+}
+
+canvas {
+  display: block;
+  background: #000;
+  border-radius: 6px;
+  touch-action: none;
+}
+
+/* ---------- CONTEXT BAR ---------- */
+
+.context {
+  padding: calc(var(--space) * 2);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ===============================
+   SMALL SCREENS
+   =============================== */
+
+@media (max-width: 480px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+  <!-- ================= TOP BAR ================= -->
+  <div class="topbar">
+
+    <!-- MODE -->
+    <div class="group">
+      <button class="primary">Draw</button>
+      <button>Select</button>
+      <button>Trim</button>
+    </div>
+
+    <!-- WIDTH -->
+    <div class="group">
+      <button class="ghost">S</button>
+      <button class="ghost primary">M</button>
+      <button class="ghost">L</button>
+    </div>
+
+    <!-- UNDO -->
+    <div class="group">
+      <button class="icon">↶</button>
+    </div>
+
+  </div>
+
+  <!-- ================= CANVAS ================= -->
+  <div class="stage">
+    <div class="canvas-frame">
+      <canvas width="600" height="800"></canvas>
+    </div>
+  </div>
+
+  <!-- ================= CONTEXT ================= -->
+  <div class="context">
+    Drag from edges to draw full perpendicular lines
+  </div>
+
+</div>
+
+<!--
+UI Version: v1.0
+Purpose: Clean draw interface (HTML + CSS only)
+-->
+
+</body>
+</html>
