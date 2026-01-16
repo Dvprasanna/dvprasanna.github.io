@@ -3,15 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Independent Line Segments</title>
+<title>Independent Line Angles</title>
 <style>
-  body { margin:0; background:#fff; }
+  body { margin:0; background:#fff; font-family:sans-serif; }
   canvas { display:block; margin:auto; touch-action:none; }
+  .controls { text-align:center; padding:8px; }
+  input { width:80px; }
 </style>
 </head>
 <body>
 
 <canvas id="c" width="600" height="300"></canvas>
+
+<div class="controls">
+  Left Angle:
+  <input type="number" id="left" value="0">°
+  &nbsp;&nbsp;
+  Right Angle:
+  <input type="number" id="right" value="0">°
+</div>
 
 <script>
 const canvas = document.getElementById("c");
@@ -19,22 +29,22 @@ const ctx = canvas.getContext("2d");
 
 const THICK = 14;
 
-// original line
+// initial line
 const line = {
   x1: 120, y1: 150,
   x2: 480, y2: 150
 };
 
 let anchor = null;
-let angleLeft = 0;
-let angleRight = 0;
+let leftAngle = 0;
+let rightAngle = 0;
 
 // ---- DRAW ----
 function draw() {
   ctx.clearRect(0,0,600,300);
 
   if (!anchor) {
-    drawThick(line.x1, line.y1, line.x2, line.y2);
+    drawSegment(line.x1, line.y1, line.x2, line.y2);
     return;
   }
 
@@ -48,8 +58,8 @@ function draw() {
   // LEFT SEGMENT
   ctx.save();
   ctx.translate(anchor.x, anchor.y);
-  ctx.rotate(angleLeft);
-  drawThick(
+  ctx.rotate(leftAngle);
+  drawSegment(
     line.x1 - anchor.x,
     line.y1 - anchor.y,
     0, 0
@@ -59,8 +69,8 @@ function draw() {
   // RIGHT SEGMENT
   ctx.save();
   ctx.translate(anchor.x, anchor.y);
-  ctx.rotate(angleRight);
-  drawThick(
+  ctx.rotate(rightAngle);
+  drawSegment(
     0, 0,
     line.x2 - anchor.x,
     line.y2 - anchor.y
@@ -68,8 +78,8 @@ function draw() {
   ctx.restore();
 }
 
-// ---- DRAW THICK LINE SEGMENT ----
-function drawThick(x1,y1,x2,y2){
+// ---- DRAW THICK SEGMENT ----
+function drawSegment(x1,y1,x2,y2){
   const len = Math.hypot(x2-x1, y2-y1);
   const ang = Math.atan2(y2-y1, x2-x1);
 
@@ -81,27 +91,28 @@ function drawThick(x1,y1,x2,y2){
   ctx.restore();
 }
 
-// ---- SET ANCHOR ----
+// ---- PROJECT CLICK TO LINE ----
 canvas.addEventListener("pointerdown", e=>{
   const r = canvas.getBoundingClientRect();
   const px = e.clientX - r.left;
   const py = e.clientY - r.top;
-  anchor = project(px, py, line);
-  angleLeft = 0;
-  angleRight = 0;
+  anchor = projectToLine(px, py, line);
   draw();
 });
 
-// demo motion (shows independence)
-setInterval(()=>{
-  if (!anchor) return;
-  angleLeft += 0.015;
-  angleRight -= 0.02;
+// ---- INPUTS ----
+document.getElementById("left").oninput = e=>{
+  leftAngle = (+e.target.value || 0) * Math.PI / 180;
   draw();
-}, 30);
+};
 
-// ---- PROJECT POINT TO LINE ----
-function project(px, py, L){
+document.getElementById("right").oninput = e=>{
+  rightAngle = (+e.target.value || 0) * Math.PI / 180;
+  draw();
+};
+
+// ---- PROJECTION ----
+function projectToLine(px, py, L){
   const vx = L.x2 - L.x1;
   const vy = L.y2 - L.y1;
   const t = ((px - L.x1)*vx + (py - L.y1)*vy) / (vx*vx + vy*vy);
