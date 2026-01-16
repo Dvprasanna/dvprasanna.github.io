@@ -3,19 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Line Anchor v1.0</title>
+<title>Line Anchor v1.0 FIXED</title>
 <style>
   body { margin:0; background:#eee; }
   canvas {
     display:block;
     margin:auto;
     background:#fff;
-    touch-action:none;
   }
 </style>
 </head>
 <body>
-v 1.0
+
 <canvas id="c" width="900" height="500"></canvas>
 
 <script>
@@ -26,7 +25,6 @@ const THICKNESS = 14;
 
 let lines = [];
 let drawing = false;
-let startPoint = null;
 
 // ---------- helpers ----------
 function getPos(e){
@@ -34,7 +32,7 @@ function getPos(e){
   return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
-function distancePointToLine(px, py, l){
+function distPointToLine(px, py, l){
   const vx = l.x2 - l.x1;
   const vy = l.y2 - l.y1;
   const wx = px - l.x1;
@@ -52,18 +50,15 @@ function distancePointToLine(px, py, l){
   return Math.hypot(px - bx, py - by);
 }
 
-function projectPointToLine(px, py, l){
+function project(px, py, l){
   const vx = l.x2 - l.x1;
   const vy = l.y2 - l.y1;
   const t = ((px - l.x1) * vx + (py - l.y1) * vy) / (vx * vx + vy * vy);
-  return {
-    x: l.x1 + t * vx,
-    y: l.y1 + t * vy
-  };
+  return { x: l.x1 + t * vx, y: l.y1 + t * vy };
 }
 
-// ---------- drawing ----------
-function drawThickLine(l){
+// ---------- draw ----------
+function drawLine(l){
   const len = Math.hypot(l.x2 - l.x1, l.y2 - l.y1);
   const ang = Math.atan2(l.y2 - l.y1, l.x2 - l.x1);
 
@@ -76,14 +71,12 @@ function drawThickLine(l){
 }
 
 function redraw(){
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+  ctx.clearRect(0,0,canvas.width,canvas.height);
   for(const l of lines){
-    drawThickLine(l);
-
+    drawLine(l);
     if(l.anchor){
       ctx.beginPath();
-      ctx.arc(l.anchor.x, l.anchor.y, 6, 0, Math.PI * 2);
+      ctx.arc(l.anchor.x, l.anchor.y, 6, 0, Math.PI*2);
       ctx.strokeStyle = "red";
       ctx.lineWidth = 2;
       ctx.stroke();
@@ -91,23 +84,21 @@ function redraw(){
   }
 }
 
-// ---------- events ----------
-canvas.addEventListener("pointerdown", e=>{
+// ---------- mouse events ----------
+canvas.addEventListener("mousedown", e=>{
   const p = getPos(e);
 
-  // check if click is on any line → add anchor
+  // try anchor first
   for(const l of lines){
-    const d = distancePointToLine(p.x, p.y, l);
-    if(d <= THICKNESS){
-      l.anchor = projectPointToLine(p.x, p.y, l);
+    if(distPointToLine(p.x, p.y, l) <= THICKNESS){
+      l.anchor = project(p.x, p.y, l);
       redraw();
       return;
     }
   }
 
-  // otherwise start drawing new line
+  // else draw new line
   drawing = true;
-  startPoint = p;
   lines.push({
     x1: p.x, y1: p.y,
     x2: p.x, y2: p.y,
@@ -115,7 +106,7 @@ canvas.addEventListener("pointerdown", e=>{
   });
 });
 
-canvas.addEventListener("pointermove", e=>{
+canvas.addEventListener("mousemove", e=>{
   if(!drawing) return;
   const p = getPos(e);
   const l = lines[lines.length - 1];
@@ -124,9 +115,8 @@ canvas.addEventListener("pointermove", e=>{
   redraw();
 });
 
-canvas.addEventListener("pointerup", ()=>{
+canvas.addEventListener("mouseup", ()=>{
   drawing = false;
-  startPoint = null;
 });
 
 // ---------- init ----------
