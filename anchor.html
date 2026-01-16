@@ -1,115 +1,135 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Anchor Proof Test</title>
+<title>Line Anchor v1.0</title>
 <style>
   body { margin:0; background:#eee; }
-  canvas { display:block; margin:auto; background:#fff; }
+  canvas {
+    display:block;
+    margin:auto;
+    background:#fff;
+    touch-action:none;
+  }
 </style>
 </head>
 <body>
-v 1.3
-<canvas id="c" width="800" height="400"></canvas>
+
+<canvas id="c" width="900" height="500"></canvas>
 
 <script>
-const c = document.getElementById("c");
-const ctx = c.getContext("2d");
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
 
-const TH = 14;
+const THICKNESS = 14;
 
 let lines = [];
-let mode = "draw";
+let drawing = false;
+let startPoint = null;
 
 // ---------- helpers ----------
-function pos(e){
-  const r=c.getBoundingClientRect();
-  return { x:e.clientX-r.left, y:e.clientY-r.top };
+function getPos(e){
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
-function distToLine(p,l){
-  const vx=l.x2-l.x1, vy=l.y2-l.y1;
-  const wx=p.x-l.x1, wy=p.y-l.y1;
-  const c1=vx*wx+vy*wy;
-  if(c1<=0) return Math.hypot(p.x-l.x1,p.y-l.y1);
-  const c2=vx*vx+vy*vy;
-  if(c2<=c1) return Math.hypot(p.x-l.x2,p.y-l.y2);
-  const b=c1/c2;
-  return Math.hypot(p.x-(l.x1+b*vx), p.y-(l.y1+b*vy));
+function distancePointToLine(px, py, l){
+  const vx = l.x2 - l.x1;
+  const vy = l.y2 - l.y1;
+  const wx = px - l.x1;
+  const wy = py - l.y1;
+
+  const c1 = vx * wx + vy * wy;
+  if (c1 <= 0) return Math.hypot(px - l.x1, py - l.y1);
+
+  const c2 = vx * vx + vy * vy;
+  if (c2 <= c1) return Math.hypot(px - l.x2, py - l.y2);
+
+  const b = c1 / c2;
+  const bx = l.x1 + b * vx;
+  const by = l.y1 + b * vy;
+  return Math.hypot(px - bx, py - by);
 }
 
-function project(p,l){
-  const vx=l.x2-l.x1, vy=l.y2-l.y1;
-  const t=((p.x-l.x1)*vx+(p.y-l.y1)*vy)/(vx*vx+vy*vy);
-  return { x:l.x1+t*vx, y:l.y1+t*vy };
+function projectPointToLine(px, py, l){
+  const vx = l.x2 - l.x1;
+  const vy = l.y2 - l.y1;
+  const t = ((px - l.x1) * vx + (py - l.y1) * vy) / (vx * vx + vy * vy);
+  return {
+    x: l.x1 + t * vx,
+    y: l.y1 + t * vy
+  };
 }
 
-function drawLine(l){
-  const len=Math.hypot(l.x2-l.x1,l.y2-l.y1);
-  const ang=Math.atan2(l.y2-l.y1,l.x2-l.x1);
+// ---------- drawing ----------
+function drawThickLine(l){
+  const len = Math.hypot(l.x2 - l.x1, l.y2 - l.y1);
+  const ang = Math.atan2(l.y2 - l.y1, l.x2 - l.x1);
+
   ctx.save();
-  ctx.translate(l.x1,l.y1);
+  ctx.translate(l.x1, l.y1);
   ctx.rotate(ang);
-  ctx.fillRect(0,-TH/2,len,TH);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, -THICKNESS / 2, len, THICKNESS);
   ctx.restore();
 }
 
 function redraw(){
-  ctx.clearRect(0,0,c.width,c.height);
-  ctx.fillStyle="#000";
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   for(const l of lines){
-    drawLine(l);
+    drawThickLine(l);
+
     if(l.anchor){
       ctx.beginPath();
-      ctx.arc(l.anchor.x,l.anchor.y,6,0,Math.PI*2);
-      ctx.strokeStyle="red";
-      ctx.lineWidth=2;
+      ctx.arc(l.anchor.x, l.anchor.y, 6, 0, Math.PI * 2);
+      ctx.strokeStyle = "red";
+      ctx.lineWidth = 2;
       ctx.stroke();
     }
   }
 }
 
-// ---------- draw lines ----------
-let start=null;
+// ---------- events ----------
+canvas.addEventListener("pointerdown", e=>{
+  const p = getPos(e);
 
-c.addEventListener("pointerdown", e=>{
-  const p=pos(e);
-
-  if(mode==="draw"){
-    start=p;
-    lines.push({ x1:p.x,y1:p.y,x2:p.x,y2:p.y, anchor:null });
-  }
-
-  else if(mode==="anchor"){
-    for(const l of lines){
-      if(distToLine(p,l) < TH){
-        l.anchor = project(p,l);
-        redraw();
-        return;
-      }
+  // check if click is on any line → add anchor
+  for(const l of lines){
+    const d = distancePointToLine(p.x, p.y, l);
+    if(d <= THICKNESS){
+      l.anchor = projectPointToLine(p.x, p.y, l);
+      redraw();
+      return;
     }
   }
+
+  // otherwise start drawing new line
+  drawing = true;
+  startPoint = p;
+  lines.push({
+    x1: p.x, y1: p.y,
+    x2: p.x, y2: p.y,
+    anchor: null
+  });
 });
 
-c.addEventListener("pointermove", e=>{
-  if(!start) return;
-  const p=pos(e);
-  const l=lines.at(-1);
-  l.x2=p.x;
-  l.y2=p.y;
+canvas.addEventListener("pointermove", e=>{
+  if(!drawing) return;
+  const p = getPos(e);
+  const l = lines[lines.length - 1];
+  l.x2 = p.x;
+  l.y2 = p.y;
   redraw();
 });
 
-c.addEventListener("pointerup", ()=>{ start=null; });
-
-// toggle mode with key
-window.addEventListener("keydown", e=>{
-  if(e.key==="a") mode="anchor";
-  if(e.key==="d") mode="draw";
+canvas.addEventListener("pointerup", ()=>{
+  drawing = false;
+  startPoint = null;
 });
 
+// ---------- init ----------
 redraw();
 </script>
 
