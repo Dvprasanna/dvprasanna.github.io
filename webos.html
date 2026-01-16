@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Interaction Engine v1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: #eee;
+    font-family: system-ui, sans-serif;
+  }
+
+  #stage {
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    border: 2px solid #333;
+    touch-action: none;
+    position: relative;
+  }
+
+  .dot {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: #0f0;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+</style>
+</head>
+
+<body>
+
+<div id="stage"></div>
+
+<script>
+/* ===============================
+   INTERACTION RULES (CONFIG)
+   =============================== */
+
+const rules = [
+  {
+    target: "#stage",
+    event: "click",
+    code: `
+      drawDot(e.clientX, e.clientY);
+    `
+  },
+  {
+    target: "#stage",
+    event: "dblclick",
+    code: `
+      clearStage();
+    `
+  },
+  {
+    target: "#stage",
+    event: "drag",
+    code: `
+      drawDot(e.clientX, e.clientY);
+    `
+  }
+];
+
+/* ===============================
+   ENGINE CORE
+   =============================== */
+
+const stage = document.querySelector("#stage");
+let dragging = false;
+
+function execute(code, event) {
+  const ctx = {
+    e: event,
+    stage,
+    drawDot,
+    clearStage,
+    log: console.log
+  };
+
+  new Function("ctx", `
+    with(ctx){
+      ${code}
+    }
+  `)(ctx);
+}
+
+/* ===============================
+   EVENT BINDINGS
+   =============================== */
+
+stage.addEventListener("click", e => runRules("click", e));
+stage.addEventListener("dblclick", e => runRules("dblclick", e));
+
+stage.addEventListener("pointerdown", e => {
+  dragging = true;
+});
+
+stage.addEventListener("pointermove", e => {
+  if (dragging) runRules("drag", e);
+});
+
+stage.addEventListener("pointerup", () => {
+  dragging = false;
+});
+
+/* ===============================
+   RULE DISPATCHER
+   =============================== */
+
+function runRules(type, event) {
+  rules.forEach(rule => {
+    if (rule.event !== type) return;
+    if (!event.target.matches(rule.target)) return;
+    execute(rule.code, event);
+  });
+}
+
+/* ===============================
+   API FUNCTIONS (SAFE)
+   =============================== */
+
+function drawDot(x, y) {
+  const dot = document.createElement("div");
+  dot.className = "dot";
+  dot.style.left = x + "px";
+  dot.style.top = y + "px";
+  stage.appendChild(dot);
+}
+
+function clearStage() {
+  stage.innerHTML = "";
+}
+</script>
+
+</body>
+</html>
