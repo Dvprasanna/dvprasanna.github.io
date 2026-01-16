@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Segmented Code Editor</title>
+
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #111;
+    color: #eee;
+    font-family: system-ui, sans-serif;
+  }
+
+  #bar {
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+    background: #000;
+    border-bottom: 1px solid #333;
+  }
+
+  button {
+    padding: 6px 10px;
+    background: #222;
+    color: #eee;
+    border: 1px solid #444;
+  }
+
+  button.active {
+    background: #444;
+  }
+
+  #msg {
+    margin-left: auto;
+    font-size: 12px;
+    color: #aaa;
+  }
+
+  #wrap {
+    position: relative;
+    height: calc(100% - 44px);
+  }
+
+  textarea, pre {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 12px;
+    font-family: monospace;
+    font-size: 14px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  textarea {
+    background: transparent;
+    color: transparent;
+    caret-color: #fff;
+    border: none;
+    outline: none;
+    resize: none;
+    z-index: 2;
+  }
+
+  pre {
+    background: #111;
+    color: #eee;
+    z-index: 1;
+  }
+
+  .hl {
+    background: rgba(80, 120, 255, 0.25);
+  }
+</style>
+</head>
+
+<body>
+
+<div id="bar">
+  <button data-mode="html" class="active">HTML</button>
+  <button data-mode="js">JS</button>
+  <button data-mode="css">CSS</button>
+  <button id="replace">Replace Block</button>
+  <span id="msg"></span>
+</div>
+
+<div id="wrap">
+  <pre id="view"></pre>
+  <textarea id="edit" spellcheck="false"></textarea>
+</div>
+
+<script>
+/* ===================== STATE ===================== */
+
+let mode = "html";
+let fullDoc = `<!DOCTYPE html>
+<html>
+<head>
+<style>
+body {
+  background: black;
+}
+</style>
+</head>
+<body>
+<script>
+function test() {
+  console.log("hi");
+}
+</script>
+</body>
+</html>`;
+
+const edit = document.getElementById("edit");
+const view = document.getElementById("view");
+const msg  = document.getElementById("msg");
+
+/* ===================== SEGMENTS ===================== */
+
+function getSegments(doc) {
+  const html = doc
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "");
+
+  const js = (doc.match(/<script[^>]*>([\s\S]*?)<\/script>/i) || ["",""])[1];
+  const css = (doc.match(/<style[^>]*>([\s\S]*?)<\/style>/i) || ["",""])[1];
+
+  return { html, js, css };
+}
+
+function setSegment(doc, mode, content) {
+  if (mode === "html") {
+    return doc.replace(
+      /(.*?)(<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>)/is,
+      content + "$2"
+    );
+  }
+
+  if (mode === "js") {
+    return doc.replace(
+      /(<script[^>]*>)[\s\S]*?(<\/script>)/i,
+      `$1\n${content}\n$2`
+    );
+  }
+
+  if (mode === "css") {
+    return doc.replace(
+      /(<style[^>]*>)[\s\S]*?(<\/style>)/i,
+      `$1\n${content}\n$2`
+    );
+  }
+}
+
+/* ===================== BLOCK DETECTION ===================== */
+
+function findBraceBlock(text, pos) {
+  let start = pos, depth = 0;
+  for (let i = pos; i >= 0; i--) {
+    if (text[i] === "}") depth++;
+    if (text[i] === "{") {
+      if (depth === 0) { start = i; break; }
+      depth--;
+    }
+  }
+
+  depth = 0;
+  let end = pos;
+  for (let i = pos; i < text.length; i++) {
+    if (text[i] === "{") depth++;
+    if (text[i] === "}") {
+      if (depth === 0) { end = i + 1; break; }
+      depth--;
+    }
+  }
+
+  if (start < end) return { start, end };
+  return null;
+}
+
+/* ===================== RENDER ===================== */
+
+function render() {
+  const segs = getSegments(fullDoc);
+  edit.value = segs[mode] || "";
+  highlight();
+}
+
+function highlight() {
+  const text = edit.value;
+  const pos = edit.selectionStart;
+
+  let block = null;
+  if (mode !== "html") block = findBraceBlock(text, pos);
+
+  if (!block) {
+    view.textContent = text;
+    msg.textContent = "No valid block";
+    return;
+  }
+
+  msg.textContent = "";
+  view.innerHTML =
+    escape(text.slice(0, block.start)) +
+    `<span class="hl">${escape(text.slice(block.start, block.end))}</span>` +
+    escape(text.slice(block.end));
+}
+
+function escape(s) {
+  return s.replace(/[&<>]/g, m =>
+    ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[m])
+  );
+}
+
+/* ===================== EVENTS ===================== */
+
+edit.addEventListener("input", () => {
+  fullDoc = setSegment(fullDoc, mode, edit.value);
+  highlight();
+});
+
+edit.addEventListener("keyup", highlight);
+edit.addEventListener("click", highlight);
+
+document.querySelectorAll("button[data-mode]").forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll("button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    mode = b.dataset.mode;
+    render();
+  };
+});
+
+document.getElementById("replace").onclick = async () => {
+  const text = edit.value;
+  const pos = edit.selectionStart;
+  const block = mode === "html" ? null : findBraceBlock(text, pos);
+
+  if (!block) {
+    msg.textContent = "Cannot replace: no block";
+    return;
+  }
+
+  const clip = await navigator.clipboard.readText();
+  edit.value = text.slice(0, block.start) + clip + text.slice(block.end);
+  edit.dispatchEvent(new Event("input"));
+};
+
+/* ===================== INIT ===================== */
+render();
+</script>
+
+</body>
+</html>
