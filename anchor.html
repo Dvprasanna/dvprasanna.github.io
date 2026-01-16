@@ -1,269 +1,116 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Line Hinge CAD v1</title>
-
+<title>Anchor Proof Test</title>
 <style>
-body { margin:0; font-family:system-ui; background:#eee; }
-#top {
-  display:flex; gap:6px; padding:8px;
-  background:#222; color:#fff;
-}
-button { padding:6px 10px; }
-canvas {
-  display:block; background:#fff;
-  touch-action:none;
-}
-#props {
-  padding:8px; background:#ddd;
-}
+  body { margin:0; background:#eee; }
+  canvas { display:block; margin:auto; background:#fff; }
 </style>
 </head>
 <body>
-v 1.2
-<div id="top">
-  <button onclick="setMode('draw')">DRAW</button>
-  <button onclick="setMode('anchor')">ANCHOR</button>
-  <button onclick="setMode('rotate')">ROTATE</button>
-  <button onclick="setMode('move')">MOVE</button>
-  <button onclick="undo()">UNDO</button>
-  <button onclick="redo()">REDO</button>
-  <button onclick="exportJSON()">EXPORT</button>
-  <button onclick="clearAll()">CLEAR</button>
-</div>
 
-<canvas id="c" width="900" height="500"></canvas>
-
-<div id="props">
-  Thickness:
-  <input type="range" id="thick" min="4" max="30" value="12">
-</div>
+<canvas id="c" width="800" height="400"></canvas>
 
 <script>
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
+const c = document.getElementById("c");
+const ctx = c.getContext("2d");
 
-const SNAP = Math.PI / 36;   // 5°
-const HANDLE_R = 35;
-const HANDLE_W = 10;
+const TH = 14;
 
-let mode = "draw";
 let lines = [];
-let selected = null;
-let drawing = false;
-let dragging = false;
-let dragHandle = null;
-let startPt = null;
+let mode = "draw";
 
-let history = [];
-let redoStack = [];
-
-// ---------- UTIL ----------
-function clone(v){ return JSON.parse(JSON.stringify(v)); }
-function saveState(){
-  history.push(clone(lines));
-  redoStack.length = 0;
-}
-function undo(){
-  if(!history.length) return;
-  redoStack.push(clone(lines));
-  lines = history.pop();
-  draw();
-}
-function redo(){
-  if(!redoStack.length) return;
-  history.push(clone(lines));
-  lines = redoStack.pop();
-  draw();
-}
-function setMode(m){ mode = m; }
-
-function getPos(e){
-  const r = canvas.getBoundingClientRect();
+// ---------- helpers ----------
+function pos(e){
+  const r=c.getBoundingClientRect();
   return { x:e.clientX-r.left, y:e.clientY-r.top };
 }
-function snap(a){ return Math.round(a / SNAP) * SNAP; }
 
-// distance point → line segment
-function distPointToSeg(px,py,x1,y1,x2,y2){
-  const vx=x2-x1, vy=y2-y1;
-  const wx=px-x1, wy=py-y1;
+function distToLine(p,l){
+  const vx=l.x2-l.x1, vy=l.y2-l.y1;
+  const wx=p.x-l.x1, wy=p.y-l.y1;
   const c1=vx*wx+vy*wy;
-  if(c1<=0) return Math.hypot(px-x1,py-y1);
+  if(c1<=0) return Math.hypot(p.x-l.x1,p.y-l.y1);
   const c2=vx*vx+vy*vy;
-  if(c2<=c1) return Math.hypot(px-x2,py-y2);
+  if(c2<=c1) return Math.hypot(p.x-l.x2,p.y-l.y2);
   const b=c1/c2;
-  const bx=x1+b*vx, by=y1+b*vy;
-  return Math.hypot(px-bx,py-by);
+  return Math.hypot(p.x-(l.x1+b*vx), p.y-(l.y1+b*vy));
 }
 
-// project point onto line
 function project(p,l){
   const vx=l.x2-l.x1, vy=l.y2-l.y1;
   const t=((p.x-l.x1)*vx+(p.y-l.y1)*vy)/(vx*vx+vy*vy);
-  return { x:l.x1+t*vx, y:l.y1+t*vy, t };
+  return { x:l.x1+t*vx, y:l.y1+t*vy };
 }
 
-// ---------- INPUT ----------
-canvas.addEventListener("pointerdown", e=>{
-  const p=getPos(e);
+function drawLine(l){
+  const len=Math.hypot(l.x2-l.x1,l.y2-l.y1);
+  const ang=Math.atan2(l.y2-l.y1,l.x2-l.x1);
+  ctx.save();
+  ctx.translate(l.x1,l.y1);
+  ctx.rotate(ang);
+  ctx.fillRect(0,-TH/2,len,TH);
+  ctx.restore();
+}
+
+function redraw(){
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.fillStyle="#000";
+
+  for(const l of lines){
+    drawLine(l);
+    if(l.anchor){
+      ctx.beginPath();
+      ctx.arc(l.anchor.x,l.anchor.y,6,0,Math.PI*2);
+      ctx.strokeStyle="red";
+      ctx.lineWidth=2;
+      ctx.stroke();
+    }
+  }
+}
+
+// ---------- draw lines ----------
+let start=null;
+
+c.addEventListener("pointerdown", e=>{
+  const p=pos(e);
 
   if(mode==="draw"){
-    drawing=true;
-    saveState();
-    const th=+document.getElementById("thick").value;
-    selected={ x1:p.x,y1:p.y,x2:p.x,y2:p.y, th,
-      anchor:null, aL:0, aR:0 };
-    lines.push(selected);
+    start=p;
+    lines.push({ x1:p.x,y1:p.y,x2:p.x,y2:p.y, anchor:null });
   }
 
   else if(mode==="anchor"){
     for(const l of lines){
-      if(distPointToSeg(p.x,p.y,l.x1,l.y1,l.x2,l.y2) < l.th+6){
-        saveState();
-        selected=l;
-        selected.anchor=project(p,l);
-        selected.aL=0;
-        selected.aR=0;
-        break;
+      if(distToLine(p,l) < TH){
+        l.anchor = project(p,l);
+        redraw();
+        return;
       }
     }
-    draw();
-  }
-
-  else if(mode==="rotate" && selected?.anchor){
-    const a=selected.anchor;
-    const dx=p.x-a.x, dy=p.y-a.y;
-    const r=Math.hypot(dx,dy);
-    if(Math.abs(r-HANDLE_R)<HANDLE_W){
-      dragging=true;
-      dragHandle = (Math.atan2(dy,dx)<0) ? "L":"R";
-    }
-  }
-
-  else if(mode==="move" && selected){
-    saveState();
-    dragging=true;
-    startPt=p;
   }
 });
 
-canvas.addEventListener("pointermove", e=>{
-  const p=getPos(e);
-
-  if(drawing && selected){
-    selected.x2=p.x;
-    selected.y2=p.y;
-    draw();
-  }
-
-  if(dragging && mode==="rotate"){
-    const a=selected.anchor;
-    const ang=snap(Math.atan2(p.y-a.y,p.x-a.x));
-    dragHandle==="L" ? selected.aL=ang : selected.aR=ang;
-    draw();
-  }
-
-  if(dragging && mode==="move"){
-    const dx=p.x-startPt.x, dy=p.y-startPt.y;
-    selected.x1+=dx; selected.y1+=dy;
-    selected.x2+=dx; selected.y2+=dy;
-    if(selected.anchor){
-      selected.anchor.x+=dx;
-      selected.anchor.y+=dy;
-    }
-    startPt=p;
-    draw();
-  }
+c.addEventListener("pointermove", e=>{
+  if(!start) return;
+  const p=pos(e);
+  const l=lines.at(-1);
+  l.x2=p.x;
+  l.y2=p.y;
+  redraw();
 });
 
-canvas.addEventListener("pointerup", ()=>{
-  drawing=false;
-  dragging=false;
-  dragHandle=null;
+c.addEventListener("pointerup", ()=>{ start=null; });
+
+// toggle mode with key
+window.addEventListener("keydown", e=>{
+  if(e.key==="a") mode="anchor";
+  if(e.key==="d") mode="draw";
 });
 
-// ---------- DRAW ----------
-function drawSeg(x1,y1,x2,y2,th){
-  const len=Math.hypot(x2-x1,y2-y1);
-  const ang=Math.atan2(y2-y1,x2-x1);
-  ctx.save();
-  ctx.translate(x1,y1);
-  ctx.rotate(ang);
-  ctx.fillRect(0,-th/2,len,th);
-  ctx.restore();
-}
-
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle="#000";
-
-  for(const l of lines){
-    if(!l.anchor){
-      drawSeg(l.x1,l.y1,l.x2,l.y2,l.th);
-      continue;
-    }
-
-    const a=l.anchor;
-
-    ctx.save();
-    ctx.translate(a.x,a.y);
-    ctx.rotate(l.aL);
-    drawSeg(l.x1-a.x,l.y1-a.y,0,0,l.th);
-    ctx.restore();
-
-    ctx.save();
-    ctx.translate(a.x,a.y);
-    ctx.rotate(l.aR);
-    drawSeg(0,0,l.x2-a.x,l.y2-a.y,l.th);
-    ctx.restore();
-
-    // anchor
-    ctx.beginPath();
-    ctx.arc(a.x,a.y,6,0,Math.PI*2);
-    ctx.strokeStyle="red";
-    ctx.stroke();
-
-    if(mode==="rotate" && l===selected){
-      ctx.save();
-      ctx.translate(a.x,a.y);
-      ctx.lineWidth=HANDLE_W;
-      ctx.strokeStyle="#666";
-      ctx.beginPath();
-      ctx.arc(0,0,HANDLE_R,l.aL-0.25,l.aL+0.25);
-      ctx.stroke();
-      ctx.strokeStyle="#000";
-      ctx.beginPath();
-      ctx.arc(0,0,HANDLE_R,l.aR-0.25,l.aR+0.25);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-}
-
-// ---------- UI ----------
-document.getElementById("thick").oninput=e=>{
-  if(selected){ selected.th=+e.target.value; draw(); }
-};
-
-function exportJSON(){
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob(
-    [JSON.stringify(lines,null,2)],{type:"application/json"}));
-  a.download="lines.json";
-  a.click();
-}
-
-function clearAll(){
-  if(!confirm("Clear all?")) return;
-  saveState();
-  lines=[]; selected=null;
-  draw();
-}
-
-draw();
+redraw();
 </script>
 
 </body>
