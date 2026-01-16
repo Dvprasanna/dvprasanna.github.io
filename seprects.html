@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Non-Overlapping Rectangles (Stable)</title>
+<title>Non-Overlapping Rectangles</title>
 
 <style>
 html,body{
@@ -24,13 +24,13 @@ canvas{
 </head>
 
 <body>
-<h3>Non-Overlapping Rectangles (Stable)</h3>
+<h3>Non-Overlapping Rectangles</h3>
 <canvas id="c" width="360" height="520"></canvas>
 
 <script>
 /* =====================================
    Non-Overlapping Rectangles
-   Version: 1.2.1 (loop-safe)
+   Version: 1.2.2 (single-clamp)
    ===================================== */
 
 const canvas = document.getElementById("c");
@@ -59,57 +59,62 @@ function overlap(a,b){
   );
 }
 
-/* ---------- Core resolution (clamp, not push) ---------- */
+/* ---------- Core logic (ONE clamp only) ---------- */
 
 function resolve(candidate){
   let r = norm(candidate);
   const intentX = Math.abs(candidate.w) >= Math.abs(candidate.h);
 
-  let iterations = 0;
-  const MAX = 20;
+  let bestLimit = null;
 
-  let changed = true;
+  for(const o0 of rects){
+    const o = norm(o0);
+    if(!overlap(r,o)) continue;
 
-  while (changed && iterations < MAX) {
-    iterations++;
-    changed = false;
-
-    for (const o0 of rects) {
-      const o = norm(o0);
-      if (!overlap(r, o)) continue;
-
-      const before = { ...r };
-
-      if (intentX) {
-        if (candidate.w > 0) {
-          r.w = Math.max(0, o.x - r.x);
-        } else {
-          const right = r.x + r.w;
-          r.x = o.x + o.w;
-          r.w = right - r.x;
+    if(intentX){
+      if(candidate.w > 0){
+        const limit = o.x;
+        if(limit >= r.x && (bestLimit === null || limit < bestLimit)){
+          bestLimit = limit;
         }
-      } else {
-        if (candidate.h > 0) {
-          r.h = Math.max(0, o.y - r.y);
-        } else {
-          const bottom = r.y + r.h;
-          r.y = o.y + o.h;
-          r.h = bottom - r.y;
+      }else{
+        const limit = o.x + o.w;
+        if(limit <= r.x + r.w && (bestLimit === null || limit > bestLimit)){
+          bestLimit = limit;
         }
       }
-
-      // no change → stop resolving
-      if (
-        r.x === before.x &&
-        r.y === before.y &&
-        r.w === before.w &&
-        r.h === before.h
-      ) {
-        return r;
+    }else{
+      if(candidate.h > 0){
+        const limit = o.y;
+        if(limit >= r.y && (bestLimit === null || limit < bestLimit)){
+          bestLimit = limit;
+        }
+      }else{
+        const limit = o.y + o.h;
+        if(limit <= r.y + r.h && (bestLimit === null || limit > bestLimit)){
+          bestLimit = limit;
+        }
       }
+    }
+  }
 
-      changed = true;
-      break;
+  if(bestLimit !== null){
+    if(intentX){
+      if(candidate.w > 0){
+        r.w = Math.max(0, bestLimit - r.x);
+      }else{
+        const right = r.x + r.w;
+        r.x = bestLimit;
+        r.w = right - r.x;
+      }
+    }else{
+      if(candidate.h > 0){
+        r.h = Math.max(0, bestLimit - r.y);
+      }else{
+        const bottom = r.y + r.h;
+        r.y = bestLimit;
+        r.h = bottom - r.y;
+      }
     }
   }
 
@@ -121,13 +126,13 @@ function resolve(candidate){
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  ctx.strokeStyle = "#0f0";
-  for (const r of rects){
+  ctx.strokeStyle="#0f0";
+  for(const r of rects){
     ctx.strokeRect(r.x,r.y,r.w,r.h);
   }
 
-  if (current){
-    ctx.strokeStyle = "#fff";
+  if(current){
+    ctx.strokeStyle="#fff";
     ctx.strokeRect(current.x,current.y,current.w,current.h);
   }
 }
@@ -135,48 +140,50 @@ function draw(){
 /* ---------- Input ---------- */
 
 function pos(e){
-  const r = canvas.getBoundingClientRect();
-  const p = e.touches ? e.touches[0] : e;
-  return { x:p.clientX-r.left, y:p.clientY-r.top };
+  const r=canvas.getBoundingClientRect();
+  const p=e.touches?e.touches[0]:e;
+  return {x:p.clientX-r.left,y:p.clientY-r.top};
 }
 
 function start(e){
   e.preventDefault();
-  const p = pos(e);
-  drawing = true;
-  sx = p.x; sy = p.y;
-  current = { x:sx, y:sy, w:0, h:0 };
+  const p=pos(e);
+  drawing=true;
+  sx=p.x; sy=p.y;
+  current={x:sx,y:sy,w:0,h:0};
 }
 
 function move(e){
-  if (!drawing) return;
+  if(!drawing) return;
   e.preventDefault();
-  const p = pos(e);
-  current.w = p.x - sx;
-  current.h = p.y - sy;
+  const p=pos(e);
+  current.w=p.x-sx;
+  current.h=p.y-sy;
   draw();
 }
 
 function end(){
-  if (!drawing) return;
-  drawing = false;
+  if(!drawing) return;
+  drawing=false;
 
-  const r = resolve(current);
-  if (r.w > 3 && r.h > 3) rects.push(r);
+  const r=resolve(current);
+  if(r.w>3 && r.h>3){
+    rects.push(r);
+  }
 
-  current = null;
+  current=null;
   draw();
 }
 
 /* ---------- Events ---------- */
 
-canvas.addEventListener("mousedown", start);
-canvas.addEventListener("mousemove", move);
-canvas.addEventListener("mouseup", end);
+canvas.addEventListener("mousedown",start);
+canvas.addEventListener("mousemove",move);
+canvas.addEventListener("mouseup",end);
 
-canvas.addEventListener("touchstart", start, {passive:false});
-canvas.addEventListener("touchmove", move, {passive:false});
-canvas.addEventListener("touchend", end);
+canvas.addEventListener("touchstart",start,{passive:false});
+canvas.addEventListener("touchmove",move,{passive:false});
+canvas.addEventListener("touchend",end);
 
 draw();
 </script>
