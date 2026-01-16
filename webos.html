@@ -2,247 +2,310 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Interaction Engine v1.3</title>
+<title>Interaction Engine v1.5</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-  body {
-    margin: 0;
-    background: #111;
-    color: #eee;
-    font-family: system-ui, sans-serif;
-    height: 100vh;
-    overflow: hidden;
-  }
+body{
+  margin:0;
+  background:#111;
+  color:#eee;
+  font-family:system-ui,sans-serif;
+  height:100vh;
+  overflow:hidden;
+}
 
-  /* ============ TOP BAR ============ */
-  #topbar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: #1a1a1a;
-    border-bottom: 1px solid #333;
-    padding: 6px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    z-index: 10;
-  }
+/* ===== TOP BAR ===== */
+#topbar{
+  position:fixed;
+  top:0;left:0;right:0;
+  height:40px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:4px;
+  background:#1a1a1a;
+  border-bottom:1px solid #333;
+  z-index:10;
+}
+#topbar button, #topbar select{
+  padding:6px 10px;
+  background:#222;
+  color:#eee;
+  border:1px solid #333;
+  cursor:pointer;
+}
+#topbar button.active{
+  background:#0a0;
+  color:#000;
+}
 
-  #topbar button {
-    padding: 6px 10px;
-    background: #222;
-    color: #eee;
-    border: 1px solid #333;
-    cursor: pointer;
-  }
+/* ===== EDITOR ===== */
+#editor{
+  position:fixed;
+  top:40px;left:0;right:0;
+  background:#000;
+  border-bottom:1px solid #333;
+  padding:8px;
+  display:none;
+  z-index:9;
+}
+#editor textarea{
+  width:100%;
+  height:120px;
+  background:#000;
+  color:#0f0;
+  border:1px solid #333;
+  font-family:monospace;
+  font-size:12px;
+}
+#editor button{
+  margin-top:6px;
+  padding:6px 12px;
+  background:#0a0;
+  color:#000;
+  border:none;
+}
 
-  #topbar button.active {
-    background: #0a0;
-    color: #000;
-  }
-
-  #toggleEditor {
-    margin-left: auto;
-    background: #333;
-  }
-
-  /* ============ EDITOR ============ */
-  #editor {
-    position: fixed;
-    top: 40px;
-    left: 0;
-    right: 0;
-    background: #000;
-    border-bottom: 1px solid #333;
-    padding: 8px;
-    display: none;
-    z-index: 9;
-  }
-
-  #editor textarea {
-    width: 100%;
-    height: 120px;
-    background: #000;
-    color: #0f0;
-    border: 1px solid #333;
-    font-family: monospace;
-    font-size: 12px;
-  }
-
-  #editor button {
-    margin-top: 6px;
-    padding: 6px 12px;
-    background: #0a0;
-    color: #000;
-    border: none;
-    cursor: pointer;
-  }
-
-  /* ============ STAGE ============ */
-  #stageWrapper {
-    position: absolute;
-    top: 40px;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    overflow: hidden;
-  }
-
-  #stage {
-    width: 2000px;
-    height: 2000px;
-    background: #000;
-    position: absolute;
-    touch-action: none;
-  }
-
-  .dot {
-    position: absolute;
-    width: 6px;
-    height: 6px;
-    background: #0f0;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-  }
+/* ===== STAGE ===== */
+#stageWrap{
+  position:absolute;
+  top:40px;left:0;right:0;bottom:0;
+  overflow:hidden;
+}
+#stage{
+  width:3000px;
+  height:3000px;
+  position:absolute;
+  background:#000;
+  touch-action:none;
+}
+.shape{
+  position:absolute;
+}
+.dot{
+  width:6px;height:6px;
+  background:#0f0;
+  border-radius:50%;
+  transform:translate(-50%,-50%);
+}
 </style>
 </head>
 
 <body>
-v 1.4
-<!-- ============ TOP BAR ============ -->
+
+<!-- ===== TOP BAR ===== -->
 <div id="topbar">
-  <button id="clearBtn">Clear</button>
   <button id="drawBtn">Draw</button>
   <button id="panBtn">Pan</button>
-  <button id="toggleEditor">Editor</button>
+  <button id="clearBtn">Clear</button>
+
+  <select id="helperSelect">
+    <option value="">Helpers</option>
+    <option value="dot">Dot</option>
+    <option value="free">Freehand</option>
+    <option value="line">Line</option>
+    <option value="circle">Circle</option>
+    <option value="rect">Rectangle</option>
+  </select>
+
+  <button id="toggleEditor" style="margin-left:auto;">Editor</button>
 </div>
 
-<!-- ============ EDITOR PANEL ============ -->
+<!-- ===== EDITOR ===== -->
 <div id="editor">
-  <div>Drag Rule Code</div>
+  <div>Draw Rule Code</div>
   <textarea id="codeInput"></textarea>
   <button id="applyBtn">Apply</button>
 </div>
 
-<!-- ============ STAGE ============ -->
-<div id="stageWrapper">
+<!-- ===== STAGE ===== -->
+<div id="stageWrap">
   <div id="stage"></div>
 </div>
 
 <script>
-/* ============ STATE ============ */
-const clearBtn = document.getElementById("clearBtn");
+/* ===== STATE ===== */
+let tool="draw";
+let dragging=false;
+let editorOpen=false;
+let panX=0, panY=0, lastX=0, lastY=0;
+let sx=0, sy=0;
 
-clearBtn.onclick = () => {
-  stage.innerHTML = "";
-};
-let currentTool = "draw";
-let dragging = false;
-let editorOpen = false;
+const stage=document.getElementById("stage");
 
-let panX = 0, panY = 0;
-let lastX = 0, lastY = 0;
-
-/* ============ RULE ============ */
-
-const rule = {
-  event: "drag",
-  code: "drawDot(e.x, e.y);"
+/* ===== RULE ===== */
+const rule={
+  code:`drawDot(e.x,e.y);`
 };
 
-/* ============ UI ============ */
+/* ===== HELPERS ===== */
+const helpers={
+dot:`drawDot(e.x,e.y);`,
 
-const drawBtn = document.getElementById("drawBtn");
-const panBtn = document.getElementById("panBtn");
-const toggleEditor = document.getElementById("toggleEditor");
-const editor = document.getElementById("editor");
-const codeInput = document.getElementById("codeInput");
+free:`drawDot(e.x,e.y);`,
 
-function updateToolUI() {
-  drawBtn.classList.toggle("active", currentTool === "draw");
-  panBtn.classList.toggle("active", currentTool === "pan");
+line:`
+if(e.start){ sx=e.x; sy=e.y; }
+else{ previewLine(sx,sy,e.x,e.y); }
+if(e.end){ commitLine(sx,sy,e.x,e.y); }
+`,
+
+circle:`
+if(e.start){ sx=e.x; sy=e.y; }
+else{
+  const r=Math.hypot(e.x-sx,e.y-sy);
+  previewCircle(sx,sy,r);
+}
+if(e.end){
+  const r=Math.hypot(e.x-sx,e.y-sy);
+  commitCircle(sx,sy,r);
+}
+`,
+
+rect:`
+if(e.start){ sx=e.x; sy=e.y; }
+else{ previewRect(sx,sy,e.x,e.y); }
+if(e.end){ commitRect(sx,sy,e.x,e.y); }
+`
+};
+
+/* ===== UI ===== */
+const drawBtn=drawBtn=document.getElementById("drawBtn");
+const panBtn=document.getElementById("panBtn");
+const clearBtn=document.getElementById("clearBtn");
+const helperSelect=document.getElementById("helperSelect");
+const editor=document.getElementById("editor");
+const toggleEditor=document.getElementById("toggleEditor");
+const codeInput=document.getElementById("codeInput");
+
+function updateToolUI(){
+  drawBtn.classList.toggle("active",tool==="draw");
+  panBtn.classList.toggle("active",tool==="pan");
+}
+drawBtn.onclick=()=>{tool="draw";updateToolUI();}
+panBtn.onclick=()=>{tool="pan";updateToolUI();}
+clearBtn.onclick=()=>stage.innerHTML="";
+toggleEditor.onclick=()=>{
+  editorOpen=!editorOpen;
+  editor.style.display=editorOpen?"block":"none";
+};
+helperSelect.onchange=e=>{
+  if(helpers[e.target.value]){
+    rule.code=helpers[e.target.value];
+    codeInput.value=rule.code;
+  }
+};
+codeInput.value=rule.code;
+document.getElementById("applyBtn").onclick=()=>{
+  rule.code=codeInput.value;
+};
+
+/* ===== ENGINE ===== */
+function run(code,e){
+  new Function("e","drawDot","previewLine","commitLine","previewCircle","commitCircle","previewRect","commitRect",code)(
+    e,drawDot,previewLine,commitLine,previewCircle,commitCircle,previewRect,commitRect
+  );
 }
 
-drawBtn.onclick = () => {
-  currentTool = "draw";
-  updateToolUI();
-};
-
-panBtn.onclick = () => {
-  currentTool = "pan";
-  updateToolUI();
-};
-
-toggleEditor.onclick = () => {
-  editorOpen = !editorOpen;
-  editor.style.display = editorOpen ? "block" : "none";
-};
-
-codeInput.value = rule.code;
-
-document.getElementById("applyBtn").onclick = () => {
-  rule.code = codeInput.value;
-};
-
-/* ============ ENGINE ============ */
-
-const stage = document.getElementById("stage");
-
-stage.addEventListener("pointerdown", e => {
-  dragging = true;
-  lastX = e.clientX;
-  lastY = e.clientY;
+stage.addEventListener("pointerdown",e=>{
+  dragging=true;
+  lastX=e.clientX; lastY=e.clientY;
+  if(tool==="draw") run(rule.code,{x:e.offsetX,y:e.offsetY,start:true});
 });
-
-stage.addEventListener("pointermove", e => {
-  if (!dragging) return;
-
-  if (currentTool === "draw") {
-    new Function("e","drawDot","drawSquare","log", rule.code)(
-      { x: e.offsetX, y: e.offsetY, shiftKey: e.shiftKey },
-      drawDot,
-      drawSquare,
-      console.log
-    );
-  }
-
-  if (currentTool === "pan") {
-    panX += e.clientX - lastX;
-    panY += e.clientY - lastY;
-    stage.style.transform = `translate(${panX}px, ${panY}px)`;
-    lastX = e.clientX;
-    lastY = e.clientY;
+stage.addEventListener("pointermove",e=>{
+  if(!dragging) return;
+  if(tool==="draw") run(rule.code,{x:e.offsetX,y:e.offsetY});
+  if(tool==="pan"){
+    panX+=e.clientX-lastX;
+    panY+=e.clientY-lastY;
+    stage.style.transform=`translate(${panX}px,${panY}px)`;
+    lastX=e.clientX; lastY=e.clientY;
   }
 });
+stage.addEventListener("pointerup",e=>{
+  if(tool==="draw") run(rule.code,{x:e.offsetX,y:e.offsetY,end:true});
+  dragging=false;
+  clearPreview();
+});
+stage.addEventListener("pointerleave",()=>dragging=false);
 
-stage.addEventListener("pointerup", () => dragging = false);
-stage.addEventListener("pointerleave", () => dragging = false);
+/* ===== DRAW API ===== */
+let previewLayer=null;
+function ensurePreview(){
+  if(!previewLayer){
+    previewLayer=document.createElement("div");
+    stage.appendChild(previewLayer);
+  }
+}
+function clearPreview(){
+  if(previewLayer) previewLayer.innerHTML="";
+}
 
-/* ============ DRAW API ============ */
-
-function drawDot(x, y) {
-  const d = document.createElement("div");
-  d.className = "dot";
-  d.style.left = x + "px";
-  d.style.top = y + "px";
+function drawDot(x,y){
+  const d=document.createElement("div");
+  d.className="shape dot";
+  d.style.left=x+"px";
+  d.style.top=y+"px";
   stage.appendChild(d);
 }
 
-function drawSquare(x, y) {
-  const s = document.createElement("div");
-  s.style.position = "absolute";
-  s.style.width = "8px";
-  s.style.height = "8px";
-  s.style.left = x + "px";
-  s.style.top = y + "px";
-  s.style.background = "#0f0";
-  stage.appendChild(s);
+/* ----- LINE ----- */
+function previewLine(x1,y1,x2,y2){
+  ensurePreview(); clearPreview();
+  const l=document.createElement("div");
+  const len=Math.hypot(x2-x1,y2-y1);
+  l.style.position="absolute";
+  l.style.left=x1+"px";
+  l.style.top=y1+"px";
+  l.style.width=len+"px";
+  l.style.height="1px";
+  l.style.background="#0f0";
+  l.style.transformOrigin="0 0";
+  l.style.transform=`rotate(${Math.atan2(y2-y1,x2-x1)}rad)`;
+  previewLayer.appendChild(l);
+}
+function commitLine(x1,y1,x2,y2){
+  previewLine(x1,y1,x2,y2);
+  stage.appendChild(previewLayer.firstChild.cloneNode(true));
 }
 
-/* ============ INIT ============ */
+/* ----- CIRCLE ----- */
+function previewCircle(cx,cy,r){
+  ensurePreview(); clearPreview();
+  const c=document.createElement("div");
+  c.style.position="absolute";
+  c.style.left=(cx-r)+"px";
+  c.style.top=(cy-r)+"px";
+  c.style.width=(r*2)+"px";
+  c.style.height=(r*2)+"px";
+  c.style.border="1px solid #0f0";
+  c.style.borderRadius="50%";
+  previewLayer.appendChild(c);
+}
+function commitCircle(cx,cy,r){
+  previewCircle(cx,cy,r);
+  stage.appendChild(previewLayer.firstChild.cloneNode(true));
+}
 
+/* ----- RECT ----- */
+function previewRect(x1,y1,x2,y2){
+  ensurePreview(); clearPreview();
+  const r=document.createElement("div");
+  r.style.position="absolute";
+  r.style.left=Math.min(x1,x2)+"px";
+  r.style.top=Math.min(y1,y2)+"px";
+  r.style.width=Math.abs(x2-x1)+"px";
+  r.style.height=Math.abs(y2-y1)+"px";
+  r.style.border="1px solid #0f0";
+  previewLayer.appendChild(r);
+}
+function commitRect(x1,y1,x2,y2){
+  previewRect(x1,y1,x2,y2);
+  stage.appendChild(previewLayer.firstChild.cloneNode(true));
+}
+
+/* ===== INIT ===== */
 updateToolUI();
 </script>
 
