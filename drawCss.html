@@ -1,696 +1,221 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Draw Tool</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canvas Draw – v1.0</title>
 
 <style>
-/* ===============================
-   UI BASELINE – v1.0
-   =============================== */
-
-:root {
-  --bg: #0f0f0f;
-  --surface: #181818;
-  --surface-2: #202020;
-  --text: #eaeaea;
-  --muted: #9a9a9a;
-  --primary: #4ea1ff;
-  --border: #2a2a2a;
-  --radius: 12px;
-  --space: 8px;
+:root{
+  --bg:#0f0f0f;
+  --surface:#181818;
+  --text:#eaeaea;
+  --muted:#9a9a9a;
+  --primary:#4ea1ff;
+  --border:#2a2a2a;
 }
-
-* {
-  box-sizing: border-box;
+html,body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system,sans-serif;
 }
-
-html, body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+.app{
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
 }
-
-/* ===============================
-   LAYOUT
-   =============================== */
-
-.app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+.topbar{
+  display:flex;
+  gap:8px;
+  padding:12px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
 }
-
-/* ---------- TOP BAR ---------- */
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: calc(var(--space) * 2);
-  padding: calc(var(--space) * 2);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+button{
+  background:#202020;
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:10px 14px;
+  min-width:44px;
 }
-
-.group {
-  display: flex;
-  gap: var(--space);
+button.primary{
+  background:var(--primary);
+  color:#000;
 }
-
-/* ---------- BUTTONS ---------- */
-
-button {
-  background: var(--surface-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-  font-size: 14px;
-  min-width: 44px;
+.stage{
+  flex:1;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  padding:16px;
 }
-
-button.primary {
-  background: var(--primary);
-  color: #000;
-  border-color: transparent;
+.canvas-frame{
+  background:#000;
+  padding:12px;
+  border-radius:12px;
+  border:1px solid var(--border);
 }
-
-button.ghost {
-  background: transparent;
+canvas{
+  background:#000;
+  touch-action:none;
 }
-
-button.icon {
-  padding: 10px;
-}
-
-/* ---------- CANVAS STAGE ---------- */
-
-.stage {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: calc(var(--space) * 3);
-}
-
-.canvas-frame {
-  background: #000;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: calc(var(--space) * 2);
-}
-
-canvas {
-  display: block;
-  background: #000;
-  border-radius: 6px;
-  touch-action: none;
-}
-
-/* ---------- CONTEXT BAR ---------- */
-
-.context {
-  padding: calc(var(--space) * 2);
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  font-size: 13px;
-  color: var(--muted);
-  text-align: center;
-}
-
-/* ===============================
-   SMALL SCREENS
-   =============================== */
-
-@media (max-width: 480px) {
-  .topbar {
-    flex-wrap: wrap;
-  }
+.context{
+  padding:10px;
+  text-align:center;
+  font-size:13px;
+  color:var(--muted);
+  border-top:1px solid var(--border);
+  background:var(--surface);
 }
 </style>
 </head>
 
 <body>
-
 <div class="app">
 
-  <!-- ================= TOP BAR ================= -->
   <div class="topbar">
-
-    <!-- MODE -->
-    <div class="group">
-      <button class="primary">Draw</button>
-      <button>Select</button>
-      <button>Trim</button>
-    </div>
-
-    <!-- WIDTH -->
-    <div class="group">
-      <button class="ghost">S</button>
-      <button class="ghost primary">M</button>
-      <button class="ghost">L</button>
-    </div>
-
-    <!-- UNDO -->
-    <div class="group">
-      <button class="icon">↶</button>
-    </div>
-
+    <button class="primary">Draw</button>
+    <button>S</button>
+    <button class="primary">M</button>
+    <button>L</button>
   </div>
 
-  <!-- ================= CANVAS ================= -->
   <div class="stage">
     <div class="canvas-frame">
-      <canvas width="600" height="800"></canvas>
+      <canvas id="canvas"></canvas>
     </div>
   </div>
 
-  <!-- ================= CONTEXT ================= -->
   <div class="context">
-    Drag from edges to draw full perpendicular lines
+    Drag from edges to draw full lines · Drag from corners for circles
   </div>
 
 </div>
 
-<!--
-UI Version: v1.0
-Purpose: Clean draw interface (HTML + CSS only)
--->
 <script>
-(() => {
-  const svg = document.getElementById('svg');
-  const sizeSel = document.getElementById('size');
-  const lwS = document.getElementById('lw-s'), lwM = document.getElementById('lw-m'), lwL = document.getElementById('lw-l');
-  const modeDraw = document.getElementById('mode-draw'), modeSelect = document.getElementById('mode-select'), modeTrim = document.getElementById('mode-trim');
-  const status = document.getElementById('status');
-  const splitBtn = document.getElementById('split');
-  const undoBtn = document.getElementById('undo'), clearBtn = document.getElementById('clear');
+/* ===== Canvas Setup ===== */
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
 
-  let width = 3;
-  let currentMode = 'draw';
-  let history = [];
-  let shapes = []; // {type:'line'|'circle'|'polyline', el:SVGElement, data:...}
-  let pointerDownInfo = null;
-  let ghost = null;
-  const HOTZONE = 50;
-  let trimActive = false;
+function resize(w=600,h=800){
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w+'px';
+  canvas.style.height = h+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+resize();
 
-  function setCanvasSize(val){
-    const [w,h] = val.split('x').map(Number);
-    svg.setAttribute('width', w);
-    svg.setAttribute('height', h);
-    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    svg.parentElement.style.width = w + 'px';
-    svg.parentElement.style.height = h + 'px';
-  }
-  setCanvasSize(sizeSel.value);
-  sizeSel.addEventListener('change', e => setCanvasSize(e.target.value));
+/* ===== State ===== */
+let shapes = [];
+let history = [];
+let width = 4;
+const HOTZONE = 50;
 
-  function setWidth(wName){
-    lwS.classList.remove('active'); lwM.classList.remove('active'); lwL.classList.remove('active');
-    if(wName==='S'){ lwS.classList.add('active'); width=2; }
-    if(wName==='M'){ lwM.classList.add('active'); width=4; }
-    if(wName==='L'){ lwL.classList.add('active'); width=7; }
-    status.textContent = `Mode: ${currentMode === 'draw' ? 'Draw' : currentMode === 'select' ? 'Select' : 'Trim'} — Width: ${wName}`;
-  }
-  lwS.addEventListener('click', ()=>setWidth('S'));
-  lwM.addEventListener('click', ()=>setWidth('M'));
-  lwL.addEventListener('click', ()=>setWidth('L'));
-  setWidth('M');
+let pointer = {active:false};
+let ghost = null;
 
-  function setMode(m){
-    currentMode = m;
-    modeDraw.classList.toggle('active', m==='draw');
-    modeSelect.classList.toggle('active', m==='select');
-    modeTrim.classList.toggle('active', m==='trim');
-    trimActive = (m === 'trim');
-    status.textContent = `Mode: ${m.charAt(0).toUpperCase()+m.slice(1)} — Width: ${document.querySelector('.toolbar .active')?.textContent || 'M'}`;
-    if(trimActive){
-      // prepare shapes by splitting at intersections (so segments exist)
-      splitAtIntersections();
+/* ===== Helpers ===== */
+function pos(e){
+  const r = canvas.getBoundingClientRect();
+  return {x:e.clientX-r.left,y:e.clientY-r.top};
+}
+
+function redraw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  shapes.forEach(s=>{
+    ctx.lineWidth = s.w;
+    ctx.strokeStyle = '#fff';
+    ctx.beginPath();
+    if(s.type==='line'){
+      ctx.moveTo(s.x1,s.y1);
+      ctx.lineTo(s.x2,s.y2);
     }
-  }
-
-  modeDraw.addEventListener('click', ()=>setMode('draw'));
-  modeSelect.addEventListener('click', ()=>setMode('select'));
-  modeTrim.addEventListener('click', ()=>setMode(trimActive ? 'draw' : 'trim')); // toggle
-
-  function createGhostFullLineVertical(x){
-    removeGhost();
-    ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ghost.setAttribute('x1', x); ghost.setAttribute('y1', 0); ghost.setAttribute('x2', x); ghost.setAttribute('y2', svg.viewBox.baseVal.height);
-    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
-    svg.appendChild(ghost);
-  }
-  function createGhostFullLineHorizontal(y){
-    removeGhost();
-    ghost = document.createElementNS('http://www.w3.org/2000/svg','line');
-    ghost.setAttribute('x1', 0); ghost.setAttribute('y1', y); ghost.setAttribute('x2', svg.viewBox.baseVal.width); ghost.setAttribute('y2', y);
-    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
-    svg.appendChild(ghost);
-  }
-  function createGhostCircle(cx,cy,r){
-    removeGhost();
-    ghost = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    ghost.setAttribute('cx',cx); ghost.setAttribute('cy',cy); ghost.setAttribute('r',r);
-    ghost.setAttribute('class','ghost'); ghost.setAttribute('stroke-width', width);
-    svg.appendChild(ghost);
-  }
-  function removeGhost(){ if(ghost){ghost.remove(); ghost=null;} }
-
-  function addShape(obj){
-    shapes.push(obj);
-    history.push({op:'add', shape:obj});
-  }
-
-  function makeFullVerticalLine(x){
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-    line.classList.add('shape');
-    line.setAttribute('x1',x); line.setAttribute('y1',0); line.setAttribute('x2',x); line.setAttribute('y2',svg.viewBox.baseVal.height);
-    line.setAttribute('stroke-width', width);
-    svg.appendChild(line);
-    addShape({type:'line', el:line, x1:x,y1:0,x2:x,y2:svg.viewBox.baseVal.height, w:width});
-  }
-
-  function makeFullHorizontalLine(y){
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-    line.classList.add('shape');
-    line.setAttribute('x1',0); line.setAttribute('y1',y); line.setAttribute('x2',svg.viewBox.baseVal.width); line.setAttribute('y2',y);
-    line.setAttribute('stroke-width', width);
-    svg.appendChild(line);
-    addShape({type:'line', el:line, x1:0,y1:y,x2:svg.viewBox.baseVal.width,y2:y, w:width});
-  }
-
-  function makeCircle(cx,cy,r){
-    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    c.classList.add('shape');
-    c.setAttribute('cx',cx); c.setAttribute('cy',cy); c.setAttribute('r',r);
-    c.setAttribute('stroke-width', width);
-    svg.appendChild(c);
-    addShape({type:'circle', el:c, cx,cy,r, w:width});
-  }
-
-  // helper: pointer coords relative to svg
-  function svgPoint(evt){
-    const pt = svg.createSVGPoint();
-    pt.x = evt.clientX; pt.y = evt.clientY;
-    const loc = pt.matrixTransform(svg.getScreenCTM().inverse());
-    return {x:loc.x, y:loc.y};
-  }
-
-  // prevent default touch scrolling when interacting with SVG
-  svg.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    svg.setPointerCapture(e.pointerId);
-    if(currentMode !== 'draw'){ return; }
-    const p = svgPoint(e);
-    const vb = svg.viewBox.baseVal;
-    const margin = HOTZONE;
-    const nearLeft = p.x <= margin;
-    const nearRight = p.x >= vb.width - margin;
-    const nearTop = p.y <= margin;
-    const nearBottom = p.y >= vb.height - margin;
-    const nearCorner = (nearLeft||nearRight) && (nearTop||nearBottom);
-    const nearEdge = nearLeft || nearRight || nearTop || nearBottom;
-    pointerDownInfo = {start:p, corner:nearCorner, edge:nearEdge, nearLeft, nearRight, nearTop, nearBottom};
-    if(nearCorner){
-      const cx = nearLeft ? 0 : vb.width;
-      const cy = nearTop ? 0 : vb.height;
-      createGhostCircle(cx, cy, Math.hypot(p.x-cx, p.y-cy));
-    } else if(nearEdge){
-      if(nearLeft || nearRight){
-        createGhostFullLineVertical(p.x);
-        pointerDownInfo.axis = 'vertical';
-      } else {
-        createGhostFullLineHorizontal(p.y);
-        pointerDownInfo.axis = 'horizontal';
-      }
-    } else {
-      pointerDownInfo = null;
+    if(s.type==='circle'){
+      ctx.arc(s.cx,s.cy,s.r,0,Math.PI*2);
     }
-  }, {passive:false});
-
-  svg.addEventListener('pointermove', (e) => {
-    if(pointerDownInfo) e.preventDefault();
-    const p = svgPoint(e);
-    if(pointerDownInfo && ghost){
-      if(pointerDownInfo.corner){
-        const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
-        const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
-        const r = Math.hypot(p.x-cx, p.y-cy);
-        ghost.setAttribute('r', r);
-      } else if(pointerDownInfo.edge){
-        if(pointerDownInfo.axis === 'vertical'){
-          let x = Math.max(0, Math.min(svg.viewBox.baseVal.width, p.x));
-          ghost.setAttribute('x1', x); ghost.setAttribute('x2', x);
-        } else {
-          let y = Math.max(0, Math.min(svg.viewBox.baseVal.height, p.y));
-          ghost.setAttribute('y1', y); ghost.setAttribute('y2', y);
-        }
-      }
-    }
-  }, {passive:false});
-
-  svg.addEventListener('pointerup', (e) => {
-    e.preventDefault();
-    svg.releasePointerCapture(e.pointerId);
-    if(!pointerDownInfo || !ghost){ pointerDownInfo=null; removeGhost(); return; }
-    if(pointerDownInfo.corner){
-      const cx = pointerDownInfo.nearLeft ? 0 : svg.viewBox.baseVal.width;
-      const cy = pointerDownInfo.nearTop ? 0 : svg.viewBox.baseVal.height;
-      const r = parseFloat(ghost.getAttribute('r'));
-      makeCircle(cx,cy,r);
-    } else if(pointerDownInfo.edge){
-      if(pointerDownInfo.axis === 'vertical'){
-        const x = parseFloat(ghost.getAttribute('x1'));
-        makeFullVerticalLine(x);
-      } else {
-        const y = parseFloat(ghost.getAttribute('y1'));
-        makeFullHorizontalLine(y);
-      }
-    }
-    pointerDownInfo=null;
-    removeGhost();
-  }, {passive:false});
-
-  // --- click-to-trim behavior: when trimActive, clicking a segment deletes it ---
-  svg.addEventListener('click', (e) => {
-    if(!trimActive) return;
-    // find clicked element that is a shape
-    const target = e.target;
-    if(!target || !target.classList || !target.classList.contains('shape')) return;
-    // remove element and remove from shapes array, add to history for undo
-    const shapeObj = shapes.find(s => s.el === target);
-    if(shapeObj){
-      target.remove();
-      shapes = shapes.filter(s => s !== shapeObj);
-      history.push({op:'del', shape: shapeObj});
-    }
+    ctx.stroke();
   });
+}
 
-  clearBtn.addEventListener('click', ()=>{ shapes.forEach(s=>s.el.remove()); shapes=[]; history.push({op:'clear'}); });
-
-  undoBtn.addEventListener('click', ()=>{ const h = history.pop(); if(!h) return; if(h.op==='add'){ h.shape.el.remove(); shapes = shapes.filter(s=>s!==h.shape);} else if(h.op==='del'){ svg.appendChild(h.shape.el); shapes.push(h.shape); } else if(h.op==='clear'){ /* can't undo clear in prototype */ } });
-
-  // intersection math helpers
-  function lineLineInter(l1, l2){
-    const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
-    const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
-    const denom = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
-    if(Math.abs(denom) < 1e-6) return null;
-    const xi = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4))/denom;
-    const yi = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4))/denom;
-    function between(a,b,c){ return Math.min(a,b)-1e-6 <= c && c <= Math.max(a,b)+1e-6; }
-    if(between(x1,x2,xi) && between(y1,y2,yi) && between(x3,x4,xi) && between(y3,y4,yi)) return {x:xi,y:yi};
-    return null;
+/* ===== Ghost ===== */
+function drawGhost(){
+  if(!ghost) return;
+  ctx.save();
+  ctx.setLineDash([6,6]);
+  ctx.strokeStyle='#4ea1ff';
+  ctx.lineWidth=ghost.w;
+  ctx.beginPath();
+  if(ghost.type==='vline'){
+    ctx.moveTo(ghost.x,0);
+    ctx.lineTo(ghost.x,800);
   }
-  function lineCircleInter(line, circle){
-    const x1=line.x1, y1=line.y1, x2=line.x2, y2=line.y2;
-    const cx=circle.cx, cy=circle.cy, r=circle.r;
-    const dx = x2-x1, dy=y2-y1;
-    const fx = x1-cx, fy=y1-cy;
-    const a = dx*dx+dy*dy;
-    const b = 2*(fx*dx+fy*dy);
-    const c = fx*fx+fy*fy - r*r;
-    let disc = b*b - 4*a*c;
-    if(disc < -1e-6) return [];
-    disc = Math.max(0, disc);
-    const t1 = (-b + Math.sqrt(disc)) / (2*a);
-    const t2 = (-b - Math.sqrt(disc)) / (2*a);
-    const points = [];
-    [t1,t2].forEach(t => {
-      if(t >= -1e-6 && t <= 1+1e-6){
-        points.push({x: x1 + dx*t, y: y1 + dy*t});
-      }
-    });
-    return points;
+  if(ghost.type==='hline'){
+    ctx.moveTo(0,ghost.y);
+    ctx.lineTo(600,ghost.y);
   }
-  function circleCircleInter(c1, c2){
-    const x0=c1.cx, y0=c1.cy, r0=c1.r;
-    const x1=c2.cx, y1=c2.cy, r1=c2.r;
-    const dx = x1-x0, dy=y1-y0;
-    const d = Math.hypot(dx,dy);
-    if(d > r0 + r1 + 1e-6) return [];
-    if(d < Math.abs(r0-r1) - 1e-6) return [];
-    if(d < 1e-9 && Math.abs(r0-r1) < 1e-9) return [];
-    const a = (r0*r0 - r1*r1 + d*d) / (2*d);
-    const h = Math.sqrt(Math.max(0, r0*r0 - a*a));
-    const xm = x0 + a*dx/d;
-    const ym = y0 + a*dy/d;
-    const rx = -dy * (h/d);
-    const ry = dx * (h/d);
-    const p1 = {x: xm + rx, y: ym + ry};
-    const p2 = {x: xm - rx, y: ym - ry};
-    if(Math.hypot(p1.x-p2.x,p1.y-p2.y) < 1e-6) return [p1];
-    return [p1,p2];
+  if(ghost.type==='circle'){
+    ctx.arc(ghost.cx,ghost.cy,ghost.r,0,Math.PI*2);
   }
+  ctx.stroke();
+  ctx.restore();
+}
 
-  function markIntersection(pt){
-    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    dot.setAttribute('cx', pt.x); dot.setAttribute('cy', pt.y); dot.setAttribute('r', 3);
-    dot.setAttribute('class','intersection-dot');
-    svg.appendChild(dot);
-    setTimeout(()=>dot.remove(), 2000);
+/* ===== Pointer Flow ===== */
+canvas.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  const p = pos(e);
+  pointer.active=true;
+
+  const w=600,h=800;
+  const L=p.x<=HOTZONE,R=p.x>=w-HOTZONE;
+  const T=p.y<=HOTZONE,B=p.y>=h-HOTZONE;
+
+  if((L||R)&&(T||B)){
+    ghost={type:'circle',cx:L?0:w,cy:T?0:h,r:0,w:width};
+  }else if(L||R){
+    ghost={type:'vline',x:p.x,w:width};
+  }else if(T||B){
+    ghost={type:'hline',y:p.y,w:width};
   }
+  redraw(); drawGhost();
+},{passive:false});
 
-  // Split at intersections: converts circles into polylines when intersections exist,
-  // and splits lines into smaller line segments between intersection points.
-  function splitAtIntersections(){
-    const lines = shapes.filter(s=>s.type==='line').map(s=>s);
-    const circles = shapes.filter(s=>s.type==='circle').map(s=>s);
-    const intersections = [];
-
-    // compute intersections
-    for(let i=0;i<lines.length;i++){
-      for(let j=i+1;j<lines.length;j++){
-        const p = lineLineInter(lines[i], lines[j]);
-        if(p){ intersections.push({p, with:[lines[i],lines[j]]}); markIntersection(p); }
-      }
-    }
-    for(let i=0;i<lines.length;i++){
-      for(let j=0;j<circles.length;j++){
-        const pts = lineCircleInter(lines[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[lines[i],circles[j]]}); markIntersection(p); });
-      }
-    }
-    for(let i=0;i<circles.length;i++){
-      for(let j=i+1;j<circles.length;j++){
-        const pts = circleCircleInter(circles[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[circles[i],circles[j]]}); markIntersection(p); });
-      }
-    }
-
-    const newShapes = [];
-    // split lines into segments
-    lines.forEach(l => {
-      const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
-      ptsOnLine.push({x:l.x1,y:l.y1}); ptsOnLine.push({x:l.x2,y:l.y2});
-      const dx = l.x2 - l.x1, dy = l.y2 - l.y1;
-      const params = ptsOnLine.map(p => {
-        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - l.x1) / (dx || 1e-6)) : ((p.y - l.y1)/(dy || 1e-6));
-        return Math.max(0, Math.min(1, t));
-      });
-      const uniq = Array.from(new Set(params.map(t=>t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
-      for(let i=0;i<uniq.length-1;i++){
-        const ta=uniq[i], tb=uniq[i+1];
-        const ax = l.x1 + dx * ta, ay = l.y1 + dy * ta;
-        const bx = l.x1 + dx * tb, by = l.y1 + dy * tb;
-        if(Math.hypot(bx-ax,by-ay) > 2){
-          const seg = document.createElementNS('http://www.w3.org/2000/svg','line');
-          seg.classList.add('shape');
-          seg.setAttribute('x1',ax); seg.setAttribute('y1',ay); seg.setAttribute('x2',bx); seg.setAttribute('y2',by);
-          seg.setAttribute('stroke-width', l.w);
-          svg.appendChild(seg);
-          newShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by, w:l.w});
-        }
-      }
-      l.el.remove();
-    });
-
-    // approximate circles as polylines and split into arcs between intersections
-    circles.forEach(c => {
-      const N = 120;
-      const pts = [];
-      for(let i=0;i<N;i++){
-        const a = (i/N)*Math.PI*2;
-        pts.push({x: c.cx + c.r*Math.cos(a), y: c.cy + c.r*Math.sin(a), a});
-      }
-      const intsOnC = intersections.filter(it => it.with.includes(c)).map(it => it.p);
-      const idxSet = new Set();
-      pts.forEach((pt, idx) => {
-        intsOnC.forEach(ip => {
-          if(Math.hypot(pt.x-ip.x, pt.y-ip.y) < 6){ idxSet.add(idx); }
-        });
-      });
-      const idxs = Array.from(idxSet).sort((a,b)=>a-b);
-      if(idxs.length === 0){
-        // no intersections -> keep circle as-is
-        const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
-        circ.classList.add('shape');
-        circ.setAttribute('cx', c.cx); circ.setAttribute('cy', c.cy); circ.setAttribute('r', c.r);
-        circ.setAttribute('stroke-width', c.w);
-        svg.appendChild(circ);
-        newShapes.push({type:'circle', el:circ, cx:c.cx,cy:c.cy,r:c.r, w:c.w});
-        c.el.remove();
-        return;
-      }
-      // create polyline segments between intersection indices
-      const sorted = idxs;
-      for(let s=0;s<sorted.length;s++){
-        const i1 = sorted[s], i2 = sorted[(s+1)%sorted.length];
-        let segPts = [];
-        let i = i1;
-        while(true){
-          segPts.push(pts[i]);
-          if(i === i2) break;
-          i = (i+1)%pts.length;
-        }
-        if(segPts.length > 1){
-          const path = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-          path.classList.add('shape');
-          path.setAttribute('points', segPts.map(p=>`${p.x},${p.y}`).join(' '));
-          path.setAttribute('fill','none');
-          path.setAttribute('stroke-width', c.w);
-          svg.appendChild(path);
-          newShapes.push({type:'polyline', el:path, pts:segPts, w:c.w});
-        }
-      }
-      c.el.remove();
-    });
-
-    // replace the old lines/circles in shapes with newSegments
-    shapes = shapes.filter(s => !(s.type==='line' || s.type==='circle'));
-    newShapes.forEach(ns => shapes.push(ns));
+canvas.addEventListener('pointermove',e=>{
+  if(!pointer.active||!ghost) return;
+  e.preventDefault();
+  const p=pos(e);
+  if(ghost.type==='circle'){
+    ghost.r=Math.hypot(p.x-ghost.cx,p.y-ghost.cy);
   }
+  if(ghost.type==='vline'){ ghost.x=p.x; }
+  if(ghost.type==='hline'){ ghost.y=p.y; }
+  redraw(); drawGhost();
+},{passive:false});
 
-  splitBtn.addEventListener('click', () => {
-    splitAtIntersections();
-  });
-
-  function splitAtIntersections(){
-    // wrapper so we can call from toolbar or trim activation
-    splitAtIntersectionsCore();
+canvas.addEventListener('pointerup',e=>{
+  e.preventDefault();
+  if(!ghost) return;
+  history.push(JSON.stringify(shapes));
+  if(ghost.type==='circle'){
+    shapes.push({type:'circle',cx:ghost.cx,cy:ghost.cy,r:ghost.r,w:ghost.w});
   }
-
-  // Because we used a nested function name above, rename core implementation:
-  function splitAtIntersectionsCore(){
-    // implementation moved up earlier: call same logic by reusing function body
-    // To keep code compact here, call splitAtIntersectionsInternal which is defined below
-    splitAtIntersectionsInternal();
+  if(ghost.type==='vline'){
+    shapes.push({type:'line',x1:ghost.x,y1:0,x2:ghost.x,y2:800,w:ghost.w});
   }
-
-  // To avoid duplication, define the internal actual splitter function (copy of function body above)
-  function splitAtIntersectionsInternal(){
-    const lines = shapes.filter(s=>s.type==='line').map(s=>s);
-    const circles = shapes.filter(s=>s.type==='circle').map(s=>s);
-    const intersections = [];
-
-    for(let i=0;i<lines.length;i++){
-      for(let j=i+1;j<lines.length;j++){
-        const p = lineLineInter(lines[i], lines[j]);
-        if(p){ intersections.push({p, with:[lines[i],lines[j]]}); markIntersection(p); }
-      }
-    }
-    for(let i=0;i<lines.length;i++){
-      for(let j=0;j<circles.length;j++){
-        const pts = lineCircleInter(lines[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[lines[i],circles[j]]}); markIntersection(p); });
-      }
-    }
-    for(let i=0;i<circles.length;i++){
-      for(let j=i+1;j<circles.length;j++){
-        const pts = circleCircleInter(circles[i], circles[j]);
-        pts.forEach(p => { intersections.push({p, with:[circles[i],circles[j]]}); markIntersection(p); });
-      }
-    }
-
-    const newShapes = [];
-    lines.forEach(l => {
-      const ptsOnLine = intersections.filter(it => it.with.includes(l)).map(it => it.p);
-      ptsOnLine.push({x:l.x1,y:l.y1}); ptsOnLine.push({x:l.x2,y:l.y2});
-      const dx = l.x2 - l.x1, dy = l.y2 - l.y1;
-      const params = ptsOnLine.map(p => {
-        let t = (Math.abs(dx) > Math.abs(dy)) ? ((p.x - l.x1) / (dx || 1e-6)) : ((p.y - l.y1)/(dy || 1e-6));
-        return Math.max(0, Math.min(1, t));
-      });
-      const uniq = Array.from(new Set(params.map(t=>t.toFixed(6)))).map(s=>parseFloat(s)).sort((a,b)=>a-b);
-      for(let i=0;i<uniq.length-1;i++){
-        const ta=uniq[i], tb=uniq[i+1];
-        const ax = l.x1 + dx * ta, ay = l.y1 + dy * ta;
-        const bx = l.x1 + dx * tb, by = l.y1 + dy * tb;
-        if(Math.hypot(bx-ax,by-ay) > 2){
-          const seg = document.createElementNS('http://www.w3.org/2000/svg','line');
-          seg.classList.add('shape');
-          seg.setAttribute('x1',ax); seg.setAttribute('y1',ay); seg.setAttribute('x2',bx); seg.setAttribute('y2',by);
-          seg.setAttribute('stroke-width', l.w);
-          svg.appendChild(seg);
-          newShapes.push({type:'line', el:seg, x1:ax,y1:ay,x2:bx,y2:by, w:l.w});
-        }
-      }
-      l.el.remove();
-    });
-
-    circles.forEach(c => {
-      const N = 120;
-      const pts = [];
-      for(let i=0;i<N;i++){
-        const a = (i/N)*Math.PI*2;
-        pts.push({x: c.cx + c.r*Math.cos(a), y: c.cy + c.r*Math.sin(a), a});
-      }
-      const intsOnC = intersections.filter(it => it.with.includes(c)).map(it => it.p);
-      const idxSet = new Set();
-      pts.forEach((pt, idx) => {
-        intsOnC.forEach(ip => {
-          if(Math.hypot(pt.x-ip.x, pt.y-ip.y) < 6){ idxSet.add(idx); }
-        });
-      });
-      const idxs = Array.from(idxSet).sort((a,b)=>a-b);
-      if(idxs.length === 0){
-        const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
-        circ.classList.add('shape');
-        circ.setAttribute('cx', c.cx); circ.setAttribute('cy', c.cy); circ.setAttribute('r', c.r);
-        circ.setAttribute('stroke-width', c.w);
-        svg.appendChild(circ);
-        newShapes.push({type:'circle', el:circ, cx:c.cx,cy:c.cy,r:c.r, w:c.w});
-        c.el.remove();
-        return;
-      }
-      const sorted = idxs;
-      for(let s=0;s<sorted.length;s++){
-        const i1 = sorted[s], i2 = sorted[(s+1)%sorted.length];
-        let segPts = [];
-        let i = i1;
-        while(true){
-          segPts.push(pts[i]);
-          if(i === i2) break;
-          i = (i+1)%pts.length;
-        }
-        if(segPts.length > 1){
-          const path = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-          path.classList.add('shape');
-          path.setAttribute('points', segPts.map(p=>`${p.x},${p.y}`).join(' '));
-          path.setAttribute('fill','none');
-          path.setAttribute('stroke-width', c.w);
-          svg.appendChild(path);
-          newShapes.push({type:'polyline', el:path, pts:segPts, w:c.w});
-        }
-      }
-      c.el.remove();
-    });
-
-    shapes = shapes.filter(s => !(s.type==='line' || s.type==='circle'));
-    newShapes.forEach(ns => shapes.push(ns));
+  if(ghost.type==='hline'){
+    shapes.push({type:'line',x1:0,y1:ghost.y,x2:600,y2:ghost.y,w:ghost.w});
   }
-
-  // toolbar split button directly exposes the splitter
-  splitBtn.addEventListener('click', () => {
-    splitAtIntersectionsInternal();
-  });
-
-})();
+  ghost=null;
+  pointer.active=false;
+  redraw();
+},{passive:false});
 </script>
+
+<!-- Version: Canvas Draw v1.0 -->
 </body>
 </html>
