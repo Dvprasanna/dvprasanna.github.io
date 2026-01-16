@@ -1,126 +1,249 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Independent Line Angles</title>
+<title>Line Hinge CAD v1</title>
 <style>
-  body { margin:0; background:#fff; font-family:sans-serif; }
-  canvas { display:block; margin:auto; touch-action:none; }
-  .controls { text-align:center; padding:8px; }
-  input { width:80px; }
+  body { margin:0; font-family:system-ui; background:#f5f5f5; }
+  #top {
+    display:flex;
+    gap:6px;
+    padding:8px;
+    background:#222;
+    color:#fff;
+  }
+  button { padding:6px 10px; }
+  canvas {
+    display:block;
+    background:#fff;
+    touch-action:none;
+  }
+  #props {
+    padding:8px;
+    background:#eee;
+    display:flex;
+    gap:10px;
+    align-items:center;
+  }
 </style>
 </head>
 <body>
 
-<canvas id="c" width="600" height="300"></canvas>
+<div id="top">
+  <button onclick="setMode('draw')">DRAW</button>
+  <button onclick="setMode('anchor')">ANCHOR</button>
+  <button onclick="setMode('rotate')">ROTATE</button>
+  <button onclick="setMode('move')">MOVE</button>
+  <button onclick="undo()">UNDO</button>
+  <button onclick="redo()">REDO</button>
+  <button onclick="exportJSON()">EXPORT</button>
+  <button onclick="clearAll()">CLEAR</button>
+</div>
 
-<div class="controls">
-  Left Angle:
-  <input type="number" id="left" value="0">°
-  &nbsp;&nbsp;
-  Right Angle:
-  <input type="number" id="right" value="0">°
+<canvas id="c" width="900" height="500"></canvas>
+
+<div id="props">
+  Thickness:
+  <input type="range" min="4" max="30" value="12" id="thick">
 </div>
 
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-const THICK = 14;
+const SNAP = Math.PI / 36; // 5°
+const HANDLE_R = 35;
+const HANDLE_W = 10;
 
-// initial line
-const line = {
-  x1: 120, y1: 150,
-  x2: 480, y2: 150
-};
+let mode = "draw";
+let lines = [];
+let selected = null;
+let drawing = false;
+let dragging = false;
+let dragHandle = null;
+let startPt = null;
 
-let anchor = null;
-let leftAngle = 0;
-let rightAngle = 0;
+let history = [];
+let redoStack = [];
 
-// ---- DRAW ----
-function draw() {
-  ctx.clearRect(0,0,600,300);
-
-  if (!anchor) {
-    drawSegment(line.x1, line.y1, line.x2, line.y2);
-    return;
-  }
-
-  // anchor
-  ctx.beginPath();
-  ctx.arc(anchor.x, anchor.y, 6, 0, Math.PI*2);
-  ctx.strokeStyle = "red";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // LEFT SEGMENT
-  ctx.save();
-  ctx.translate(anchor.x, anchor.y);
-  ctx.rotate(leftAngle);
-  drawSegment(
-    line.x1 - anchor.x,
-    line.y1 - anchor.y,
-    0, 0
-  );
-  ctx.restore();
-
-  // RIGHT SEGMENT
-  ctx.save();
-  ctx.translate(anchor.x, anchor.y);
-  ctx.rotate(rightAngle);
-  drawSegment(
-    0, 0,
-    line.x2 - anchor.x,
-    line.y2 - anchor.y
-  );
-  ctx.restore();
+function saveState(){
+  history.push(JSON.parse(JSON.stringify(lines)));
+  redoStack = [];
 }
 
-// ---- DRAW THICK SEGMENT ----
-function drawSegment(x1,y1,x2,y2){
-  const len = Math.hypot(x2-x1, y2-y1);
-  const ang = Math.atan2(y2-y1, x2-x1);
+function undo(){
+  if (!history.length) return;
+  redoStack.push(lines);
+  lines = history.pop();
+  draw();
+}
 
+function redo(){
+  if (!redoStack.length) return;
+  history.push(lines);
+  lines = redoStack.pop();
+  draw();
+}
+
+function setMode(m){ mode = m; }
+
+function getPos(e){
+  const r = canvas.getBoundingClientRect();
+  return { x:e.clientX-r.left, y:e.clientY-r.top };
+}
+
+function project(p, l){
+  const vx=l.x2-l.x1, vy=l.y2-l.y1;
+  const t=((p.x-l.x1)*vx+(p.y-l.y1)*vy)/(vx*vx+vy*vy);
+  return { x:l.x1+t*vx, y:l.y1+t*vy, t };
+}
+
+function snap(a){ return Math.round(a/SNAP)*SNAP; }
+
+canvas.addEventListener("pointerdown", e=>{
+  const p=getPos(e);
+
+  if(mode==="draw"){
+    drawing=true;
+    startPt=p;
+    saveState();
+    const t=document.getElementById("thick").value;
+    lines.push({ x1:p.x,y1:p.y,x2:p.x,y2:p.y,th:+t,
+      anchor:null, aL:0, aR:0 });
+    selected=lines.at(-1);
+  }
+
+  else if(mode==="anchor" && selected){
+    selected.anchor = project(p,selected);
+    selected.aL=0; selected.aR=0;
+    saveState();
+  }
+
+  else if(mode==="rotate" && selected?.anchor){
+    const a = selected.anchor;
+    const dx=p.x-a.x, dy=p.y-a.y;
+    const r=Math.hypot(dx,dy);
+    const ang=Math.atan2(dy,dx);
+    if(Math.abs(r-HANDLE_R)<HANDLE_W){
+      dragHandle = (ang<0)? "left":"right";
+      dragging=true;
+    }
+  }
+
+  else if(mode==="move" && selected){
+    dragging=true;
+    startPt=p;
+    saveState();
+  }
+});
+
+canvas.addEventListener("pointermove", e=>{
+  const p=getPos(e);
+
+  if(drawing && selected){
+    selected.x2=p.x; selected.y2=p.y;
+    draw();
+  }
+
+  if(dragging && mode==="rotate"){
+    const a=selected.anchor;
+    const ang=snap(Math.atan2(p.y-a.y,p.x-a.x));
+    dragHandle==="left"? selected.aL=ang : selected.aR=ang;
+    draw();
+  }
+
+  if(dragging && mode==="move"){
+    const dx=p.x-startPt.x, dy=p.y-startPt.y;
+    selected.x1+=dx; selected.y1+=dy;
+    selected.x2+=dx; selected.y2+=dy;
+    if(selected.anchor){ selected.anchor.x+=dx; selected.anchor.y+=dy; }
+    startPt=p;
+    draw();
+  }
+});
+
+canvas.addEventListener("pointerup", ()=>{
+  drawing=false;
+  dragging=false;
+  dragHandle=null;
+});
+
+function drawSegment(x1,y1,x2,y2,th){
+  const len=Math.hypot(x2-x1,y2-y1);
+  const ang=Math.atan2(y2-y1,x2-x1);
   ctx.save();
   ctx.translate(x1,y1);
   ctx.rotate(ang);
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, -THICK/2, len, THICK);
+  ctx.fillRect(0,-th/2,len,th);
   ctx.restore();
 }
 
-// ---- PROJECT CLICK TO LINE ----
-canvas.addEventListener("pointerdown", e=>{
-  const r = canvas.getBoundingClientRect();
-  const px = e.clientX - r.left;
-  const py = e.clientY - r.top;
-  anchor = projectToLine(px, py, line);
-  draw();
-});
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#000";
 
-// ---- INPUTS ----
-document.getElementById("left").oninput = e=>{
-  leftAngle = (+e.target.value || 0) * Math.PI / 180;
-  draw();
-};
+  for(const l of lines){
+    if(!l.anchor){
+      drawSegment(l.x1,l.y1,l.x2,l.y2,l.th);
+      continue;
+    }
+    const a=l.anchor;
 
-document.getElementById("right").oninput = e=>{
-  rightAngle = (+e.target.value || 0) * Math.PI / 180;
-  draw();
-};
+    ctx.save();
+    ctx.translate(a.x,a.y);
+    ctx.rotate(l.aL);
+    drawSegment(l.x1-a.x,l.y1-a.y,0,0,l.th);
+    ctx.restore();
 
-// ---- PROJECTION ----
-function projectToLine(px, py, L){
-  const vx = L.x2 - L.x1;
-  const vy = L.y2 - L.y1;
-  const t = ((px - L.x1)*vx + (py - L.y1)*vy) / (vx*vx + vy*vy);
-  return {
-    x: L.x1 + t*vx,
-    y: L.y1 + t*vy
-  };
+    ctx.save();
+    ctx.translate(a.x,a.y);
+    ctx.rotate(l.aR);
+    drawSegment(0,0,l.x2-a.x,l.y2-a.y,l.th);
+    ctx.restore();
+
+    // anchor
+    ctx.beginPath();
+    ctx.arc(a.x,a.y,6,0,Math.PI*2);
+    ctx.strokeStyle="red";
+    ctx.stroke();
+
+    if(mode==="rotate" && l===selected){
+      ctx.save();
+      ctx.translate(a.x,a.y);
+      ctx.lineWidth=HANDLE_W;
+      ctx.strokeStyle="#666";
+      ctx.beginPath();
+      ctx.arc(0,0,HANDLE_R,l.aL-0.25,l.aL+0.25);
+      ctx.stroke();
+      ctx.strokeStyle="#000";
+      ctx.beginPath();
+      ctx.arc(0,0,HANDLE_R,l.aR-0.25,l.aR+0.25);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
 }
+
+function exportJSON(){
+  const data=JSON.stringify(lines,null,2);
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([data],{type:"application/json"}));
+  a.download="lines.json";
+  a.click();
+}
+
+function clearAll(){
+  if(!confirm("Clear all?"))return;
+  saveState();
+  lines=[];
+  selected=null;
+  draw();
+}
+
+document.getElementById("thick").oninput=e=>{
+  if(selected){ selected.th=+e.target.value; draw(); }
+};
 
 draw();
 </script>
