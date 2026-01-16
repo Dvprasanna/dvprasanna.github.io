@@ -3,28 +3,44 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Canvas Draw – v1.0</title>
+<title>Canvas Draw</title>
 
 <style>
+/* ===============================
+   CANVAS DRAW – UI v1.1
+   =============================== */
+
 :root{
   --bg:#0f0f0f;
   --surface:#181818;
+  --surface2:#202020;
   --text:#eaeaea;
   --muted:#9a9a9a;
   --primary:#4ea1ff;
   --border:#2a2a2a;
 }
+
+*{ box-sizing:border-box; }
+
 html,body{
   margin:0;
   background:var(--bg);
   color:var(--text);
   font-family:system-ui,-apple-system,sans-serif;
 }
+
+/* ===============================
+   LAYOUT
+   =============================== */
+
 .app{
   min-height:100vh;
   display:flex;
   flex-direction:column;
 }
+
+/* ---------- TOP BAR ---------- */
+
 .topbar{
   display:flex;
   gap:8px;
@@ -32,18 +48,24 @@ html,body{
   background:var(--surface);
   border-bottom:1px solid var(--border);
 }
+
 button{
-  background:#202020;
+  background:var(--surface2);
   color:var(--text);
   border:1px solid var(--border);
   border-radius:10px;
   padding:10px 14px;
   min-width:44px;
+  font-size:14px;
 }
+
 button.primary{
   background:var(--primary);
   color:#000;
 }
+
+/* ---------- CANVAS STAGE ---------- */
+
 .stage{
   flex:1;
   display:flex;
@@ -51,30 +73,42 @@ button.primary{
   align-items:center;
   padding:16px;
 }
+
+/* OUTER FRAME (visual placement) */
 .canvas-frame{
   background:#000;
   padding:12px;
-  border-radius:12px;
-  border:1px solid var(--border);
+  border-radius:14px;
+  border:2px solid #3a3a3a;
 }
+
+/* ACTUAL CANVAS */
 canvas{
+  display:block;
   background:#000;
+  border:1px solid #4ea1ff;   /* CANVAS BORDER */
+  border-radius:6px;
   touch-action:none;
 }
+
+/* ---------- CONTEXT ---------- */
+
 .context{
   padding:10px;
   text-align:center;
   font-size:13px;
   color:var(--muted);
-  border-top:1px solid var(--border);
   background:var(--surface);
+  border-top:1px solid var(--border);
 }
 </style>
 </head>
 
 <body>
+
 <div class="app">
 
+  <!-- TOP BAR -->
   <div class="topbar">
     <button class="primary">Draw</button>
     <button>S</button>
@@ -82,50 +116,60 @@ canvas{
     <button>L</button>
   </div>
 
+  <!-- CANVAS -->
   <div class="stage">
     <div class="canvas-frame">
       <canvas id="canvas"></canvas>
     </div>
   </div>
 
+  <!-- CONTEXT -->
   <div class="context">
-    Drag from edges to draw full lines · Drag from corners for circles
+    Drag from edges for full lines · Drag from corners for circles
   </div>
 
 </div>
 
 <script>
-/* ===== Canvas Setup ===== */
+/* ===============================
+   CANVAS CORE – v1.1
+   =============================== */
+
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-const dpr = window.devicePixelRatio || 1;
+const DPR = window.devicePixelRatio || 1;
 
-function resize(w=600,h=800){
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-  canvas.style.width = w+'px';
-  canvas.style.height = h+'px';
-  ctx.setTransform(dpr,0,0,dpr,0,0);
+const W = 600;
+const H = 800;
+const HOTZONE = 50;
+
+function resizeCanvas(){
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
 }
-resize();
+resizeCanvas();
 
-/* ===== State ===== */
+/* ---------- STATE ---------- */
+
 let shapes = [];
 let history = [];
 let width = 4;
-const HOTZONE = 50;
 
-let pointer = {active:false};
+let pointer = { active:false };
 let ghost = null;
 
-/* ===== Helpers ===== */
-function pos(e){
+/* ---------- HELPERS ---------- */
+
+function getPos(e){
   const r = canvas.getBoundingClientRect();
-  return {x:e.clientX-r.left,y:e.clientY-r.top};
+  return { x:e.clientX - r.left, y:e.clientY - r.top };
 }
 
 function redraw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.clearRect(0,0,W,H);
   shapes.forEach(s=>{
     ctx.lineWidth = s.w;
     ctx.strokeStyle = '#fff';
@@ -141,81 +185,113 @@ function redraw(){
   });
 }
 
-/* ===== Ghost ===== */
 function drawGhost(){
   if(!ghost) return;
   ctx.save();
   ctx.setLineDash([6,6]);
-  ctx.strokeStyle='#4ea1ff';
-  ctx.lineWidth=ghost.w;
+  ctx.strokeStyle = '#4ea1ff';
+  ctx.lineWidth = ghost.w;
   ctx.beginPath();
+
   if(ghost.type==='vline'){
     ctx.moveTo(ghost.x,0);
-    ctx.lineTo(ghost.x,800);
+    ctx.lineTo(ghost.x,H);
   }
   if(ghost.type==='hline'){
     ctx.moveTo(0,ghost.y);
-    ctx.lineTo(600,ghost.y);
+    ctx.lineTo(W,ghost.y);
   }
   if(ghost.type==='circle'){
     ctx.arc(ghost.cx,ghost.cy,ghost.r,0,Math.PI*2);
   }
+
   ctx.stroke();
   ctx.restore();
 }
 
-/* ===== Pointer Flow ===== */
-canvas.addEventListener('pointerdown',e=>{
+/* ===============================
+   POINTER FLOW
+   =============================== */
+
+canvas.addEventListener('pointerdown', e=>{
   e.preventDefault();
   canvas.setPointerCapture(e.pointerId);
-  const p = pos(e);
-  pointer.active=true;
 
-  const w=600,h=800;
-  const L=p.x<=HOTZONE,R=p.x>=w-HOTZONE;
-  const T=p.y<=HOTZONE,B=p.y>=h-HOTZONE;
+  const p = getPos(e);
+  pointer.active = true;
+
+  const L = p.x <= HOTZONE;
+  const R = p.x >= W - HOTZONE;
+  const T = p.y <= HOTZONE;
+  const B = p.y >= H - HOTZONE;
+
+  ghost = null;
 
   if((L||R)&&(T||B)){
-    ghost={type:'circle',cx:L?0:w,cy:T?0:h,r:0,w:width};
-  }else if(L||R){
-    ghost={type:'vline',x:p.x,w:width};
-  }else if(T||B){
-    ghost={type:'hline',y:p.y,w:width};
+    ghost = {
+      type:'circle',
+      cx: L ? 0 : W,
+      cy: T ? 0 : H,
+      r: 0,
+      w: width
+    };
+  } else if(L||R){
+    ghost = { type:'vline', x:p.x, w:width };
+  } else if(T||B){
+    ghost = { type:'hline', y:p.y, w:width };
   }
-  redraw(); drawGhost();
+
+  redraw();
+  drawGhost();
 },{passive:false});
 
-canvas.addEventListener('pointermove',e=>{
-  if(!pointer.active||!ghost) return;
+canvas.addEventListener('pointermove', e=>{
+  if(!pointer.active || !ghost) return;
   e.preventDefault();
-  const p=pos(e);
-  if(ghost.type==='circle'){
-    ghost.r=Math.hypot(p.x-ghost.cx,p.y-ghost.cy);
-  }
-  if(ghost.type==='vline'){ ghost.x=p.x; }
-  if(ghost.type==='hline'){ ghost.y=p.y; }
-  redraw(); drawGhost();
-},{passive:false});
 
-canvas.addEventListener('pointerup',e=>{
-  e.preventDefault();
-  if(!ghost) return;
-  history.push(JSON.stringify(shapes));
+  const p = getPos(e);
+
   if(ghost.type==='circle'){
-    shapes.push({type:'circle',cx:ghost.cx,cy:ghost.cy,r:ghost.r,w:ghost.w});
+    ghost.r = Math.hypot(p.x - ghost.cx, p.y - ghost.cy);
   }
   if(ghost.type==='vline'){
-    shapes.push({type:'line',x1:ghost.x,y1:0,x2:ghost.x,y2:800,w:ghost.w});
+    ghost.x = Math.max(0,Math.min(W,p.x));
   }
   if(ghost.type==='hline'){
-    shapes.push({type:'line',x1:0,y1:ghost.y,x2:600,y2:ghost.y,w:ghost.w});
+    ghost.y = Math.max(0,Math.min(H,p.y));
   }
-  ghost=null;
-  pointer.active=false;
+
+  redraw();
+  drawGhost();
+},{passive:false});
+
+canvas.addEventListener('pointerup', e=>{
+  e.preventDefault();
+  canvas.releasePointerCapture(e.pointerId);
+
+  if(ghost){
+    history.push(JSON.stringify(shapes));
+
+    if(ghost.type==='circle'){
+      shapes.push({ type:'circle', cx:ghost.cx, cy:ghost.cy, r:ghost.r, w:ghost.w });
+    }
+    if(ghost.type==='vline'){
+      shapes.push({ type:'line', x1:ghost.x, y1:0, x2:ghost.x, y2:H, w:ghost.w });
+    }
+    if(ghost.type==='hline'){
+      shapes.push({ type:'line', x1:0, y1:ghost.y, x2:W, y2:ghost.y, w:ghost.w });
+    }
+  }
+
+  ghost = null;
+  pointer.active = false;
   redraw();
 },{passive:false});
+
+/* ===============================
+   Version: Canvas Draw v1.1
+   =============================== */
 </script>
 
-<!-- Version: Canvas Draw v1.0 -->
 </body>
 </html>
