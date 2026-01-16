@@ -1,148 +1,94 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+# Interactive Web Experiments
 
-<title>Interactive Web Experiments</title>
+A personal collection of lightweight web apps exploring **drawing, grids, balance, motion, text, and interaction logic**.  
+These are not demos — they are structured experiments with varying stability levels.
 
-<style>
-:root{
-  --bg:#0e0e0e;
-  --fg:#eaeaea;
-  --muted:#888;
-  --border:#2a2a2a;
-  --stable:#2ecc71;
-  --mid:#f1c40f;
-  --exp:#e67e22;
-}
-body{
-  margin:0;
-  background:var(--bg);
-  color:var(--fg);
-  font-family:system-ui, sans-serif;
-}
-header{
-  padding:20px;
-  border-bottom:1px solid var(--border);
-}
-h1{margin:0;font-size:22px;}
-.subtitle{color:var(--muted);font-size:14px;}
-.stats{
-  display:flex;
-  gap:20px;
-  padding:16px;
-  border-bottom:1px solid var(--border);
-}
-.stat{
-  font-size:14px;
-}
-main{
-  padding:16px;
-}
-.group{
-  margin-bottom:24px;
-}
-.group h2{
-  font-size:16px;
-  border-bottom:1px solid var(--border);
-  padding-bottom:6px;
-}
-.app{
-  display:flex;
-  justify-content:space-between;
-  padding:6px 0;
-  border-bottom:1px dashed var(--border);
-}
-.app a{
-  color:#9cdcfe;
-  text-decoration:none;
-}
-.badge{
-  font-size:12px;
-  padding:2px 8px;
-  border-radius:10px;
-}
-.s5{background:var(--stable);}
-.s4{background:#27ae60;}
-.s3{background:var(--mid);}
-.s2{background:var(--exp);}
-footer{
-  padding:12px;
-  color:var(--muted);
-  border-top:1px solid var(--border);
-  font-size:12px;
-}
-</style>
-</head>
+---
 
-<body>
+## Project Stats
 
-<header>
-  <h1>Interactive Web Experiments</h1>
-  <div class="subtitle">Canvas, text, balance, motion — structured explorations</div>
-</header>
+| Metric | Value |
+|------|------|
+| Total apps | 22 |
+| Stable (rating 4–5) | 12 |
+| Experimental (rating 2–3) | 10 |
+| Core engines | 4 |
 
-<div class="stats">
-  <div class="stat">Total Apps: <strong>22</strong></div>
-  <div class="stat">Stable (4–5): <strong>12</strong></div>
-  <div class="stat">Experimental: <strong>10</strong></div>
-  <div class="stat">Core Engines: <strong>4</strong></div>
-</div>
+**Stability Scale**
+- **5** – Stable (reusable, deterministic)
+- **4** – Mostly stable
+- **3** – Experimental but usable
+- **2** – Prototype / research
+- **1** – Concept only
 
-<main>
+---
 
-<!-- DRAWING -->
-<div class="group">
-<h2>Drawing & Geometry</h2>
-<div class="app"><a href="draw.html">draw.html</a><span class="badge s4">4</span></div>
-<div class="app"><a href="drawdoodle.html">drawdoodle.html</a><span class="badge s4">4</span></div>
-<div class="app"><a href="linex.html">linex.html</a><span class="badge s4">4</span></div>
-<div class="app"><a href="drawx.html">drawx.html</a><span class="badge s3">3</span></div>
-<div class="app"><a href="drawy.html">drawy.html</a><span class="badge s3">3</span></div>
-<div class="app"><a href="mycurve.html">mycurve.html</a><span class="badge s3">3</span></div>
-<div class="app"><a href="p_curve.html">p_curve.html</a><span class="badge s2">2</span></div>
-</div>
+## Drawing & Geometry
 
-<!-- GRID -->
-<div class="group">
-<h2>Grid, Balance & Perception</h2>
-<div class="app"><a href="grid.html">grid.html</a><span class="badge s5">5</span></div>
-<div class="app"><a href="perfect.html">perfect.html</a><span class="badge s4">4</span></div>
-<div class="app"><a href="scanner.html">scanner.html</a><span class="badge s3">3</span></div>
-</div>
+| File | Description | Stability |
+|----|------------|----------|
+| [draw.html](draw.html) | Basic drawing | 4 |
+| [drawdoodle.html](drawdoodle.html) | Free doodle drawing | 4 |
+| [linex.html](linex.html) | Linear drawing logic | 4 |
+| [drawx.html](drawx.html) | X-axis constrained drawing | 3 |
+| [drawy.html](drawy.html) | Y-axis constrained drawing | 3 |
+| [mycurve.html](mycurve.html) | Custom curve tool | 3 |
+| [p_curve.html](p_curve.html) | Parametric curve experiment | 2 |
 
-<!-- ANIMATION -->
-<div class="group">
-<h2>Animation & Motion</h2>
-<div class="app"><a href="anim1.html">anim1.html</a><span class="badge s3">3</span></div>
-<div class="app"><a href="anim2.html">anim2.html</a><span class="badge s3">3</span></div>
-<div class="app"><a href="sliding.html">sliding.html</a><span class="badge s3">3</span></div>
-<div class="app"><a href="slidingv1.html">slidingv1.html</a><span class="badge s4">4</span></div>
-</div>
+---
 
-<!-- TEXT -->
-<div class="group">
-<h2>Text & Utilities</h2>
-<div class="app"><a href="textv2.html">textv2.html</a><span class="badge s5">5</span></div>
-<div class="app"><a href="alarmc.html">alarmc.html</a><span class="badge s4">4</span></div>
-<div class="app"><a href="xgame.html">xgame.html</a><span class="badge s3">3</span></div>
-</div>
+## Grid, Balance & Perception
 
-<!-- SYSTEM -->
-<div class="group">
-<h2>Visual / System</h2>
-<div class="app"><a href="drawtext.html">drawtext.html</a><span class="badge s3">3</span></div>
-<div class="app"><a href="drawtextc.html">drawtextc.html</a><span class="badge s4">4</span></div>
-<div class="app"><a href="image.html">image.html</a><span class="badge s3">3</span></div>
-<div class="app"><a href="site.html">site.html</a><span class="badge s4">4</span></div>
-</div>
+| File | Description | Stability |
+|----|------------|----------|
+| [grid.html](grid.html) | Grid-based drawing system | 5 |
+| [perfect.html](perfect.html) | Balance / symmetry logic | 4 |
+| [scanner.html](scanner.html) | Scan-style perception motion | 3 |
 
-</main>
+---
 
-<footer>
-  GitHub Pages • v1.0 • Structured experimentation
-</footer>
+## Animation & Motion
 
-</body>
-</html>
+| File | Description | Stability |
+|----|------------|----------|
+| [anim1.html](anim1.html) | Walking man animation | 3 |
+| [anim2.html](anim2.html) | Walking man (variant) | 3 |
+| [sliding.html](sliding.html) | Sliding interaction | 3 |
+| [slidingv1.html](slidingv1.html) | Sliding (refined) | 4 |
+
+---
+
+## Text & Utilities
+
+| File | Description | Stability |
+|----|------------|----------|
+| [textv2.html](textv2.html) | Text table maker | 5 |
+| [alarmc.html](alarmc.html) | Excel-like alarm logic | 4 |
+| [xgame.html](xgame.html) | Logic / interaction game | 3 |
+
+---
+
+## Text Visuals & System
+
+| File | Description | Stability |
+|----|------------|----------|
+| [drawtext.html](drawtext.html) | Text-based screen saver | 3 |
+| [drawtextc.html](drawtextc.html) | Controlled screen saver | 4 |
+| [image.html](image.html) | Image experiment | 3 |
+| [site.html](site.html) | Layout / site test | 4 |
+| index.html | Project launcher | 5 |
+
+---
+
+## Notes
+
+- Files are intentionally **small and dependency-free**
+- Variants exist to preserve thinking history
+- Stability reflects **logic reliability**, not visual polish
+
+---
+
+## Version
+
+**Repository version:** v1.0  
+**Status:** Actively evolving through consolidation, not expansion
