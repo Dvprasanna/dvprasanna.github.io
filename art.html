@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Art Type Comparison – Sortable</title>
+<title>Multi-Sort Comparison Table</title>
 
 <style>
   body {
@@ -21,7 +21,22 @@
 
   h1 {
     font-size: 22px;
+    margin-bottom: 12px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 12px;
     margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  select {
+    background: #171a2e;
+    color: #eaeaf0;
+    border: 1px solid #2a2e4a;
+    padding: 8px 10px;
+    font-size: 14px;
   }
 
   table {
@@ -38,96 +53,102 @@
 
   th {
     background: #1f2340;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  th:hover {
-    background: #2a2e4a;
+    text-align: left;
   }
 
   td:nth-child(3) {
-    font-weight: 600;
     text-align: center;
+    font-weight: 600;
   }
 
   .yes { color: #4ade80; }
   .no  { color: #f87171; }
-
-  .hint {
-    font-size: 12px;
-    color: #9aa0c3;
-    margin-bottom: 8px;
-  }
 </style>
 </head>
 
 <body>
 <div class="container">
-  <h1>Art Type × Characteristic Comparison</h1>
-  <div class="hint">Click any column header to sort</div>
+  <h1>Art Type × Characteristic (Multi-Sort)</h1>
+
+  <div class="controls">
+    <label>
+      1st sort:
+      <select id="primarySort">
+        <option value="0">Art Type</option>
+        <option value="1">Characteristic</option>
+        <option value="2">Applies (Yes/No)</option>
+      </select>
+    </label>
+
+    <label>
+      2nd sort:
+      <select id="secondarySort">
+        <option value="1">Characteristic</option>
+        <option value="0">Art Type</option>
+        <option value="2">Applies (Yes/No)</option>
+      </select>
+    </label>
+  </div>
 
   <table id="comparisonTable">
     <thead>
       <tr>
-        <th onclick="sortTable(0)">Art Type</th>
-        <th onclick="sortTable(1)">Characteristic</th>
-        <th onclick="sortTable(2)">Applies</th>
+        <th>Art Type</th>
+        <th>Characteristic</th>
+        <th>Applies</th>
       </tr>
     </thead>
     <tbody>
-      <!-- Identity & Branding -->
-      <tr><td>Identity & Branding</td><td>Action orientation</td><td class="no">No</td></tr>
-      <tr><td>Identity & Branding</td><td>Cultural / legal relevance</td><td class="yes">Yes</td></tr>
-      <tr><td>Identity & Branding</td><td>Emotional intensity</td><td class="no">No</td></tr>
       <tr><td>Identity & Branding</td><td>Longevity</td><td class="yes">Yes</td></tr>
-      <tr><td>Identity & Branding</td><td>Memory impact</td><td class="yes">Yes</td></tr>
+      <tr><td>Identity & Branding</td><td>Emotional intensity</td><td class="no">No</td></tr>
       <tr><td>Identity & Branding</td><td>Precision requirement</td><td class="yes">Yes</td></tr>
 
-      <!-- Illusion & Perception -->
       <tr><td>Illusion & Perception</td><td>Emotional intensity</td><td class="yes">Yes</td></tr>
       <tr><td>Illusion & Perception</td><td>Longevity</td><td class="no">No</td></tr>
-      <tr><td>Illusion & Perception</td><td>Memory impact</td><td class="yes">Yes</td></tr>
-      <tr><td>Illusion & Perception</td><td>Precision requirement</td><td class="yes">Yes</td></tr>
 
-      <!-- Communication & Marketing -->
       <tr><td>Communication & Marketing</td><td>Action orientation</td><td class="yes">Yes</td></tr>
-      <tr><td>Communication & Marketing</td><td>Emotional intensity</td><td class="yes">Yes</td></tr>
       <tr><td>Communication & Marketing</td><td>Longevity</td><td class="no">No</td></tr>
 
-      <!-- Information & Instruction -->
       <tr><td>Information & Instruction</td><td>Precision requirement</td><td class="yes">Yes</td></tr>
-      <tr><td>Information & Instruction</td><td>Longevity</td><td class="yes">Yes</td></tr>
       <tr><td>Information & Instruction</td><td>Emotional intensity</td><td class="no">No</td></tr>
 
-      <!-- Digital & Interface -->
       <tr><td>Digital & Interface</td><td>Functional interaction</td><td class="yes">Yes</td></tr>
-      <tr><td>Digital & Interface</td><td>Precision requirement</td><td class="yes">Yes</td></tr>
       <tr><td>Digital & Interface</td><td>Emotional intensity</td><td class="no">No</td></tr>
     </tbody>
   </table>
 </div>
 
 <script>
-let sortDirection = {};
+const primary = document.getElementById("primarySort");
+const secondary = document.getElementById("secondarySort");
+const tbody = document.querySelector("#comparisonTable tbody");
 
-function sortTable(colIndex) {
-  const table = document.getElementById("comparisonTable");
-  const tbody = table.tBodies[0];
+primary.addEventListener("change", sortTable);
+secondary.addEventListener("change", sortTable);
+
+function sortTable() {
+  const p = parseInt(primary.value);
+  const s = parseInt(secondary.value);
+
   const rows = Array.from(tbody.rows);
 
-  sortDirection[colIndex] = !sortDirection[colIndex];
-  const dir = sortDirection[colIndex] ? 1 : -1;
-
   rows.sort((a, b) => {
-    let A = a.cells[colIndex].innerText.toLowerCase();
-    let B = b.cells[colIndex].innerText.toLowerCase();
-    if (A < B) return -1 * dir;
-    if (A > B) return 1 * dir;
+    let A1 = a.cells[p].innerText.toLowerCase();
+    let B1 = b.cells[p].innerText.toLowerCase();
+
+    if (A1 < B1) return -1;
+    if (A1 > B1) return 1;
+
+    let A2 = a.cells[s].innerText.toLowerCase();
+    let B2 = b.cells[s].innerText.toLowerCase();
+
+    if (A2 < B2) return -1;
+    if (A2 > B2) return 1;
+
     return 0;
   });
 
-  rows.forEach(row => tbody.appendChild(row));
+  rows.forEach(r => tbody.appendChild(r));
 }
 </script>
 
