@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Art Comparison with Sub-Categories</title>
+<title>Characters vs Types Matrix</title>
 
 <style>
   body {
@@ -13,10 +13,9 @@
     color: #eaeaf0;
   }
 
-  .container {
-    max-width: 1300px;
-    margin: 30px auto;
-    padding: 0 16px;
+  .wrap {
+    padding: 24px;
+    overflow-x: auto;
   }
 
   h1 {
@@ -25,103 +24,174 @@
   }
 
   table {
-    width: 100%;
     border-collapse: collapse;
+    min-width: 1400px;
     background: #171a2e;
   }
 
   th, td {
     border: 1px solid #2a2e4a;
     padding: 10px 12px;
-    font-size: 14px;
+    text-align: center;
+    font-size: 13px;
   }
 
   th {
     background: #1f2340;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  td:nth-child(4) {
-    text-align: center;
     font-weight: 600;
+    position: sticky;
+    top: 0;
   }
 
-  .yes { color: #4ade80; }
-  .no  { color: #f87171; }
-
-  .hint {
-    font-size: 12px;
-    color: #9aa0c3;
-    margin-bottom: 10px;
+  td:first-child,
+  th:first-child {
+    text-align: left;
+    background: #14172a;
+    position: sticky;
+    left: 0;
+    font-weight: 500;
   }
+
+  .yes { color: #4ade80; font-weight: 600; }
+  .no  { color: #f87171; font-weight: 600; }
 </style>
 </head>
 
 <body>
-<div class="container">
-  <h1>Art Type Comparison (with Sub-Categories)</h1>
-  <div class="hint">Click any column header to sort</div>
+<div class="wrap">
+  <h1>Characters × Types Comparison</h1>
 
-  <table id="table">
+  <table>
     <thead>
       <tr>
-        <th onclick="sortTable(0)">Art Type</th>
-        <th onclick="sortTable(1)">Sub-Category</th>
-        <th onclick="sortTable(2)">Characteristic</th>
-        <th onclick="sortTable(3)">Applies</th>
+        <th>Characteristic</th>
+        <th>Identity & Branding</th>
+        <th>Illusion & Perception</th>
+        <th>Marketing</th>
+        <th>Information</th>
+        <th>Editorial</th>
+        <th>Interface</th>
+        <th>Art & Expression</th>
+        <th>Packaging</th>
+        <th>Corporate</th>
+        <th>Symbolic</th>
       </tr>
     </thead>
+
     <tbody>
+      <tr>
+        <td>Action orientation</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+      </tr>
 
-      <!-- Identity & Branding -->
-      <tr><td>Identity & Branding</td><td>Recognition</td><td>Memory impact</td><td class="yes">Yes</td></tr>
-      <tr><td>Identity & Branding</td><td>Recognition</td><td>Recognition focus</td><td class="yes">Yes</td></tr>
-      <tr><td>Identity & Branding</td><td>Stability</td><td>Longevity</td><td class="yes">Yes</td></tr>
-      <tr><td>Identity & Branding</td><td>Stability</td><td>Frequent change</td><td class="no">No</td></tr>
+      <tr>
+        <td>Emotional intensity</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+      </tr>
 
-      <!-- Illusion & Perception -->
-      <tr><td>Illusion & Perception</td><td>Cognition</td><td>Emotional intensity</td><td class="yes">Yes</td></tr>
-      <tr><td>Illusion & Perception</td><td>Cognition</td><td>Memory impact</td><td class="yes">Yes</td></tr>
-      <tr><td>Illusion & Perception</td><td>Temporal</td><td>Longevity</td><td class="no">No</td></tr>
+      <tr>
+        <td>Longevity</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+      </tr>
 
-      <!-- Communication & Marketing -->
-      <tr><td>Communication & Marketing</td><td>Conversion</td><td>Action orientation</td><td class="yes">Yes</td></tr>
-      <tr><td>Communication & Marketing</td><td>Conversion</td><td>Short-term use</td><td class="yes">Yes</td></tr>
-      <tr><td>Communication & Marketing</td><td>Retention</td><td>Memory impact</td><td class="no">No</td></tr>
+      <tr>
+        <td>Memory impact</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+      </tr>
 
-      <!-- Information & Instruction -->
-      <tr><td>Information & Instruction</td><td>Clarity</td><td>Precision requirement</td><td class="yes">Yes</td></tr>
-      <tr><td>Information & Instruction</td><td>Clarity</td><td>Emotional intensity</td><td class="no">No</td></tr>
+      <tr>
+        <td>Precision requirement</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+      </tr>
 
-      <!-- Digital & Interface -->
-      <tr><td>Digital & Interface</td><td>Usability</td><td>Functional interaction</td><td class="yes">Yes</td></tr>
-      <tr><td>Digital & Interface</td><td>Usability</td><td>Precision requirement</td><td class="yes">Yes</td></tr>
+      <tr>
+        <td>Scalability requirement</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+      </tr>
 
+      <tr>
+        <td>Storytelling emphasis</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+      </tr>
+
+      <tr>
+        <td>Cultural / legal relevance</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+      </tr>
     </tbody>
   </table>
 </div>
-
-<script>
-let dir = {};
-
-function sortTable(col) {
-  const tbody = document.querySelector("#table tbody");
-  const rows = Array.from(tbody.rows);
-  dir[col] = !dir[col];
-  const d = dir[col] ? 1 : -1;
-
-  rows.sort((a, b) => {
-    let A = a.cells[col].innerText.toLowerCase();
-    let B = b.cells[col].innerText.toLowerCase();
-    if (A < B) return -1 * d;
-    if (A > B) return 1 * d;
-    return 0;
-  });
-
-  rows.forEach(r => tbody.appendChild(r));
-}
-</script>
-
 </body>
 </html>
