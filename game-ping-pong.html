@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Minimal Ping Pong</title>
+<style>
+    body {
+        margin: 0;
+        background: #ffffff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        font-family: Arial, sans-serif;
+    }
+    canvas {
+        border: 3px solid #000;
+    }
+</style>
+</head>
+<body>
+
+<canvas id="game" width="600" height="800"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+// Game objects
+const paddleWidth = 15;
+const paddleHeight = 120;
+
+let leftPaddle = {
+    x: 30,
+    y: canvas.height / 2 - paddleHeight / 2,
+    speed: 6
+};
+
+let rightPaddle = {
+    x: canvas.width - 45,
+    y: canvas.height / 2 - paddleHeight / 2,
+    speed: 4
+};
+
+let ball = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    r: 10,
+    dx: 5,
+    dy: 5
+};
+
+// Controls
+let upPressed = false;
+let downPressed = false;
+
+document.addEventListener("keydown", e => {
+    if (e.key === "ArrowUp") upPressed = true;
+    if (e.key === "ArrowDown") downPressed = true;
+});
+
+document.addEventListener("keyup", e => {
+    if (e.key === "ArrowUp") upPressed = false;
+    if (e.key === "ArrowDown") downPressed = false;
+});
+
+// Draw functions
+function drawRect(x, y, w, h) {
+    ctx.strokeRect(x, y, w, h);
+}
+
+function drawBall() {
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+// Game logic
+function update() {
+    // Player paddle
+    if (upPressed && leftPaddle.y > 0) leftPaddle.y -= leftPaddle.speed;
+    if (downPressed && leftPaddle.y < canvas.height - paddleHeight)
+        leftPaddle.y += leftPaddle.speed;
+
+    // AI paddle
+    if (ball.y < rightPaddle.y + paddleHeight / 2)
+        rightPaddle.y -= rightPaddle.speed;
+    else
+        rightPaddle.y += rightPaddle.speed;
+
+    // Ball movement
+    ball.x += ball.dx;
+    ball.y += ball.dy;
+
+    // Wall collision
+    if (ball.y < 0 || ball.y > canvas.height) ball.dy *= -1;
+
+    // Paddle collision
+    if (
+        ball.x - ball.r < leftPaddle.x + paddleWidth &&
+        ball.y > leftPaddle.y &&
+        ball.y < leftPaddle.y + paddleHeight
+    ) ball.dx *= -1;
+
+    if (
+        ball.x + ball.r > rightPaddle.x &&
+        ball.y > rightPaddle.y &&
+        ball.y < rightPaddle.y + paddleHeight
+    ) ball.dx *= -1;
+
+    // Reset ball
+    if (ball.x < 0 || ball.x > canvas.width) {
+        ball.x = canvas.width / 2;
+        ball.y = canvas.height / 2;
+        ball.dx *= -1;
+    }
+}
+
+// Draw scene
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Top & bottom bars
+    drawRect(100, 20, 400, 20);
+    drawRect(100, canvas.height - 40, 400, 20);
+
+    // Center divider
+    drawRect(200, 100, 200, 600);
+    ctx.beginPath();
+    ctx.moveTo(200, 400);
+    ctx.lineTo(400, 400);
+    ctx.stroke();
+
+    // Level indicator
+    ctx.save();
+    ctx.translate(20, canvas.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("LEVEL", 0, 0);
+    ctx.restore();
+
+    // Paddles
+    drawRect(leftPaddle.x, leftPaddle.y, paddleWidth, paddleHeight);
+    drawRect(rightPaddle.x, rightPaddle.y, paddleWidth, paddleHeight);
+
+    // Ball
+    drawBall();
+}
+
+// Loop
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+
+</body>
+</html>
