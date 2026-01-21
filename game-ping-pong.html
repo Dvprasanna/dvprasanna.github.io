@@ -2,19 +2,18 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Minimal Ping Pong</title>
+<title>Table Tennis</title>
 <style>
     body {
         margin: 0;
-        background: #ffffff;
+        background: #fff;
         display: flex;
         justify-content: center;
         align-items: center;
         height: 100vh;
-        font-family: Arial, sans-serif;
     }
     canvas {
-        border: 3px solid #000;
+        border: 3px solid black;
     }
 </style>
 </head>
@@ -26,45 +25,54 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// Game objects
-const paddleWidth = 15;
-const paddleHeight = 120;
-
-let leftPaddle = {
-    x: 30,
-    y: canvas.height / 2 - paddleHeight / 2,
-    speed: 6
+// ================= TABLE =================
+const table = {
+    x: 100,
+    y: 100,
+    width: 400,
+    height: 600
 };
 
-let rightPaddle = {
-    x: canvas.width - 45,
-    y: canvas.height / 2 - paddleHeight / 2,
-    speed: 4
+// ================= PADDLES =================
+const paddleWidth = 120;
+const paddleHeight = 12;
+
+let topPaddle = {
+    x: canvas.width / 2 - paddleWidth / 2,
+    y: table.y - 25,
+    speed: 5
 };
 
+let bottomPaddle = {
+    x: canvas.width / 2 - paddleWidth / 2,
+    y: table.y + table.height + 13,
+    speed: 7
+};
+
+// ================= BALL =================
 let ball = {
     x: canvas.width / 2,
     y: canvas.height / 2,
-    r: 10,
-    dx: 5,
+    r: 6,
+    dx: 2,
     dy: 5
 };
 
-// Controls
-let upPressed = false;
-let downPressed = false;
+// ================= CONTROLS =================
+let left = false;
+let right = false;
 
 document.addEventListener("keydown", e => {
-    if (e.key === "ArrowUp") upPressed = true;
-    if (e.key === "ArrowDown") downPressed = true;
+    if (e.key === "ArrowLeft") left = true;
+    if (e.key === "ArrowRight") right = true;
 });
 
 document.addEventListener("keyup", e => {
-    if (e.key === "ArrowUp") upPressed = false;
-    if (e.key === "ArrowDown") downPressed = false;
+    if (e.key === "ArrowLeft") left = false;
+    if (e.key === "ArrowRight") right = false;
 });
 
-// Draw functions
+// ================= DRAW =================
 function drawRect(x, y, w, h) {
     ctx.strokeRect(x, y, w, h);
 }
@@ -75,78 +83,83 @@ function drawBall() {
     ctx.stroke();
 }
 
-// Game logic
-function update() {
-    // Player paddle
-    if (upPressed && leftPaddle.y > 0) leftPaddle.y -= leftPaddle.speed;
-    if (downPressed && leftPaddle.y < canvas.height - paddleHeight)
-        leftPaddle.y += leftPaddle.speed;
+function drawTable() {
+    // Table
+    drawRect(table.x, table.y, table.width, table.height);
 
-    // AI paddle
-    if (ball.y < rightPaddle.y + paddleHeight / 2)
-        rightPaddle.y -= rightPaddle.speed;
+    // Net
+    ctx.beginPath();
+    ctx.moveTo(table.x, table.y + table.height / 2);
+    ctx.lineTo(table.x + table.width, table.y + table.height / 2);
+    ctx.stroke();
+}
+
+// ================= GAME LOGIC =================
+function update() {
+    // Bottom paddle (player)
+    if (left && bottomPaddle.x > table.x)
+        bottomPaddle.x -= bottomPaddle.speed;
+
+    if (right && bottomPaddle.x + paddleWidth < table.x + table.width)
+        bottomPaddle.x += bottomPaddle.speed;
+
+    // Top paddle (AI)
+    if (ball.x < topPaddle.x + paddleWidth / 2)
+        topPaddle.x -= topPaddle.speed;
     else
-        rightPaddle.y += rightPaddle.speed;
+        topPaddle.x += topPaddle.speed;
+
+    topPaddle.x = Math.max(
+        table.x,
+        Math.min(topPaddle.x, table.x + table.width - paddleWidth)
+    );
 
     // Ball movement
     ball.x += ball.dx;
     ball.y += ball.dy;
 
-    // Wall collision
-    if (ball.y < 0 || ball.y > canvas.height) ball.dy *= -1;
+    // Table side walls
+    if (ball.x - ball.r < table.x || ball.x + ball.r > table.x + table.width)
+        ball.dx *= -1;
 
-    // Paddle collision
+    // Bottom paddle collision
     if (
-        ball.x - ball.r < leftPaddle.x + paddleWidth &&
-        ball.y > leftPaddle.y &&
-        ball.y < leftPaddle.y + paddleHeight
-    ) ball.dx *= -1;
+        ball.y + ball.r > bottomPaddle.y &&
+        ball.x > bottomPaddle.x &&
+        ball.x < bottomPaddle.x + paddleWidth
+    ) {
+        ball.dy *= -1;
+        ball.y = bottomPaddle.y - ball.r;
+    }
 
+    // Top paddle collision
     if (
-        ball.x + ball.r > rightPaddle.x &&
-        ball.y > rightPaddle.y &&
-        ball.y < rightPaddle.y + paddleHeight
-    ) ball.dx *= -1;
+        ball.y - ball.r < topPaddle.y + paddleHeight &&
+        ball.x > topPaddle.x &&
+        ball.x < topPaddle.x + paddleWidth
+    ) {
+        ball.dy *= -1;
+        ball.y = topPaddle.y + paddleHeight + ball.r;
+    }
 
-    // Reset ball
-    if (ball.x < 0 || ball.x > canvas.width) {
+    // Reset if missed
+    if (ball.y < table.y || ball.y > table.y + table.height) {
         ball.x = canvas.width / 2;
         ball.y = canvas.height / 2;
-        ball.dx *= -1;
+        ball.dy *= -1;
     }
 }
 
-// Draw scene
+// ================= DRAW LOOP =================
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Top & bottom bars
-    drawRect(100, 20, 400, 20);
-    drawRect(100, canvas.height - 40, 400, 20);
-
-    // Center divider
-    drawRect(200, 100, 200, 600);
-    ctx.beginPath();
-    ctx.moveTo(200, 400);
-    ctx.lineTo(400, 400);
-    ctx.stroke();
-
-    // Level indicator
-    ctx.save();
-    ctx.translate(20, canvas.height / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillText("LEVEL", 0, 0);
-    ctx.restore();
-
-    // Paddles
-    drawRect(leftPaddle.x, leftPaddle.y, paddleWidth, paddleHeight);
-    drawRect(rightPaddle.x, rightPaddle.y, paddleWidth, paddleHeight);
-
-    // Ball
+    drawTable();
+    drawRect(topPaddle.x, topPaddle.y, paddleWidth, paddleHeight);
+    drawRect(bottomPaddle.x, bottomPaddle.y, paddleWidth, paddleHeight);
     drawBall();
 }
 
-// Loop
 function loop() {
     update();
     draw();
