@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Text → JPEG System Exporter</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Hanken+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --canvas-w: 2000px;
+  --canvas-h: 2000px;
+  --margin: 120px;
+  --rhythm: 16px;
+
+  --headline-size: 72px;
+  --headline-line: 1.1;
+  --headline-font: 'Inter', sans-serif;
+
+  --body-size: 34px;
+  --body-line: 1.4;
+  --body-font: 'Inter', sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 20px;
+  background: #f2f2f2;
+  font-family: Arial, sans-serif;
+}
+
+.wrapper {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 20px;
+}
+
+/* CONTROLS */
+.controls {
+  background: #ffffff;
+  padding: 16px;
+  border-radius: 6px;
+}
+
+.controls h3 {
+  margin-top: 0;
+}
+
+textarea, select, input, button {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 6px;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* CANVAS */
+.canvas-area {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.canvas {
+  width: var(--canvas-w);
+  height: var(--canvas-h);
+  background: #ffffff;
+  box-sizing: border-box;
+  padding: var(--margin);
+  position: relative;
+  transform: scale(0.25);
+  transform-origin: top left;
+}
+
+.grid {
+  position: absolute;
+  inset: var(--margin);
+  border: 1px dashed #ccc;
+  pointer-events: none;
+}
+
+.text-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.headline {
+  font-family: var(--headline-font);
+  font-size: var(--headline-size);
+  line-height: var(--headline-line);
+  margin-bottom: calc(var(--rhythm) * 2);
+}
+
+.body {
+  font-family: var(--body-font);
+  font-size: var(--body-size);
+  line-height: var(--body-line);
+}
+
+/* EXPORT MODE (no scaling) */
+.export .canvas {
+  transform: none;
+}
+.export .grid {
+  display: none;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Raw Text → JPEG Batch Export Tool</h1>
+
+<div class="wrapper">
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <h3>Text Input (4 Images)</h3>
+
+    <label>Headline</label>
+    <textarea id="headlineInput" rows="2">Primary Benefit Headline</textarea>
+
+    <label>Body</label>
+    <textarea id="bodyInput" rows="4">Supporting text stays exactly as written.</textarea>
+
+    <hr>
+
+    <h3>Preset</h3>
+    <select onchange="applyPreset(this.value)">
+      <option value="amazon">Amazon (2000×2000)</option>
+      <option value="square">Square (1080×1080)</option>
+      <option value="landscape">16:9 (1920×1080)</option>
+    </select>
+
+    <h3>Font (Locked)</h3>
+    <select onchange="setFont(this.value)">
+      <option value="inter">Inter Tight</option>
+      <option value="hanken">Hanken Grotesk</option>
+    </select>
+
+    <h3>Layout</h3>
+    <label>Margin</label>
+    <input type="range" min="60" max="200" value="120"
+      oninput="setVar('--margin', this.value + 'px')">
+
+    <label>Headline Size</label>
+    <input type="range" min="40" max="96" value="72"
+      oninput="setVar('--headline-size', this.value + 'px')">
+
+    <label>Body Size</label>
+    <input type="range" min="22" max="42" value="34"
+      oninput="setVar('--body-size', this.value + 'px')">
+
+    <button onclick="exportBatch()">Export 4 JPEGs</button>
+  </div>
+
+  <!-- PREVIEW -->
+  <div class="canvas-area" id="previewArea">
+    <!-- Canvases injected by JS -->
+  </div>
+
+</div>
+
+<!-- html2canvas -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<script>
+const previewArea = document.getElementById("previewArea");
+
+function setVar(name, value) {
+  document.documentElement.style.setProperty(name, value);
+}
+
+function setFont(type) {
+  if (type === "hanken") {
+    setVar('--headline-font', "'Hanken Grotesk', sans-serif");
+  } else {
+    setVar('--headline-font', "'Inter', sans-serif");
+  }
+}
+
+function applyPreset(preset) {
+  if (preset === "amazon") {
+    setVar('--canvas-w', '2000px');
+    setVar('--canvas-h', '2000px');
+  }
+  if (preset === "square") {
+    setVar('--canvas-w', '1080px');
+    setVar('--canvas-h', '1080px');
+  }
+  if (preset === "landscape") {
+    setVar('--canvas-w', '1920px');
+    setVar('--canvas-h', '1080px');
+  }
+  renderCanvases();
+}
+
+function renderCanvases() {
+  previewArea.innerHTML = "";
+  for (let i = 1; i <= 4; i++) {
+    const div = document.createElement("div");
+    div.className = "canvas";
+    div.innerHTML = `
+      <div class="grid"></div>
+      <div class="text-block">
+        <div class="headline">${headlineInput.value}</div>
+        <div class="body">${bodyInput.value}</div>
+      </div>
+    `;
+    previewArea.appendChild(div);
+  }
+}
+
+headlineInput.oninput = renderCanvases;
+bodyInput.oninput = renderCanvases;
+
+renderCanvases();
+
+function exportBatch() {
+  document.body.classList.add("export");
+  const canvases = document.querySelectorAll(".canvas");
+
+  canvases.forEach((canvas, index) => {
+    html2canvas(canvas, {
+      scale: 2,
+      backgroundColor: "#ffffff"
+    }).then(c => {
+      const link = document.createElement("a");
+      link.download = `image-${index + 1}.jpg`;
+      link.href = c.toDataURL("image/jpeg", 0.95);
+      link.click();
+    });
+  });
+
+  document.body.classList.remove("export");
+}
+</script>
+
+</body>
+</html>
