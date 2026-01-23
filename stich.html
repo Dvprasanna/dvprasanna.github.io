@@ -3,144 +3,234 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Tailoring Measurement Preview</title>
+<title>Tailoring Measurement & Bill Preview</title>
+
 <style>
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    background: #f5f5f7;
-    margin: 0;
-    padding: 16px;
-  }
-  h2 {
-    margin-top: 24px;
-  }
-  .card {
-    background: #ffffff;
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 16px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-  }
-  label {
-    display: block;
-    margin-top: 12px;
-    font-size: 14px;
-  }
-  input, select, textarea {
-    width: 100%;
-    padding: 10px;
-    margin-top: 4px;
-    font-size: 16px;
-  }
-  textarea {
-    resize: vertical;
-  }
-  .row {
-    display: flex;
-    gap: 12px;
-  }
-  .row > div {
-    flex: 1;
-  }
-  .btn {
-    background: #007aff;
-    color: white;
-    border: none;
-    padding: 14px;
-    font-size: 16px;
-    border-radius: 10px;
-    width: 100%;
-    margin-top: 16px;
-  }
-  pre {
-    background: #1e1e1e;
-    color: #00ff90;
-    padding: 12px;
-    overflow-x: auto;
-    font-size: 13px;
-    border-radius: 8px;
-  }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f5f5f7;
+  margin: 0;
+  padding: 16px;
+}
+
+h2 {
+  margin-bottom: 12px;
+}
+
+.accordion {
+  background: #ffffff;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.accordion-header {
+  padding: 14px 16px;
+  font-weight: 600;
+  background: #f0f0f3;
+  cursor: pointer;
+}
+
+.accordion-body {
+  padding: 16px;
+  display: none;
+}
+
+.accordion.open .accordion-body {
+  display: block;
+}
+
+label {
+  display: block;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+input, select, textarea {
+  width: 100%;
+  padding: 10px;
+  margin-top: 4px;
+  font-size: 16px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+}
+
+.row > div {
+  flex: 1;
+}
+
+.btn {
+  background: #007aff;
+  color: #ffffff;
+  border: none;
+  padding: 14px;
+  font-size: 16px;
+  border-radius: 10px;
+  width: 100%;
+  margin-top: 16px;
+}
+
+pre {
+  background: #1e1e1e;
+  color: #00ff90;
+  padding: 12px;
+  font-size: 13px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
 </style>
 </head>
 
 <body>
 
-<h2>Men’s Stitching Measurement Preview</h2>
+<h2>Men’s Stitching Entry</h2>
 
-<div class="card">
-  <label>Garment</label>
-  <select id="garment">
-    <option value="shirt">Shirt</option>
-    <option value="pant">Pant</option>
-    <option value="kurta">Kurta</option>
-  </select>
+<!-- BILL INFO -->
+<div class="accordion open">
+  <div class="accordion-header" onclick="toggle(this)">Bill / Token Info</div>
+  <div class="accordion-body">
+    <label>Customer Name</label>
+    <input id="custName">
 
-  <label>Fit</label>
-  <select id="fit">
-    <option>Regular</option>
-    <option>Slim</option>
-    <option>Loose</option>
-  </select>
+    <label>Token Number</label>
+    <input id="token">
 
-  <label>Posture</label>
-  <select id="posture" multiple>
-    <option value="forward_shoulder">Forward Shoulder</option>
-    <option value="sloped_shoulder">Sloped Shoulder</option>
-    <option value="prominent_belly">Prominent Belly</option>
-    <option value="one_shoulder_low">One Shoulder Low</option>
-  </select>
-</div>
+    <label>Date</label>
+    <input type="date" id="billDate">
 
-<div class="card">
-  <h3>Measurements (Inches)</h3>
-  <div class="row">
-    <div>
-      <label>Chest</label>
-      <input type="number" id="chest">
+    <div class="row">
+      <div>
+        <label>Total Amount</label>
+        <input type="number" id="totalAmt" oninput="calcDue()">
+      </div>
+      <div>
+        <label>Amount Received</label>
+        <input type="number" id="amtRec" oninput="calcDue()">
+      </div>
     </div>
-    <div>
-      <label>Waist</label>
-      <input type="number" id="waist">
-    </div>
+
+    <label>Amount Due</label>
+    <input type="number" id="amtDue" readonly>
+
+    <label>Due Date</label>
+    <input type="date" id="dueDate">
   </div>
+</div>
 
-  <div class="row">
-    <div>
-      <label>Shoulder</label>
-      <input type="number" id="shoulder">
-    </div>
-    <div>
-      <label>Sleeve Length</label>
-      <input type="number" id="sleeve">
-    </div>
+<!-- GARMENT -->
+<div class="accordion">
+  <div class="accordion-header" onclick="toggle(this)">Garment & Fit</div>
+  <div class="accordion-body">
+    <label>Garment</label>
+    <select id="garment">
+      <option>Shirt</option>
+      <option>Pant</option>
+      <option>Kurta</option>
+    </select>
+
+    <label>Fit</label>
+    <select id="fit">
+      <option>Regular</option>
+      <option>Slim</option>
+      <option>Loose</option>
+    </select>
+
+    <label>Posture</label>
+    <select id="posture" multiple>
+      <option value="forward_shoulder">Forward Shoulder</option>
+      <option value="sloped_shoulder">Sloped Shoulder</option>
+      <option value="prominent_belly">Prominent Belly</option>
+      <option value="one_shoulder_low">One Shoulder Low</option>
+    </select>
   </div>
-
-  <label>Garment Length</label>
-  <input type="number" id="length">
 </div>
 
-<div class="card">
-  <label>Remarks</label>
-  <textarea id="remarks" rows="3"></textarea>
+<!-- MEASUREMENTS -->
+<div class="accordion">
+  <div class="accordion-header" onclick="toggle(this)">Measurements (Inches)</div>
+  <div class="accordion-body">
+    <div class="row">
+      <div>
+        <label>Chest</label>
+        <input type="number" id="chest">
+      </div>
+      <div>
+        <label>Waist</label>
+        <input type="number" id="waist">
+      </div>
+    </div>
 
-  <label>Stitching Instructions</label>
-  <textarea id="instructions" rows="2"></textarea>
+    <div class="row">
+      <div>
+        <label>Shoulder</label>
+        <input type="number" id="shoulder">
+      </div>
+      <div>
+        <label>Sleeve Length</label>
+        <input type="number" id="sleeve">
+      </div>
+    </div>
 
-  <button class="btn" onclick="generate()">Preview JSON</button>
+    <label>Garment Length</label>
+    <input type="number" id="length">
+  </div>
 </div>
 
-<div class="card">
-  <h3>Export Preview (JSON)</h3>
-  <pre id="output">{}</pre>
+<!-- NOTES -->
+<div class="accordion">
+  <div class="accordion-header" onclick="toggle(this)">Notes & Instructions</div>
+  <div class="accordion-body">
+    <label>Remarks</label>
+    <textarea id="remarks" rows="3"></textarea>
+
+    <label>Stitching Instructions</label>
+    <textarea id="instructions" rows="2"></textarea>
+
+    <button class="btn" onclick="generate()">Preview JSON</button>
+  </div>
+</div>
+
+<!-- OUTPUT -->
+<div class="accordion">
+  <div class="accordion-header" onclick="toggle(this)">Export Preview</div>
+  <div class="accordion-body">
+    <pre id="output">{}</pre>
+  </div>
 </div>
 
 <script>
+function toggle(el) {
+  el.parentElement.classList.toggle("open");
+}
+
+function calcDue() {
+  const total = Number(totalAmt.value || 0);
+  const rec = Number(amtRec.value || 0);
+  amtDue.value = total - rec;
+}
+
 function generate() {
-  const postureSelect = document.getElementById("posture");
-  const postureValues = Array.from(postureSelect.selectedOptions).map(o => o.value);
+  const postureVals = Array.from(posture.selectedOptions).map(o => o.value);
 
   const data = {
-    garment: document.getElementById("garment").value,
+    token_number: token.value,
+    customer_name: custName.value,
+    bill_date: billDate.value,
+    due_date: dueDate.value,
+    amount: {
+      total: Number(totalAmt.value),
+      received: Number(amtRec.value),
+      due: Number(amtDue.value)
+    },
+    garment: garment.value,
     unit: "inch",
     measurements: {
       chest: Number(chest.value),
@@ -150,13 +240,12 @@ function generate() {
       length: Number(length.value)
     },
     fit: fit.value,
-    posture: postureValues,
+    posture: postureVals,
     remarks: remarks.value,
     stitching_instructions: instructions.value
   };
 
-  document.getElementById("output").textContent =
-    JSON.stringify(data, null, 2);
+  output.textContent = JSON.stringify(data, null, 2);
 }
 </script>
 
