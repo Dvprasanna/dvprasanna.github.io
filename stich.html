@@ -1,77 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta charset="UTF-8">
 <title>Tailoring Entry</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body {
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #f5f5f7;
-  padding: 16px;
-  margin: 0;
+  background:#f5f5f7;
+  padding:16px;
+  margin:0;
 }
-h2 { margin-bottom: 12px; }
+h2 { margin-bottom:12px; }
 
-.accordion {
-  background: #fff;
-  border-radius: 12px;
-  margin-bottom: 12px;
-  box-shadow: 0 2px 6px rgba(0,0,0,.08);
-  overflow: hidden;
+.section {
+  background:#fff;
+  border-radius:12px;
+  padding:16px;
+  margin-bottom:12px;
+  box-shadow:0 2px 6px rgba(0,0,0,.08);
 }
-.accordion-header {
-  padding: 14px 16px;
-  font-weight: 600;
-  background: #f0f0f3;
-  cursor: pointer;
-}
-.accordion-body {
-  padding: 16px;
-  display: none;
-}
-.accordion.open .accordion-body { display: block; }
 
 label {
-  display: block;
-  margin-top: 10px;
-  font-size: 14px;
+  display:block;
+  margin-top:10px;
+  font-size:14px;
 }
 input, select, textarea {
-  width: 100%;
-  padding: 10px;
-  font-size: 16px;
-  margin-top: 4px;
+  width:100%;
+  padding:10px;
+  font-size:16px;
+  margin-top:4px;
 }
-textarea { resize: vertical; }
+textarea { resize:vertical; }
 
 .row {
-  display: flex;
-  gap: 12px;
+  display:flex;
+  gap:12px;
 }
-.row > div { flex: 1; }
+.row > div { flex:1; }
 
 .btn {
-  margin-top: 16px;
-  width: 100%;
-  padding: 14px;
-  background: #007aff;
-  color: #fff;
-  border: none;
-  font-size: 16px;
-  border-radius: 10px;
+  margin-top:14px;
+  width:100%;
+  padding:14px;
+  font-size:16px;
+  border:none;
+  border-radius:10px;
+  background:#007aff;
+  color:#fff;
 }
 
 pre {
-  background: #1e1e1e;
-  color: #00ff90;
-  padding: 12px;
-  font-size: 13px;
-  border-radius: 8px;
-  overflow-x: auto;
+  background:#1e1e1e;
+  color:#00ff90;
+  padding:12px;
+  border-radius:8px;
+  font-size:13px;
+  overflow-x:auto;
 }
-.hidden { display: none; }
 </style>
 </head>
 
@@ -79,153 +67,182 @@ pre {
 
 <h2>Men’s Stitching Entry</h2>
 
-<!-- BILL INFO -->
-<div class="accordion open">
-  <div class="accordion-header" onclick="toggle(this)">Bill / Token Info</div>
-  <div class="accordion-body">
-    <label>Customer Name</label>
-    <input id="custName">
+<!-- BILL -->
+<div class="section">
+  <h3>Bill / Customer</h3>
 
-    <label>Token Number</label>
-    <input id="token">
+  <label>Customer Name</label>
+  <input id="custName">
 
-    <label>Date</label>
-    <input type="date" id="billDate">
+  <label>Customer Phone</label>
+  <input id="custPhone" type="tel">
 
-    <div class="row">
-      <div>
-        <label>Total Amount</label>
-        <input type="number" id="totalAmt" oninput="calcDue()">
-      </div>
-      <div>
-        <label>Amount Received</label>
-        <input type="number" id="amtRec" oninput="calcDue()">
-      </div>
+  <label>Token Number</label>
+  <input id="token">
+
+  <label>Bill Date</label>
+  <input type="date" id="billDate">
+
+  <label>Due Date</label>
+  <input type="date" id="dueDate">
+
+  <div class="row">
+    <div>
+      <label>Total Amount</label>
+      <input type="number" id="totalAmt" oninput="calcDue()">
     </div>
-
-    <label>Amount Due</label>
-    <input type="number" id="amtDue" readonly>
-
-    <label>Due Date</label>
-    <input type="date" id="dueDate">
+    <div>
+      <label>Amount Received</label>
+      <input type="number" id="amtRec" oninput="calcDue()">
+    </div>
   </div>
+
+  <label>Amount Due</label>
+  <input type="number" id="amtDue" readonly>
 </div>
 
 <!-- GARMENT -->
-<div class="accordion open">
-  <div class="accordion-header" onclick="toggle(this)">Garment & Fit</div>
-  <div class="accordion-body">
-    <label>Garment</label>
-    <select id="garment" onchange="switchGarment()">
-      <option value="shirt">Shirt</option>
-      <option value="pant">Pant</option>
-      <option value="kurta">Kurta</option>
-    </select>
+<div class="section">
+  <h3>Garment</h3>
 
-    <label>Fit</label>
-    <select id="fit">
-      <option>Regular</option>
-      <option>Slim</option>
-      <option>Loose</option>
-    </select>
+  <label>Garment Type</label>
+  <select id="garment" onchange="switchGarment()">
+    <option value="shirt">Shirt</option>
+    <option value="pant">Pant</option>
+    <option value="kurta">Kurta</option>
+  </select>
 
-    <label>Posture</label>
-    <select id="posture" multiple>
-      <option value="forward_shoulder">Forward Shoulder</option>
-      <option value="sloped_shoulder">Sloped Shoulder</option>
-      <option value="prominent_belly">Prominent Belly</option>
-      <option value="one_shoulder_low">One Shoulder Low</option>
-    </select>
-  </div>
+  <label>Fit</label>
+  <select id="fit">
+    <option>Regular</option>
+    <option>Slim</option>
+    <option>Loose</option>
+  </select>
+
+  <label>Posture</label>
+  <select id="posture" multiple>
+    <option value="forward_shoulder">Forward Shoulder</option>
+    <option value="sloped_shoulder">Sloped Shoulder</option>
+    <option value="prominent_belly">Prominent Belly</option>
+    <option value="one_shoulder_low">One Shoulder Low</option>
+  </select>
 </div>
 
 <!-- SHIRT -->
-<div class="accordion open garment" id="shirt">
-  <div class="accordion-header" onclick="toggle(this)">Shirt Measurements (Inches)</div>
-  <div class="accordion-body">
-    <div class="row">
-      <div><label>Chest</label><input id="s_chest"></div>
-      <div><label>Waist</label><input id="s_waist"></div>
-    </div>
-    <div class="row">
-      <div><label>Shoulder</label><input id="s_shoulder"></div>
-      <div><label>Sleeve</label><input id="s_sleeve"></div>
-    </div>
-    <label>Shirt Length</label>
-    <input id="s_length">
+<div class="section garment" id="shirt">
+  <h3>Shirt Measurements (inch)</h3>
+  <div class="row">
+    <div><label>Chest</label><input id="s_chest"></div>
+    <div><label>Waist</label><input id="s_waist"></div>
   </div>
+  <div class="row">
+    <div><label>Shoulder</label><input id="s_shoulder"></div>
+    <div><label>Sleeve</label><input id="s_sleeve"></div>
+  </div>
+  <label>Length</label>
+  <input id="s_length">
 </div>
 
 <!-- PANT -->
-<div class="accordion garment hidden" id="pant">
-  <div class="accordion-header" onclick="toggle(this)">Pant Measurements (Inches)</div>
-  <div class="accordion-body">
-    <div class="row">
-      <div><label>Waist</label><input id="p_waist"></div>
-      <div><label>Seat</label><input id="p_seat"></div>
-    </div>
-    <div class="row">
-      <div><label>Thigh</label><input id="p_thigh"></div>
-      <div><label>Knee</label><input id="p_knee"></div>
-    </div>
-    <div class="row">
-      <div><label>Bottom</label><input id="p_bottom"></div>
-      <div><label>Outseam</label><input id="p_outseam"></div>
-    </div>
-    <label>Inseam</label>
-    <input id="p_inseam">
+<div class="section garment" id="pant" style="display:none">
+  <h3>Pant Measurements (inch)</h3>
+  <div class="row">
+    <div><label>Waist</label><input id="p_waist"></div>
+    <div><label>Seat</label><input id="p_seat"></div>
   </div>
+  <div class="row">
+    <div><label>Thigh</label><input id="p_thigh"></div>
+    <div><label>Knee</label><input id="p_knee"></div>
+  </div>
+  <div class="row">
+    <div><label>Bottom</label><input id="p_bottom"></div>
+    <div><label>Outseam</label><input id="p_outseam"></div>
+  </div>
+  <label>Inseam</label>
+  <input id="p_inseam">
 </div>
 
 <!-- KURTA -->
-<div class="accordion garment hidden" id="kurta">
-  <div class="accordion-header" onclick="toggle(this)">Kurta Measurements (Inches)</div>
-  <div class="accordion-body">
-    <div class="row">
-      <div><label>Chest</label><input id="k_chest"></div>
-      <div><label>Waist</label><input id="k_waist"></div>
-    </div>
-    <div class="row">
-      <div><label>Shoulder</label><input id="k_shoulder"></div>
-      <div><label>Sleeve</label><input id="k_sleeve"></div>
-    </div>
-    <label>Kurta Length</label>
-    <input id="k_length">
+<div class="section garment" id="kurta" style="display:none">
+  <h3>Kurta Measurements (inch)</h3>
+  <div class="row">
+    <div><label>Chest</label><input id="k_chest"></div>
+    <div><label>Waist</label><input id="k_waist"></div>
   </div>
+  <div class="row">
+    <div><label>Shoulder</label><input id="k_shoulder"></div>
+    <div><label>Sleeve</label><input id="k_sleeve"></div>
+  </div>
+  <label>Length</label>
+  <input id="k_length">
 </div>
 
 <!-- NOTES -->
-<div class="accordion">
-  <div class="accordion-header" onclick="toggle(this)">Notes & Instructions</div>
-  <div class="accordion-body">
-    <label>Remarks</label>
-    <textarea id="remarks"></textarea>
+<div class="section">
+  <label>Remarks</label>
+  <textarea id="remarks"></textarea>
 
-    <label>Stitching Instructions</label>
-    <textarea id="instructions"></textarea>
+  <label>Stitching Instructions</label>
+  <textarea id="instructions"></textarea>
 
-    <button class="btn" onclick="generate()">Preview JSON</button>
-  </div>
+  <button class="btn" onclick="generate()">Export & Generate QR</button>
+  <button class="btn" style="background:#34c759" onclick="shareWhatsApp()">Share via WhatsApp</button>
 </div>
 
-<!-- OUTPUT -->
-<div class="accordion">
-  <div class="accordion-header" onclick="toggle(this)">Export Preview</div>
-  <div class="accordion-body">
-    <pre id="output">{}</pre>
-  </div>
+<div class="section">
+  <h3>QR Code</h3>
+  <div id="qrcode"></div>
 </div>
 
+<div class="section">
+  <h3>Export Preview</h3>
+  <pre id="output">{}</pre>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
-function toggle(el){ el.parentElement.classList.toggle("open"); }
+const STORAGE_KEY = "tailor_entry_v1";
+const fields = document.querySelectorAll("input,select,textarea");
 
-function calcDue(){
-  amtDue.value = (Number(totalAmt.value||0) - Number(amtRec.value||0));
+fields.forEach(f => f.addEventListener("input", saveForm));
+
+function saveForm(){
+  const data = {};
+  fields.forEach(f=>{
+    if(f.multiple){
+      data[f.id]=[...f.selectedOptions].map(o=>o.value);
+    } else {
+      data[f.id]=f.value;
+    }
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
+function restoreForm(){
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if(!saved) return;
+  const data = JSON.parse(saved);
+  Object.keys(data).forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    if(el.multiple){
+      [...el.options].forEach(o=>o.selected=data[id].includes(o.value));
+    } else {
+      el.value=data[id];
+    }
+  });
+  switchGarment();
+  calcDue();
+}
+restoreForm();
+
 function switchGarment(){
-  document.querySelectorAll(".garment").forEach(g=>g.classList.add("hidden"));
-  document.getElementById(garment.value).classList.remove("hidden");
+  document.querySelectorAll(".garment").forEach(g=>g.style.display="none");
+  document.getElementById(garment.value).style.display="block";
+}
+
+function calcDue(){
+  amtDue.value=(+totalAmt.value||0)-(+amtRec.value||0);
 }
 
 function generate(){
@@ -233,29 +250,49 @@ function generate(){
   let measurements={};
 
   if(garment.value==="shirt"){
-    measurements={ chest:+s_chest.value, waist:+s_waist.value, shoulder:+s_shoulder.value, sleeve:+s_sleeve.value, length:+s_length.value };
+    measurements={chest:+s_chest.value,waist:+s_waist.value,shoulder:+s_shoulder.value,sleeve:+s_sleeve.value,length:+s_length.value};
   }
   if(garment.value==="pant"){
-    measurements={ waist:+p_waist.value, seat:+p_seat.value, thigh:+p_thigh.value, knee:+p_knee.value, bottom:+p_bottom.value, outseam:+p_outseam.value, inseam:+p_inseam.value };
+    measurements={waist:+p_waist.value,seat:+p_seat.value,thigh:+p_thigh.value,knee:+p_knee.value,bottom:+p_bottom.value,outseam:+p_outseam.value,inseam:+p_inseam.value};
   }
   if(garment.value==="kurta"){
-    measurements={ chest:+k_chest.value, waist:+k_waist.value, shoulder:+k_shoulder.value, sleeve:+k_sleeve.value, length:+k_length.value };
+    measurements={chest:+k_chest.value,waist:+k_waist.value,shoulder:+k_shoulder.value,sleeve:+k_sleeve.value,length:+k_length.value};
   }
 
-  output.textContent = JSON.stringify({
-    token: token.value,
-    customer: custName.value,
-    bill_date: billDate.value,
-    due_date: dueDate.value,
-    amount:{ total:+totalAmt.value, received:+amtRec.value, due:+amtDue.value },
-    garment: garment.value,
+  const data={
+    token:token.value,
+    customer:{name:custName.value,phone:custPhone.value},
+    bill_date:billDate.value,
+    due_date:dueDate.value,
+    amount:{total:+totalAmt.value,received:+amtRec.value,due:+amtDue.value},
+    garment:garment.value,
     unit:"inch",
-    fit: fit.value,
-    posture: postureVals,
+    fit:fit.value,
+    posture:postureVals,
     measurements,
-    remarks: remarks.value,
-    stitching_instructions: instructions.value
-  },null,2);
+    remarks:remarks.value,
+    stitching_instructions:instructions.value
+  };
+
+  const encoded=encodeURIComponent(JSON.stringify(data));
+  window.lastScanURL="https://yourdomain.com/scan.html#"+encoded;
+
+  output.textContent=JSON.stringify(data,null,2);
+  qrcode.innerHTML="";
+  new QRCode(qrcode,{text:window.lastScanURL,width:220,height:220});
+}
+
+function shareWhatsApp(){
+  if(!window.lastScanURL) return alert("Generate QR first");
+  const msg=`TOKEN: ${token.value}
+Customer: ${custName.value}
+Phone: ${custPhone.value}
+Due Date: ${dueDate.value}
+Amount Due: ${amtDue.value}
+
+Scan:
+${window.lastScanURL}`;
+  window.open("https://wa.me/?text="+encodeURIComponent(msg));
 }
 </script>
 
