@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stitching Details</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+  font-family:monospace;
+  padding:16px;
+  background:#fff;
+  line-height:1.6;
+}
+.section{margin-bottom:16px;}
+.label{font-weight:bold;}
+</style>
+</head>
+
+<body>
+
+<h2>Stitching Details</h2>
+<div id="content">Loading…</div>
+
+<script>
+if(!location.hash){
+  content.innerText="No data found.";
+} else {
+  try{
+    const data=JSON.parse(decodeURIComponent(location.hash.substring(1)));
+    let html="";
+
+    html+=`<div class="section">
+      <div class="label">Token</div>${data.token}
+      <div class="label">Customer</div>${data.customer.name}
+      <div class="label">Phone</div>${data.customer.phone}
+      <div class="label">Garment</div>${data.garment}
+      <div class="label">Fit</div>${data.fit}
+      <div class="label">Due Date</div>${data.due_date}
+    </div>`;
+
+    html+=`<div class="section">
+      <div class="label">Amount</div>
+      Total: ${data.amount.total}<br>
+      Paid: ${data.amount.received}<br>
+      Due: ${data.amount.due}
+    </div>`;
+
+    html+=`<div class="section">
+      <div class="label">Measurements (${data.unit})</div>`;
+    for(const k in data.measurements){
+      html+=`${k.toUpperCase()}: ${data.measurements[k]}<br>`;
+    }
+    html+=`</div>`;
+
+    if(data.posture?.length){
+      html+=`<div class="section">
+        <div class="label">Posture</div>${data.posture.join(", ")}
+      </div>`;
+    }
+
+    if(data.remarks){
+      html+=`<div class="section">
+        <div class="label">Remarks</div>${data.remarks}
+      </div>`;
+    }
+
+    if(data.stitching_instructions){
+      html+=`<div class="section">
+        <div class="label">Stitching Instructions</div>${data.stitching_instructions}
+      </div>`;
+    }
+
+    content.innerHTML=html;
+  } catch(e){
+    content.innerText="Invalid QR data.";
+  }
+}
+</script>
+
+</body>
+</html>
