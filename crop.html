@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Document Scanner Crop</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Mobile Document Scanner</title>
 
 <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
@@ -14,20 +15,26 @@
     --text: #eaeaea;
   }
 
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: system-ui, sans-serif;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     height: 100vh;
     display: flex;
     flex-direction: column;
   }
 
   header {
-    padding: 14px 18px;
     background: var(--panel);
+    padding: 14px 16px;
     font-weight: 600;
+    text-align: center;
   }
 
   .workspace {
@@ -45,19 +52,25 @@
   }
 
   footer {
-    padding: 12px;
     background: var(--panel);
+    padding: 12px;
     display: flex;
+    gap: 10px;
     justify-content: center;
-    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  input[type="file"] {
+    display: none;
   }
 
   .btn {
-    padding: 10px 18px;
-    border-radius: 6px;
+    padding: 12px 16px;
+    border-radius: 8px;
     border: none;
-    cursor: pointer;
+    font-size: 14px;
     font-weight: 600;
+    cursor: pointer;
   }
 
   .btn.primary {
@@ -69,14 +82,12 @@
     background: #2a2f3a;
     color: var(--text);
   }
-
-  input { display: none; }
 </style>
 </head>
 
 <body>
 
-<header>Document Crop Tool</header>
+<header>Document Scanner</header>
 
 <div class="workspace">
   <canvas id="canvas"></canvas>
@@ -87,7 +98,10 @@
     Upload
     <input type="file" id="upload" accept="image/*">
   </label>
-  <button class="btn primary" onclick="crop()">Crop & Download</button>
+
+  <button class="btn secondary" onclick="undo()">Undo</button>
+  <button class="btn secondary" onclick="done()">Done</button>
+  <button class="btn primary" onclick="crop()">Crop</button>
 </footer>
 
 <script>
@@ -95,20 +109,24 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 let img = new Image();
+let originalMat = null;
+let scale = 1;
+
 let points = [];
 let dragIndex = -1;
-let scale = 1;
-let originalMat = null;
+
+let history = [];
+let locked = false;
 
 // Upload
 document.getElementById("upload").onchange = e => {
   img.src = URL.createObjectURL(e.target.files[0]);
 };
 
-// Image load
+// Image loaded
 img.onload = () => {
   if (originalMat) originalMat.delete();
-  originalMat = cv.imread(img); // FULL resolution
+  originalMat = cv.imread(img);
 
   const maxW = canvas.parentElement.clientWidth;
   const maxH = canvas.parentElement.clientHeight;
@@ -119,12 +137,14 @@ img.onload = () => {
   canvas.height = img.height * scale;
 
   points = [
-    [40, 40],
-    [canvas.width - 40, 40],
-    [canvas.width - 40, canvas.height - 40],
-    [40, canvas.height - 40]
+    [30, 30],
+    [canvas.width - 30, 30],
+    [canvas.width - 30, canvas.height - 30],
+    [30, canvas.height - 30]
   ];
 
+  history = [];
+  locked = false;
   draw();
 };
 
@@ -133,53 +153,91 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-  ctx.fillStyle = "rgba(10,170,255,0.25)";
-  ctx.beginPath();
-  ctx.moveTo(...points[0]);
-  points.forEach(p => ctx.lineTo(...p));
-  ctx.closePath();
-  ctx.fill();
+  if (!locked) {
+    // Blue overlay
+    ctx.fillStyle = "rgba(10,170,255,0.25)";
+    ctx.beginPath();
+    ctx.moveTo(...points[0]);
+    points.forEach(p => ctx.lineTo(...p));
+    ctx.closePath();
+    ctx.fill();
 
-  ctx.strokeStyle = "#0aaaff";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  points.forEach(p => {
-    ctx.fillStyle = "#fff";
+    // Border
     ctx.strokeStyle = "#0aaaff";
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(p[0], p[1], 5, 0, Math.PI * 2);
-    ctx.fill();
     ctx.stroke();
+
+    // Handles (5px visual)
+    points.forEach(p => {
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = "#0aaaff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+  }
+}
+
+// Pointer events
+canvas.addEventListener("pointerdown", onPointerDown);
+canvas.addEventListener("pointermove", onPointerMove);
+canvas.addEventListener("pointerup", onPointerUp);
+canvas.addEventListener("pointercancel", onPointerUp);
+
+function getCanvasPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function onPointerDown(e) {
+  if (locked) return;
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+
+  // Save state for UNDO
+  history.push(JSON.parse(JSON.stringify(points)));
+
+  const { x, y } = getCanvasPoint(e);
+  dragIndex = -1;
+
+  points.forEach((p, i) => {
+    if (Math.hypot(p[0] - x, p[1] - y) <= 14) {
+      dragIndex = i;
+    }
   });
 }
 
-// Drag handling
-canvas.onmousedown = e => {
-  const r = canvas.getBoundingClientRect();
-  const x = e.clientX - r.left;
-  const y = e.clientY - r.top;
+function onPointerMove(e) {
+  if (dragIndex === -1 || locked) return;
+  e.preventDefault();
 
-  dragIndex = -1;
-  points.forEach((p, i) => {
-    if (Math.hypot(p[0] - x, p[1] - y) <= 12) dragIndex = i;
-  });
-};
-
-canvas.onmousemove = e => {
-  if (dragIndex === -1) return;
-  const r = canvas.getBoundingClientRect();
-  points[dragIndex] = [
-    e.clientX - r.left,
-    e.clientY - r.top
-  ];
+  const { x, y } = getCanvasPoint(e);
+  points[dragIndex] = [x, y];
   draw();
-};
+}
 
-canvas.onmouseup = canvas.onmouseleave = () => dragIndex = -1;
+function onPointerUp(e) {
+  dragIndex = -1;
+  try { canvas.releasePointerCapture(e.pointerId); } catch {}
+}
 
-// Crop & export
+// DONE
+function done() {
+  locked = true;
+  draw();
+}
+
+// UNDO
+function undo() {
+  if (history.length === 0) return;
+  points = history.pop();
+  locked = false;
+  draw();
+}
+
+// Crop & download
 function crop() {
   if (!originalMat) return;
 
@@ -199,7 +257,7 @@ function crop() {
   );
 
   let dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-    0,0, w,0, w,h, 0,h
+    0, 0, w, 0, w, h, 0, h
   ]);
 
   let M = cv.getPerspectiveTransform(srcPts, dstPts);
@@ -217,9 +275,9 @@ function crop() {
   let out = document.createElement("canvas");
   out.width = w;
   out.height = h;
-  let outCtx = out.getContext("2d");
-  outCtx.fillStyle = "#fff";
-  outCtx.fillRect(0,0,w,h);
+  let octx = out.getContext("2d");
+  octx.fillStyle = "#fff";
+  octx.fillRect(0, 0, w, h);
   cv.imshow(out, dst);
 
   let a = document.createElement("a");
@@ -227,7 +285,10 @@ function crop() {
   a.href = out.toDataURL("image/png");
   a.click();
 
-  dst.delete(); srcPts.delete(); dstPts.delete(); M.delete();
+  dst.delete();
+  srcPts.delete();
+  dstPts.delete();
+  M.delete();
 }
 </script>
 
