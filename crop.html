@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Document Tool by prasana </title>
+<title>Document Scanner Crop</title>
 
 <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
@@ -14,25 +14,20 @@
     --text: #eaeaea;
   }
 
-  * {
-    box-sizing: border-box;
-  }
-
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    font-family: system-ui, sans-serif;
+    height: 100vh;
     display: flex;
     flex-direction: column;
-    height: 100vh;
   }
 
   header {
-    padding: 14px 20px;
+    padding: 14px 18px;
     background: var(--panel);
     font-weight: 600;
-    letter-spacing: 0.3px;
   }
 
   .workspace {
@@ -46,31 +41,28 @@
   canvas {
     max-width: 100%;
     max-height: 100%;
-    border-radius: 6px;
     touch-action: none;
   }
 
   footer {
-    background: var(--panel);
     padding: 12px;
+    background: var(--panel);
     display: flex;
-    gap: 12px;
     justify-content: center;
-  }
-
-  input[type="file"] {
-    display: none;
+    gap: 12px;
   }
 
   .btn {
-    background: var(--accent);
-    color: #000;
-    border: none;
     padding: 10px 18px;
-    font-size: 14px;
     border-radius: 6px;
+    border: none;
     cursor: pointer;
     font-weight: 600;
+  }
+
+  .btn.primary {
+    background: var(--accent);
+    color: #000;
   }
 
   .btn.secondary {
@@ -78,18 +70,13 @@
     color: var(--text);
   }
 
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  input { display: none; }
 </style>
 </head>
 
 <body>
 
-<header>
-  Document Cropper
-</header>
+<header>Document Crop Tool</header>
 
 <div class="workspace">
   <canvas id="canvas"></canvas>
@@ -97,10 +84,10 @@
 
 <footer>
   <label class="btn secondary">
-    Upload Image
+    Upload
     <input type="file" id="upload" accept="image/*">
   </label>
-  <button class="btn" onclick="crop()">Crop & Download</button>
+  <button class="btn primary" onclick="crop()">Crop & Download</button>
 </footer>
 
 <script>
@@ -111,12 +98,18 @@ let img = new Image();
 let points = [];
 let dragIndex = -1;
 let scale = 1;
+let originalMat = null;
 
+// Upload
 document.getElementById("upload").onchange = e => {
   img.src = URL.createObjectURL(e.target.files[0]);
 };
 
+// Image load
 img.onload = () => {
+  if (originalMat) originalMat.delete();
+  originalMat = cv.imread(img); // FULL resolution
+
   const maxW = canvas.parentElement.clientWidth;
   const maxH = canvas.parentElement.clientHeight;
 
@@ -135,110 +128,98 @@ img.onload = () => {
   draw();
 };
 
+// Draw preview
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-  if (points.length === 4) {
-    // Blue overlay
-    ctx.fillStyle = "rgba(10,170,255,0.25)";
-    ctx.beginPath();
-    ctx.moveTo(...points[0]);
-    points.forEach(p => ctx.lineTo(...p));
-    ctx.closePath();
-    ctx.fill();
+  ctx.fillStyle = "rgba(10,170,255,0.25)";
+  ctx.beginPath();
+  ctx.moveTo(...points[0]);
+  points.forEach(p => ctx.lineTo(...p));
+  ctx.closePath();
+  ctx.fill();
 
-    // Border
+  ctx.strokeStyle = "#0aaaff";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  points.forEach(p => {
+    ctx.fillStyle = "#fff";
     ctx.strokeStyle = "#0aaaff";
     ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(p[0], p[1], 5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.stroke();
-
-    // Handles (5px radius)
-    points.forEach(p => {
-      ctx.fillStyle = "#ffffff";
-      ctx.strokeStyle = "#0aaaff";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(p[0], p[1], 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    });
-  }
+  });
 }
 
-// Drag logic
-canvas.onmousedown = startDrag;
-canvas.onmousemove = drag;
-canvas.onmouseup = endDrag;
-canvas.onmouseleave = endDrag;
-
-function startDrag(e) {
+// Drag handling
+canvas.onmousedown = e => {
   const r = canvas.getBoundingClientRect();
   const x = e.clientX - r.left;
   const y = e.clientY - r.top;
 
   dragIndex = -1;
-
   points.forEach((p, i) => {
-    if (Math.hypot(p[0] - x, p[1] - y) <= 12) {
-      dragIndex = i;
-    }
+    if (Math.hypot(p[0] - x, p[1] - y) <= 12) dragIndex = i;
   });
-}
+};
 
-function drag(e) {
+canvas.onmousemove = e => {
   if (dragIndex === -1) return;
-
   const r = canvas.getBoundingClientRect();
   points[dragIndex] = [
     e.clientX - r.left,
     e.clientY - r.top
   ];
   draw();
-}
+};
 
-function endDrag() {
-  dragIndex = -1;
-}
+canvas.onmouseup = canvas.onmouseleave = () => dragIndex = -1;
 
-// Crop & download (white background)
+// Crop & export
 function crop() {
-  let src = cv.imread(canvas);
+  if (!originalMat) return;
+
   let dst = new cv.Mat();
 
   let realPts = points.map(p => [p[0] / scale, p[1] / scale]);
-
   let srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, realPts.flat());
 
-  let width = Math.max(
+  let w = Math.max(
     Math.hypot(realPts[1][0]-realPts[0][0], realPts[1][1]-realPts[0][1]),
     Math.hypot(realPts[2][0]-realPts[3][0], realPts[2][1]-realPts[3][1])
   );
 
-  let height = Math.max(
+  let h = Math.max(
     Math.hypot(realPts[3][0]-realPts[0][0], realPts[3][1]-realPts[0][1]),
     Math.hypot(realPts[2][0]-realPts[1][0], realPts[2][1]-realPts[1][1])
   );
 
   let dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-    0,0, width,0, width,height, 0,height
+    0,0, w,0, w,h, 0,h
   ]);
 
   let M = cv.getPerspectiveTransform(srcPts, dstPts);
+
   cv.warpPerspective(
-    src, dst, M,
-    new cv.Size(width, height),
+    originalMat,
+    dst,
+    M,
+    new cv.Size(w, h),
     cv.INTER_LINEAR,
     cv.BORDER_CONSTANT,
     new cv.Scalar(255,255,255,255)
   );
 
   let out = document.createElement("canvas");
-  out.width = width;
-  out.height = height;
+  out.width = w;
+  out.height = h;
   let outCtx = out.getContext("2d");
   outCtx.fillStyle = "#fff";
-  outCtx.fillRect(0,0,width,height);
+  outCtx.fillRect(0,0,w,h);
   cv.imshow(out, dst);
 
   let a = document.createElement("a");
@@ -246,7 +227,7 @@ function crop() {
   a.href = out.toDataURL("image/png");
   a.click();
 
-  src.delete(); dst.delete(); srcPts.delete(); dstPts.delete(); M.delete();
+  dst.delete(); srcPts.delete(); dstPts.delete(); M.delete();
 }
 </script>
 
