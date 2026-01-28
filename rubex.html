@@ -8,46 +8,40 @@
 <style>
 body {
     font-family: Arial, sans-serif;
-    background: #111;
-    color: #fff;
-    text-align: center;
+    background:#111;
+    color:#fff;
+    text-align:center;
 }
 
 #game {
-    display: grid;
-    grid-template-columns: repeat(3, 80px);
-    gap: 6px;
-    justify-content: center;
-    margin: 20px auto;
+    display:grid;
+    grid-template-columns:repeat(3,80px);
+    gap:6px;
+    justify-content:center;
+    margin:20px auto;
 }
 
 .tile {
-    width: 80px;
-    height: 80px;
-    border-radius: 8px;
-}
-
-.controls {
-    margin-top: 15px;
+    width:80px;
+    height:80px;
+    border-radius:8px;
 }
 
 button {
-    margin: 4px;
-    padding: 10px 14px;
-    border-radius: 6px;
-    border: none;
-    font-size: 14px;
-    cursor: pointer;
+    margin:4px;
+    padding:10px 14px;
+    border-radius:6px;
+    border:none;
+    cursor:pointer;
 }
 
 pre {
-    background: #000;
-    color: #0f0;
-    padding: 10px;
-    margin: 10px auto;
-    width: 90%;
-    max-width: 420px;
-    text-align: left;
+    background:#000;
+    padding:10px;
+    margin:10px auto;
+    width:90%;
+    max-width:420px;
+    text-align:left;
 }
 </style>
 </head>
@@ -55,41 +49,33 @@ pre {
 <body>
 
 <h2>2D Rubex Game</h2>
-<p>Rotate rows & columns to match all colors</p>
 
 <div id="game"></div>
 
-<div class="controls">
-    <h4>Rotate Rows</h4>
+<div>
     <button onclick="rotateRow(0)">Row 1</button>
     <button onclick="rotateRow(1)">Row 2</button>
     <button onclick="rotateRow(2)">Row 3</button>
-
-    <h4>Rotate Columns</h4>
+    <br>
     <button onclick="rotateCol(0)">Col 1</button>
     <button onclick="rotateCol(1)">Col 2</button>
     <button onclick="rotateCol(2)">Col 3</button>
-
     <br><br>
     <button onclick="showHint()">Hint</button>
 </div>
 
-<pre id="hintBox" style="display:none;"></pre>
-
-<pre id="stepsBox">Minimum rotations: calculating...</pre>
+<pre id="hintBox" style="display:none;color:#0f0;"></pre>
+<pre id="stepsBox" style="color:#ffd700;">Minimum rotations: calculating...</pre>
 
 <script>
-const colors = ["red", "blue", "green", "yellow", "orange"];
+const colors = ["red","blue","green","yellow","orange"];
 let grid = [];
 
 /* ---------- INIT ---------- */
-function randomColor() {
-    return colors[Math.floor(Math.random() * colors.length)];
-}
-
 function init() {
-    grid = [];
-    for (let i = 0; i < 9; i++) grid.push(randomColor());
+    grid = Array.from({length:9}, () =>
+        colors[Math.floor(Math.random()*colors.length)]
+    );
     draw();
 }
 
@@ -98,122 +84,113 @@ function draw() {
     const game = document.getElementById("game");
     game.innerHTML = "";
 
-    grid.forEach(color => {
+    grid.forEach(c => {
         const d = document.createElement("div");
         d.className = "tile";
-        d.style.background = color;
+        d.style.background = c;
         game.appendChild(d);
     });
 
-    checkWin();
-    updateMinSteps();
+    clearHint();              // IMPORTANT
+    updateMinSteps();         // ALWAYS updates
 }
 
 /* ---------- ROTATIONS ---------- */
-function rotateRow(row) {
-    let i = row * 3;
-    [grid[i], grid[i+1], grid[i+2]] = [grid[i+1], grid[i+2], grid[i]];
+function rotateRow(r) {
+    const i = r*3;
+    [grid[i],grid[i+1],grid[i+2]] = [grid[i+1],grid[i+2],grid[i]];
     draw();
 }
 
-function rotateCol(col) {
-    [grid[col], grid[col+3], grid[col+6]] =
-    [grid[col+3], grid[col+6], grid[col]];
+function rotateCol(c) {
+    [grid[c],grid[c+3],grid[c+6]] = [grid[c+3],grid[c+6],grid[c]];
     draw();
 }
 
-/* ---------- WIN CHECK ---------- */
-function checkWin() {
-    if (grid.every(c => c === grid[0])) {
-        setTimeout(() => alert("🎉 Puzzle Solved!"), 100);
-    }
-}
-
-/* ---------- HINT SYSTEM ---------- */
+/* ---------- HINT ---------- */
 function showHint() {
     const box = document.getElementById("hintBox");
     let hint = "";
 
-    for (let r = 0; r < 3; r++) {
-        let i = r * 3;
-        if (!(grid[i] === grid[i+1] && grid[i+1] === grid[i+2])) {
-            hint = `Hint: Try rotating Row ${r + 1}`;
+    for (let r=0;r<3;r++) {
+        const i=r*3;
+        if (!(grid[i]===grid[i+1] && grid[i+1]===grid[i+2])) {
+            hint = `Hint: Rotate Row ${r+1}`;
             break;
         }
     }
 
     if (!hint) {
-        for (let c = 0; c < 3; c++) {
-            if (!(grid[c] === grid[c+3] && grid[c+3] === grid[c+6])) {
-                hint = `Hint: Try rotating Column ${c + 1}`;
+        for (let c=0;c<3;c++) {
+            if (!(grid[c]===grid[c+3] && grid[c+3]===grid[c+6])) {
+                hint = `Hint: Rotate Column ${c+1}`;
                 break;
             }
         }
     }
 
-    if (!hint) hint = "Hint: You are very close!";
+    if (!hint) hint = "Hint: One move away";
 
-    box.style.display = "block";
+    box.style.display="block";
     box.textContent = hint;
 }
 
-/* ---------- MIN ROTATION SOLVER (BFS) ---------- */
-function serialize(g) {
-    return g.join(",");
+function clearHint() {
+    const box = document.getElementById("hintBox");
+    box.style.display="none";
+    box.textContent="";
 }
 
-function isSolved(g) {
-    return g.every(c => c === g[0]);
-}
+/* ---------- MIN MOVES (BFS) ---------- */
+function serialize(g){ return g.join(","); }
+function solved(g){ return g.every(x=>x===g[0]); }
 
-function getMoves(g) {
-    let moves = [];
-
-    for (let r = 0; r < 3; r++) {
-        let ng = [...g];
-        let i = r * 3;
-        [ng[i], ng[i+1], ng[i+2]] = [ng[i+1], ng[i+2], ng[i]];
-        moves.push(ng);
+function moves(g){
+    let out=[];
+    for(let r=0;r<3;r++){
+        let n=[...g];
+        let i=r*3;
+        [n[i],n[i+1],n[i+2]]=[n[i+1],n[i+2],n[i]];
+        out.push(n);
     }
-
-    for (let c = 0; c < 3; c++) {
-        let ng = [...g];
-        [ng[c], ng[c+3], ng[c+6]] = [ng[c+3], ng[c+6], ng[c]];
-        moves.push(ng);
+    for(let c=0;c<3;c++){
+        let n=[...g];
+        [n[c],n[c+3],n[c+6]]=[n[c+3],n[c+6],n[c]];
+        out.push(n);
     }
-
-    return moves;
+    return out;
 }
 
-function minRotations(start) {
-    const seen = new Set();
-    const q = [{ g: start, d: 0 }];
-
+function minRotations(start){
+    const seen=new Set();
+    const q=[{g:start,d:0}];
     seen.add(serialize(start));
 
-    while (q.length) {
-        const { g, d } = q.shift();
-        if (isSolved(g)) return d;
-        if (d >= 6) continue;
+    while(q.length){
+        const {g,d}=q.shift();
+        if(solved(g)) return d;
+        if(d>=6) continue;
 
-        for (const ng of getMoves(g)) {
-            const key = serialize(ng);
-            if (!seen.has(key)) {
-                seen.add(key);
-                q.push({ g: ng, d: d + 1 });
+        for(const ng of moves(g)){
+            const k=serialize(ng);
+            if(!seen.has(k)){
+                seen.add(k);
+                q.push({g:ng,d:d+1});
             }
         }
     }
     return "≥7";
 }
 
-function updateMinSteps() {
+function updateMinSteps(){
+    const steps = minRotations([...grid]); // CLONE FIX
     document.getElementById("stepsBox").textContent =
-        "Minimum rotations: " + minRotations(grid);
+        "Minimum rotations: " + steps;
 }
 
 init();
 </script>
-
+by p
 </body>
+
 </html>
