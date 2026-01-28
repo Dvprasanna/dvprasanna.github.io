@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2D Rubex Game</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: #fff;
+    text-align: center;
+}
+
+#game {
+    display: grid;
+    grid-template-columns: repeat(3, 80px);
+    gap: 6px;
+    justify-content: center;
+    margin: 20px auto;
+}
+
+.tile {
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+}
+
+.controls {
+    margin-top: 15px;
+}
+
+button {
+    margin: 4px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<h2>2D Rubex Game</h2>
+<p>Rotate rows & columns to match colors</p>
+
+<div id="game"></div>
+
+<div class="controls">
+    <h4>Rotate Rows</h4>
+    <button onclick="rotateRow(0)">Row 1</button>
+    <button onclick="rotateRow(1)">Row 2</button>
+    <button onclick="rotateRow(2)">Row 3</button>
+
+    <h4>Rotate Columns</h4>
+    <button onclick="rotateCol(0)">Col 1</button>
+    <button onclick="rotateCol(1)">Col 2</button>
+    <button onclick="rotateCol(2)">Col 3</button>
+</div>
+
+<script>
+const colors = ["red", "blue", "green", "yellow", "orange"];
+let grid = [];
+
+function randomColor() {
+    return colors[Math.floor(Math.random() * colors.length)];
+}
+
+function init() {
+    grid = [];
+    for (let i = 0; i < 9; i++) {
+        grid.push(randomColor());
+    }
+    draw();
+}
+
+function draw() {
+    const game = document.getElementById("game");
+    game.innerHTML = "";
+    grid.forEach(color => {
+        const div = document.createElement("div");
+        div.className = "tile";
+        div.style.background = color;
+        game.appendChild(div);
+    });
+    checkWin();
+}
+
+function rotateRow(row) {
+    const i = row * 3;
+    const temp = grid[i];
+    grid[i] = grid[i + 1];
+    grid[i + 1] = grid[i + 2];
+    grid[i + 2] = temp;
+    draw();
+}
+
+function rotateCol(col) {
+    const temp = grid[col];
+    grid[col] = grid[col + 3];
+    grid[col + 3] = grid[col + 6];
+    grid[col + 6] = temp;
+    draw();
+}
+
+function checkWin() {
+    if (grid.every(c => c === grid[0])) {
+        setTimeout(() => alert("🎉 You solved it!"), 100);
+    }
+}
+
+init();
+</script>
+by prasana
+</body>
+</html>
