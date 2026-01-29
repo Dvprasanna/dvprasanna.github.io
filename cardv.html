@@ -5,142 +5,142 @@
 <head>
   <!-- 1.1 -->
   <meta charset="UTF-8">
-  <title>Print Visiting Card (300 DPI)</title>
+  <title>Visiting Card – Multiple Text Layouts</title>
 
   <!-- 1.2 -->
   <style>
-    /* 1.2.1 */
-    body {
-      font-family: Arial, sans-serif;
-      background: #eee;
-      padding: 20px;
-    }
-
-    /* 1.2.2 : screen preview only */
-    canvas {
-      width: 350px;
-      height: 200px;
-      border: 1px solid #999;
-      display: block;
-      margin-bottom: 15px;
-    }
-
-    /* 1.2.3 */
-    .controls input,
-    .controls button {
-      display: block;
-      width: 320px;
-      margin: 6px 0;
-      padding: 6px;
+    body { background:#eee; padding:20px; font-family:Arial; }
+    canvas { width:350px; height:200px; border:1px solid #999; display:block; margin-bottom:15px; }
+    .controls input, .controls select, .controls button {
+      width:320px; margin:6px 0; padding:6px; display:block;
     }
   </style>
 </head>
 
 <body>
   <!-- 1.3 -->
-
-  <!-- 1.3.1 : PRINT SIZE (3.5 x 2 inch @ 300 DPI) -->
   <canvas id="card" width="1050" height="600"></canvas>
 
-  <!-- 1.3.2 -->
+  <!-- 1.3.1 -->
   <div class="controls">
+    <select id="layout">
+      <option value="1">Layout 1 – Classic</option>
+      <option value="2">Layout 2 – Center Focus</option>
+      <option value="3">Layout 3 – Left Stack</option>
+    </select>
+
     <input id="name" value="John Doe">
     <input id="role" value="Software Engineer">
-
     <input id="phone" value="+91 90000 00000">
     <input id="email" value="john@email.com">
     <input id="website" value="www.company.com">
-
     <input id="company" value="COMPANY NAME">
-
     <input id="branch" value="Bangalore Branch">
     <input id="address" value="MG Road, Bangalore">
 
     <input id="c1" type="color" value="#ffffff">
     <input id="c2" type="color" value="#eaeaea">
 
-    <button onclick="download()">Download PNG</button>
+    <button onclick="download()">Download</button>
   </div>
 
   <!-- 1.4 -->
   <script>
-    // 1.4.1
-    const canvas = document.getElementById("card");
-    const ctx = canvas.getContext("2d");
-
-    // 1.4.2
+    const c = card.getContext("2d");
     const g = id => document.getElementById(id);
+    const els = ["layout","name","role","phone","email","website","company","branch","address","c1","c2"]
+      .map(g);
 
-    const nameEl = g("name");
-    const roleEl = g("role");
-    const phoneEl = g("phone");
-    const emailEl = g("email");
-    const websiteEl = g("website");
-    const companyEl = g("company");
-    const branchEl = g("branch");
-    const addressEl = g("address");
-    const c1El = g("c1");
-    const c2El = g("c2");
+    els.forEach(e => e.addEventListener("input", draw));
 
-    // 1.4.3
-    [
-      nameEl, roleEl, phoneEl, emailEl, websiteEl,
-      companyEl, branchEl, addressEl, c1El, c2El
-    ].forEach(el => el.addEventListener("input", draw));
-
-    // 1.4.4
-    function draw() {
-      // 1.4.4.1 background
-      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      grad.addColorStop(0, c1El.value);
-      grad.addColorStop(1, c2El.value);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      ctx.fillStyle = "#000";
-
-      // 1.4.4.2 top left
-      ctx.textAlign = "left";
-      ctx.font = "bold 48px Arial";
-      ctx.fillText(nameEl.value, 60, 90);
-
-      // 1.4.4.3 top right
-      ctx.textAlign = "right";
-      ctx.font = "36px Arial";
-      ctx.fillText(roleEl.value, canvas.width - 60, 90);
-
-      // 1.4.4.4 contact
-      ctx.textAlign = "left";
-      ctx.font = "32px Arial";
-      ctx.fillText(phoneEl.value, 60, 160);
-      ctx.fillText(emailEl.value, 60, 205);
-      ctx.fillText(websiteEl.value, 60, 250);
-
-      // 1.4.4.5 center company
-      ctx.textAlign = "center";
-      ctx.font = "bold 64px Arial";
-      ctx.fillText(companyEl.value, canvas.width / 2, 360);
-
-      // 1.4.4.6 bottom address
-      ctx.font = "30px Arial";
-      ctx.fillText(branchEl.value, canvas.width / 2, 500);
-      ctx.fillText(addressEl.value, canvas.width / 2, 540);
+    function bg(){
+      const gr = c.createLinearGradient(0,0,card.width,card.height);
+      gr.addColorStop(0,c1.value); gr.addColorStop(1,c2.value);
+      c.fillStyle = gr; c.fillRect(0,0,card.width,card.height);
+      c.fillStyle="#000";
     }
 
-    // 1.4.5
-    function download() {
-      const a = document.createElement("a");
-      a.download = "visiting-card-300dpi.png";
-      a.href = canvas.toDataURL("image/png");
+    function draw(){
+      bg();
+      if(layout.value==="1") layout1();
+      if(layout.value==="2") layout2();
+      if(layout.value==="3") layout3();
+    }
+
+    // 1.4.1 – Layout 1 (Classic)
+    function layout1(){
+      c.textAlign="left"; c.font="bold 48px Arial";
+      c.fillText(name.value,60,90);
+      c.textAlign="right"; c.font="36px Arial";
+      c.fillText(role.value,card.width-60,90);
+
+      c.textAlign="left"; c.font="32px Arial";
+      c.fillText(phone.value,60,170);
+      c.fillText(email.value,60,215);
+      c.fillText(website.value,60,260);
+
+      c.textAlign="center"; c.font="bold 64px Arial";
+      c.fillText(company.value,card.width/2,360);
+
+      c.font="30px Arial";
+      c.fillText(branch.value,card.width/2,500);
+      c.fillText(address.value,card.width/2,540);
+    }
+
+    // 1.4.2 – Layout 2 (Center Focus)
+    function layout2(){
+      c.textAlign="center";
+      c.font="bold 72px Arial";
+      c.fillText(company.value,card.width/2,140);
+
+      c.font="42px Arial";
+      c.fillText(name.value,card.width/2,220);
+      c.font="34px Arial";
+      c.fillText(role.value,card.width/2,270);
+
+      c.font="30px Arial";
+      c.fillText(phone.value,card.width/2,350);
+      c.fillText(email.value,card.width/2,390);
+      c.fillText(website.value,card.width/2,430);
+
+      c.font="28px Arial";
+      c.fillText(branch.value+" – "+address.value,card.width/2,520);
+    }
+
+    // 1.4.3 – Layout 3 (Left Stack)
+    function layout3(){
+      c.textAlign="left";
+      c.font="bold 60px Arial";
+      c.fillText(company.value,60,120);
+
+      c.font="42px Arial";
+      c.fillText(name.value,60,200);
+      c.font="34px Arial";
+      c.fillText(role.value,60,250);
+
+      c.font="30px Arial";
+      c.fillText(phone.value,60,330);
+      c.fillText(email.value,60,370);
+      c.fillText(website.value,60,410);
+
+      c.textAlign="right";
+      c.font="28px Arial";
+      c.fillText(branch.value,card.width-60,500);
+      c.fillText(address.value,card.width-60,540);
+    }
+
+    function download(){
+      const a=document.createElement("a");
+      a.download="visiting-card.png";
+      a.href=card.toDataURL();
       a.click();
     }
 
-    // 1.4.6
     draw();
   </script>
-by dv prasana
-dvprasanna1979@gmail.com 
+  
+  by dv p
+  dvprasanna1978@gmail.com donate me
 </body>
 <!-- 1.5 -->
-
 </html>
