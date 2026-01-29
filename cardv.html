@@ -65,41 +65,45 @@
     const ctx = canvas.getContext("2d");
 
     // 1.4.2
-    const inputs = ["name", "role", "phone", "email", "c1", "c2"];
+    const nameEl  = document.getElementById("name");
+    const roleEl  = document.getElementById("role");
+    const phoneEl = document.getElementById("phone");
+    const emailEl = document.getElementById("email");
+    const c1El    = document.getElementById("c1");
+    const c2El    = document.getElementById("c2");
 
     // 1.4.3
-    inputs.forEach(id => {
-      document.getElementById(id).addEventListener("input", draw);
+    [nameEl, roleEl, phoneEl, emailEl, c1El, c2El].forEach(el => {
+      el.addEventListener("input", draw);
     });
 
     // 1.4.4
     function draw() {
       // 1.4.4.1
       const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      g.addColorStop(0, c1.value);
-      g.addColorStop(1, c2.value);
+      g.addColorStop(0, c1El.value);
+      g.addColorStop(1, c2El.value);
 
-      // 1.4.4.2
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 1.4.4.3
+      // 1.4.4.2
       ctx.fillStyle = "#fff";
       ctx.font = "bold 20px Arial";
-      ctx.fillText(name.value, 20, 40);
+      ctx.fillText(nameEl.value, 20, 40);
 
-      // 1.4.4.4
+      // 1.4.4.3
       ctx.font = "14px Arial";
-      ctx.fillText(role.value, 20, 70);
-      ctx.fillText(phone.value, 20, 110);
-      ctx.fillText(email.value, 20, 140);
+      ctx.fillText(roleEl.value, 20, 70);
+      ctx.fillText(phoneEl.value, 20, 110);
+      ctx.fillText(emailEl.value, 20, 140);
     }
 
     // 1.4.5
     function download() {
       const a = document.createElement("a");
       a.download = "visiting-card.png";
-      a.href = canvas.toDataURL();
+      a.href = canvas.toDataURL("image/png");
       a.click();
     }
 
