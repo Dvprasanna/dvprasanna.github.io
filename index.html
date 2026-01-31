@@ -151,6 +151,14 @@ footer{
 <footer>
   GitHub Pages • v1.0 • Structured experimentation
 </footer>
-
+<script>
+document.querySelectorAll('.app a').forEach(link=>{
+  link.addEventListener('click',()=>{
+    gtag('event','open_app',{
+      app_name: link.getAttribute('href')
+    });
+  });
+});
+</script>
 </body>
 </html>
