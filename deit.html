@@ -1,130 +1,234 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <title>Daily Food Diary</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
 <style>
-    body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-        background: #f4f6f8;
-        margin: 0;
-        padding: 20px;
-    }
-    .container {
-        max-width: 900px;
-        margin: auto;
-        background: #fff;
-        padding: 20px 24px;
-        border-radius: 10px;
-        box-shadow: 0 8px 24px rgba(0,0,0,.08);
-    }
-    h1 {
-        margin-top: 0;
-        font-size: 22px;
-    }
-    .date-row {
-        margin-bottom: 20px;
-    }
-    .section {
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 14px;
-        margin-bottom: 14px;
-    }
-    .section h3 {
-        margin: 0 0 8px;
-        font-size: 16px;
-    }
-    textarea {
-        width: 100%;
-        min-height: 60px;
-        padding: 8px;
-        resize: vertical;
-    }
-    .type {
-        margin-top: 6px;
-    }
-    label {
-        margin-right: 14px;
-        font-size: 14px;
-    }
-    button {
-        background: #2563eb;
-        color: #fff;
-        border: none;
-        padding: 10px 16px;
-        font-size: 15px;
-        border-radius: 6px;
-        cursor: pointer;
-    }
-    button:hover {
-        background: #1e4ed8;
-    }
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f4f6f8;
+    margin: 0;
+    padding: 20px;
+  }
+  .container {
+    max-width: 900px;
+    margin: auto;
+    background: #fff;
+    padding: 20px 24px;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.08);
+  }
+  h1 {
+    margin-top: 0;
+    font-size: 22px;
+  }
+  .date-row {
+    margin-bottom: 16px;
+  }
+  .summary {
+    background: #f1f5f9;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 14px;
+  }
+  .section {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .section h3 {
+    margin: 0 0 6px;
+    font-size: 15px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 60px;
+    padding: 8px;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  .type {
+    margin-top: 6px;
+  }
+  label {
+    margin-right: 14px;
+    font-size: 14px;
+  }
+  button {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: 10px 16px;
+    font-size: 15px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover {
+    background: #1e4ed8;
+  }
 </style>
 </head>
 
 <body>
 <div class="container">
-    <h1>Daily Food Diary</h1>
+  <h1>Daily Food Diary</h1>
 
-    <div class="date-row">
-        <label><strong>Date:</strong></label>
-        <input type="date" id="entryDate">
-    </div>
+  <div class="date-row">
+    <label><strong>Date:</strong></label>
+    <input type="date" id="entryDate" />
+  </div>
 
-    <div id="sections"></div>
+  <div class="summary" id="summary">
+    Select a date to see summary.
+  </div>
 
-    <button onclick="exportCSV()">Export as CSV</button>
+  <div id="sections"></div>
+
+  <button onclick="exportCSV()">Export as CSV</button>
 </div>
 
 <script>
+/* ---------- CONFIG ---------- */
+const STORAGE_KEY = "foodDiary";
+
 const slots = [
-    "Before Breakfast",
-    "Breakfast",
-    "Before Lunch",
-    "Lunch",
-    "Before Dinner",
-    "Dinner",
-    "After Dinner"
+  "Before Breakfast",
+  "Breakfast",
+  "Before Lunch",
+  "Lunch",
+  "Before Dinner",
+  "Dinner",
+  "After Dinner"
 ];
 
-const container = document.getElementById("sections");
+/* ---------- STORAGE ---------- */
+function loadDB() {
+  return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+}
+
+function saveDB(db) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+}
+
+/* ---------- UI BUILD ---------- */
+const sectionsEl = document.getElementById("sections");
 
 slots.forEach(slot => {
-    container.innerHTML += `
-        <div class="section">
-            <h3>${slot}</h3>
-            <textarea placeholder="Write what you had..."></textarea>
-            <div class="type">
-                <label><input type="radio" name="${slot}" value="Liquid"> Liquid</label>
-                <label><input type="radio" name="${slot}" value="Solid"> Solid</label>
-            </div>
-        </div>
-    `;
+  sectionsEl.innerHTML += `
+    <div class="section" data-slot="${slot}">
+      <h3>${slot}</h3>
+      <textarea placeholder="Write what you had..."></textarea>
+      <div class="type">
+        <label><input type="radio" name="${slot}" value="Liquid"> Liquid</label>
+        <label><input type="radio" name="${slot}" value="Solid"> Solid</label>
+      </div>
+    </div>
+  `;
 });
 
-function exportCSV() {
-    const date = document.getElementById("entryDate").value;
-    if (!date) {
-        alert("Please select a date");
-        return;
+/* ---------- CORE LOGIC ---------- */
+const dateInput = document.getElementById("entryDate");
+
+dateInput.addEventListener("change", loadDateData);
+
+function saveEntry(slot) {
+  const date = dateInput.value;
+  if (!date) return;
+
+  const db = loadDB();
+  if (!db[date]) db[date] = {};
+
+  const section = document.querySelector(`[data-slot="${slot}"]`);
+  const food = section.querySelector("textarea").value;
+  const typeInput = section.querySelector("input[type=radio]:checked");
+  const type = typeInput ? typeInput.value : "";
+
+  db[date][slot] = { food, type };
+  saveDB(db);
+  updateSummary();
+}
+
+function loadDateData() {
+  const date = dateInput.value;
+  const db = loadDB();
+  const dayData = db[date] || {};
+
+  document.querySelectorAll(".section").forEach(section => {
+    const slot = section.dataset.slot;
+    const textarea = section.querySelector("textarea");
+    const radios = section.querySelectorAll("input[type=radio]");
+
+    textarea.value = dayData[slot]?.food || "";
+    radios.forEach(r => r.checked = (r.value === dayData[slot]?.type));
+  });
+
+  updateSummary();
+}
+
+/* ---------- AUTO-SAVE ---------- */
+document.querySelectorAll(".section").forEach(section => {
+  const slot = section.dataset.slot;
+  section.querySelector("textarea").addEventListener("keyup", () => saveEntry(slot));
+  section.querySelectorAll("input[type=radio]").forEach(radio => {
+    radio.addEventListener("change", () => saveEntry(slot));
+  });
+});
+
+/* ---------- SUMMARY ---------- */
+function updateSummary() {
+  const date = dateInput.value;
+  if (!date) {
+    summary.innerText = "Select a date to see summary.";
+    return;
+  }
+
+  const db = loadDB();
+  const dayData = db[date] || {};
+
+  let filled = 0, liquid = 0, solid = 0;
+  let missing = [];
+
+  slots.forEach(slot => {
+    const e = dayData[slot];
+    if (e && e.food && e.food.trim() !== "") {
+      filled++;
+      if (e.type === "Liquid") liquid++;
+      if (e.type === "Solid") solid++;
+    } else {
+      missing.push(slot);
     }
+  });
 
-    let csv = "Date,Time Slot,Food,Type\n";
+  summary.innerText =
+    `Summary – ${date}\n` +
+    `• Filled: ${filled} / ${slots.length}\n` +
+    `• Liquid: ${liquid}\n` +
+    `• Solid: ${solid}\n` +
+    `• Missing: ${missing.length ? missing.join(", ") : "None"}`;
+}
 
-    document.querySelectorAll(".section").forEach((sec, i) => {
-        const food = sec.querySelector("textarea").value.replace(/,/g, " ");
-        const typeInput = sec.querySelector("input[type=radio]:checked");
-        const type = typeInput ? typeInput.value : "";
-        csv += `${date},${slots[i]},${food},${type}\n`;
-    });
+/* ---------- CSV EXPORT ---------- */
+function exportCSV() {
+  const db = loadDB();
+  let csv = "Date,Time Slot,Food,Type\n";
 
-    const blob = new Blob([csv], { type: "text/csv" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `food-diary-${date}.csv`;
-    link.click();
+  for (const date in db) {
+    for (const slot in db[date]) {
+      const e = db[date][slot];
+      const food = (e.food || "").replace(/,/g, " ");
+      csv += `${date},${slot},${food},${e.type || ""}\n`;
+    }
+  }
+
+  const blob = new Blob([csv], { type: "text/csv" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "food-diary.csv";
+  link.click();
 }
 </script>
 </body>
