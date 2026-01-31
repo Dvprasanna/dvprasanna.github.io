@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Daily Food Diary</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+    body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        background: #f4f6f8;
+        margin: 0;
+        padding: 20px;
+    }
+    .container {
+        max-width: 900px;
+        margin: auto;
+        background: #fff;
+        padding: 20px 24px;
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.08);
+    }
+    h1 {
+        margin-top: 0;
+        font-size: 22px;
+    }
+    .date-row {
+        margin-bottom: 20px;
+    }
+    .section {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 14px;
+        margin-bottom: 14px;
+    }
+    .section h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+    }
+    textarea {
+        width: 100%;
+        min-height: 60px;
+        padding: 8px;
+        resize: vertical;
+    }
+    .type {
+        margin-top: 6px;
+    }
+    label {
+        margin-right: 14px;
+        font-size: 14px;
+    }
+    button {
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        padding: 10px 16px;
+        font-size: 15px;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    button:hover {
+        background: #1e4ed8;
+    }
+</style>
+</head>
+
+<body>
+<div class="container">
+    <h1>Daily Food Diary</h1>
+
+    <div class="date-row">
+        <label><strong>Date:</strong></label>
+        <input type="date" id="entryDate">
+    </div>
+
+    <div id="sections"></div>
+
+    <button onclick="exportCSV()">Export as CSV</button>
+</div>
+
+<script>
+const slots = [
+    "Before Breakfast",
+    "Breakfast",
+    "Before Lunch",
+    "Lunch",
+    "Before Dinner",
+    "Dinner",
+    "After Dinner"
+];
+
+const container = document.getElementById("sections");
+
+slots.forEach(slot => {
+    container.innerHTML += `
+        <div class="section">
+            <h3>${slot}</h3>
+            <textarea placeholder="Write what you had..."></textarea>
+            <div class="type">
+                <label><input type="radio" name="${slot}" value="Liquid"> Liquid</label>
+                <label><input type="radio" name="${slot}" value="Solid"> Solid</label>
+            </div>
+        </div>
+    `;
+});
+
+function exportCSV() {
+    const date = document.getElementById("entryDate").value;
+    if (!date) {
+        alert("Please select a date");
+        return;
+    }
+
+    let csv = "Date,Time Slot,Food,Type\n";
+
+    document.querySelectorAll(".section").forEach((sec, i) => {
+        const food = sec.querySelector("textarea").value.replace(/,/g, " ");
+        const typeInput = sec.querySelector("input[type=radio]:checked");
+        const type = typeInput ? typeInput.value : "";
+        csv += `${date},${slots[i]},${food},${type}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `food-diary-${date}.csv`;
+    link.click();
+}
+</script>
+</body>
+</html>
