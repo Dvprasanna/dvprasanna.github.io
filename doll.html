@@ -2,122 +2,110 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Puppet Global Y Offset</title>
+<title>Full Puppet Control</title>
 <style>
-  body{background:#111;display:flex;justify-content:center;}
-  canvas{background:#fff;margin-top:20px;touch-action:none;}
+ body{background:#111;display:flex;justify-content:center;}
+ canvas{background:#fff;margin-top:20px;touch-action:none;}
 </style>
 </head>
 <body>
 
-<canvas id="stage" width="460" height="560"></canvas>
+<canvas id="stage" width="480" height="580"></canvas>
 
 <script>
 const c = document.getElementById("stage");
-const g = c.getContext("2d");
+const ctx = c.getContext("2d");
 
 const puppet = {
-  barX: 230,
-  barY: 0,              // GLOBAL Y OFFSET
-  baseY: 240,
-  pose: {
-    head: 0,
-    lh: 0,
-    rh: 0,
-    ll: 0,
-    rl: 0
+  barX: 240,
+  barY: 0,
+  baseY: 260,
+  parts: {
+    head:{x:0,y:-40},
+    lh:{x:-50,y:40},
+    rh:{x:50,y:40},
+    ll:{x:-30,y:150},
+    rl:{x:30,y:150}
   }
 };
 
 let drag = null;
 
-const L=(x1,y1,x2,y2)=>{g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke();}
-const D=(x,y)=>{g.beginPath();g.arc(x,y,6,0,Math.PI*2);g.fill();}
+const L=(x1,y1,x2,y2)=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+const D=(x,y)=>{ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();}
 
 function draw(){
-  g.clearRect(0,0,460,560);
-  g.lineWidth=2;
-  g.strokeStyle="#000";
-  g.fillStyle="#c00";
+  ctx.clearRect(0,0,480,580);
+  ctx.lineWidth=2;
+  ctx.strokeStyle="#000";
+  ctx.fillStyle="#c00";
 
   // CONTROL BARS
-  L(puppet.barX-60,50,puppet.barX+60,50);
-  D(puppet.barX,50);
-
-  L(400,80+puppet.barY,400,160+puppet.barY);
-  D(400,120+puppet.barY);
+  L(puppet.barX-60,50,puppet.barX+60,50); D(puppet.barX,50);
+  L(430,80+puppet.barY,430,160+puppet.barY); D(430,120+puppet.barY);
 
   const cx = puppet.barX;
-  const gy = puppet.barY;  // GLOBAL Y
-
-  // STRINGS
-  L(cx,50,cx,puppet.baseY+gy-60);
-
-  // HEAD
-  g.beginPath();
-  g.arc(cx,
-    puppet.baseY+gy-40+puppet.pose.head,
-    20,0,Math.PI*2);
-  g.stroke();
+  const cy = puppet.baseY + puppet.barY;
 
   // BODY
-  L(cx,
-    puppet.baseY+gy,
-    cx,
-    puppet.baseY+gy+90);
+  L(cx,cy,cx,cy+90);
+
+  // HEAD
+  ctx.beginPath();
+  ctx.arc(cx+puppet.parts.head.x, cy+puppet.parts.head.y,20,0,Math.PI*2);
+  ctx.stroke();
+  D(cx+puppet.parts.head.x, cy+puppet.parts.head.y);
 
   // HANDS
-  L(cx,
-    puppet.baseY+gy+20,
-    cx-50,
-    puppet.baseY+gy+40+puppet.pose.lh);
-
-  L(cx,
-    puppet.baseY+gy+20,
-    cx+50,
-    puppet.baseY+gy+40+puppet.pose.rh);
+  ["lh","rh"].forEach(k=>{
+    L(cx,cy+20,cx+puppet.parts[k].x,cy+puppet.parts[k].y);
+    D(cx+puppet.parts[k].x,cy+puppet.parts[k].y);
+  });
 
   // LEGS
-  L(cx,
-    puppet.baseY+gy+90,
-    cx-30,
-    puppet.baseY+gy+140+puppet.pose.ll);
-
-  L(cx,
-    puppet.baseY+gy+90,
-    cx+30,
-    puppet.baseY+gy+140+puppet.pose.rl);
+  ["ll","rl"].forEach(k=>{
+    L(cx,cy+90,cx+puppet.parts[k].x,cy+puppet.parts[k].y);
+    D(cx+puppet.parts[k].x,cy+puppet.parts[k].y);
+  });
 }
 
-function P(e){
+function pos(e){
   const r=c.getBoundingClientRect();
   const t=e.touches?e.touches[0]:e;
   return {x:t.clientX-r.left,y:t.clientY-r.top};
 }
 
+function hit(px,py,x,y){ return Math.hypot(px-x,py-y)<10; }
+
 c.onmousedown=c.ontouchstart=e=>{
-  const p=P(e);
-  if(Math.abs(p.y-50)<10 && Math.abs(p.x-puppet.barX)<60) drag="x";
-  else if(Math.abs(p.x-400)<10 && Math.abs(p.y-(120+puppet.barY))<40) drag="y";
+  const p=pos(e);
+
+  if(Math.abs(p.y-50)<10 && Math.abs(p.x-puppet.barX)<60){ drag={type:"barX"}; return; }
+  if(Math.abs(p.x-430)<10 && Math.abs(p.y-(120+puppet.barY))<40){ drag={type:"barY"}; return; }
+
+  const cx=puppet.barX, cy=puppet.baseY+puppet.barY;
+  for(const k in puppet.parts){
+    const px=cx+puppet.parts[k].x;
+    const py=cy+puppet.parts[k].y;
+    if(hit(p.x,p.y,px,py)){ drag={type:"part",key:k}; return; }
+  }
 };
 
 c.onmousemove=c.ontouchmove=e=>{
   if(!drag) return;
-  const p=P(e);
-  if(drag==="x") puppet.barX=Math.max(80,Math.min(340,p.x));
-  if(drag==="y") puppet.barY=Math.max(-80,Math.min(120,p.y-120));
+  const p=pos(e);
+  const cx=puppet.barX, cy=puppet.baseY+puppet.barY;
+
+  if(drag.type==="barX") puppet.barX=Math.max(80,Math.min(380,p.x));
+  if(drag.type==="barY") puppet.barY=Math.max(-120,Math.min(120,p.y-120));
+  if(drag.type==="part"){
+    puppet.parts[drag.key].x = p.x - cx;
+    puppet.parts[drag.key].y = p.y - cy;
+  }
   draw();
 };
 
 c.onmouseup=c.ontouchend=()=>drag=null;
-
-// idle articulation (strings still matter)
-setInterval(()=>{
-  puppet.pose.lh = Math.sin(Date.now()/300)*8;
-  puppet.pose.rh = -Math.sin(Date.now()/300)*8;
-  puppet.pose.head = Math.sin(Date.now()/400)*4;
-  draw();
-},30);
 
 draw();
 </script>
