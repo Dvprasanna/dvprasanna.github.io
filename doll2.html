@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Simple Puppet Animator (Auto Key + Frame Box)</title>
+<title>Simple Puppet Animator – All Joints</title>
 
 <style>
 body{
@@ -52,21 +52,17 @@ canvas{
 
 <body>
 
-<h3>Simple Puppet Animator</h3>
+<h3>Simple Puppet Animator (All Joint Controls)</h3>
 
 <canvas id="stage" width="360" height="360"></canvas>
 
 <div id="anim-ui">
   <button id="play">▶ Play</button>
   <button id="restart">⟲ Restart</button>
-
   Frame:
   <input id="curFrame" type="number" value="0" min="0">
-
   Max:
   <input id="maxFrame" type="number" value="40" min="1">
-
-  <button id="add">＋ Add Frame</button>
 </div>
 
 <script>
@@ -97,74 +93,69 @@ const puppet = {
   }
 };
 
-let drag=null;
+let drag = null;
 
 /* ===== HELPERS ===== */
-const line=(x1,y1,x2,y2)=>{
-  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-};
-const dot=(x,y)=>{
-  ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill();
-};
 const clone=o=>JSON.parse(JSON.stringify(o));
 
-/* ===== DRAW ===== */
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.lineWidth=3;
-  ctx.strokeStyle="#000";
-  ctx.fillStyle="#d00";
+const line=(x1,y1,x2,y2)=>{
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+};
 
-  const cx=puppet.x, cy=puppet.y;
+const dot=(x,y,color="#d00",r=6)=>{
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fill();
+};
 
-  line(cx,cy,cx,cy+70);
-
-  line(cx,cy,cx+puppet.parts.head.x,cy+puppet.parts.head.y);
-  ctx.beginPath(); ctx.arc(cx,cy-40,16,0,Math.PI*2); ctx.stroke();
-
-  ["lh","rh"].forEach(k=>{
-    const p=puppet.parts[k];
-    line(cx,cy+10,cx+p.x,cy+p.y); dot(cx+p.x,cy+p.y);
-  });
-
-  ["ll","rl"].forEach(k=>{
-    const p=puppet.parts[k];
-    line(cx,cy+70,cx+p.x,cy+p.y); dot(cx+p.x,cy+p.y);
-  });
-}
-
-/* ===== INPUT ===== */
 function pos(e){
   const r=canvas.getBoundingClientRect();
   const t=e.touches?e.touches[0]:e;
   return {x:t.clientX-r.left,y:t.clientY-r.top};
 }
 function hit(px,py,x,y){
-  return Math.hypot(px-x,py-y)<12;
+  return Math.hypot(px-x,py-y)<10;
 }
 
-canvas.onmousedown=canvas.ontouchstart=e=>{
-  if(playing) return;
-  const p=pos(e);
+/* ===== DRAW ===== */
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.lineWidth=3;
+  ctx.strokeStyle="#000";
+
   const cx=puppet.x, cy=puppet.y;
 
-  for(const k in puppet.parts){
-    const px=cx+puppet.parts[k].x;
-    const py=cy+puppet.parts[k].y;
-    if(hit(p.x,p.y,px,py)){ drag={k}; return; }
-  }
-};
+  /* bones */
+  line(cx,cy,cx,cy+70);                 // spine
+  line(cx,cy,cx+puppet.parts.head.x,cy+puppet.parts.head.y);
 
-canvas.onmousemove=canvas.ontouchmove=e=>{
-  if(!drag||playing) return;
-  const p=pos(e);
-  puppet.parts[drag.k].x=p.x-puppet.x;
-  puppet.parts[drag.k].y=p.y-puppet.y;
-  autoAddFrame();
-  draw();
-};
+  line(cx,cy+10,cx+puppet.parts.lh.x,cy+puppet.parts.lh.y);
+  line(cx,cy+10,cx+puppet.parts.rh.x,cy+puppet.parts.rh.y);
 
-canvas.onmouseup=canvas.ontouchend=()=>drag=null;
+  line(cx,cy+70,cx+puppet.parts.ll.x,cy+puppet.parts.ll.y);
+  line(cx,cy+70,cx+puppet.parts.rl.x,cy+puppet.parts.rl.y);
+
+  /* head */
+  ctx.beginPath();
+  ctx.arc(cx,cy-40,16,0,Math.PI*2);
+  ctx.stroke();
+
+  /* joint dots */
+  dot(cx,cy,"#000");                 // body root
+  dot(cx,cy-40,"#00a");              // neck / head joint
+
+  dot(cx,cy+10,"#000");              // shoulders
+  dot(cx+puppet.parts.lh.x,cy+puppet.parts.lh.y);
+  dot(cx+puppet.parts.rh.x,cy+puppet.parts.rh.y);
+
+  dot(cx,cy+70,"#000");               // hips
+  dot(cx+puppet.parts.ll.x,cy+puppet.parts.ll.y);
+  dot(cx+puppet.parts.rl.x,cy+puppet.parts.rl.y);
+}
 
 /* ===== AUTO KEY ===== */
 function poseMovedEnough(curr,last){
@@ -184,6 +175,40 @@ function autoAddFrame(){
   }
 }
 
+/* ===== INPUT ===== */
+canvas.onmousedown=canvas.ontouchstart=e=>{
+  if(playing) return;
+  const p=pos(e);
+  const cx=puppet.x, cy=puppet.y;
+
+  if(hit(p.x,p.y,cx,cy)){ drag={type:"root"}; return; }
+
+  for(const k in puppet.parts){
+    const px=cx+puppet.parts[k].x;
+    const py=cy+puppet.parts[k].y;
+    if(hit(p.x,p.y,px,py)){ drag={type:"part",k}; return; }
+  }
+};
+
+canvas.onmousemove=canvas.ontouchmove=e=>{
+  if(!drag||playing) return;
+  const p=pos(e);
+
+  if(drag.type==="root"){
+    puppet.x=p.x;
+    puppet.y=p.y;
+  }
+  if(drag.type==="part"){
+    puppet.parts[drag.k].x=p.x-puppet.x;
+    puppet.parts[drag.k].y=p.y-puppet.y;
+  }
+
+  autoAddFrame();
+  draw();
+};
+
+canvas.onmouseup=canvas.ontouchend=()=>drag=null;
+
 /* ===== ANIMATION ===== */
 function applyFrame(f){
   if(frames[f]){
@@ -198,11 +223,6 @@ document.getElementById("curFrame").onchange=e=>{
   const max=parseInt(document.getElementById("maxFrame").value);
   currentFrame=Math.max(0,Math.min(max,parseInt(e.target.value)||0));
   applyFrame(currentFrame);
-};
-
-document.getElementById("add").onclick=()=>{
-  frames[currentFrame]=clone(puppet);
-  lastAutoPose=clone(puppet);
 };
 
 document.getElementById("play").onclick=e=>{
