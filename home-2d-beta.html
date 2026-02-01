@@ -2,37 +2,100 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Minimalist 2D Flat Layout</title>
+<title>2D Flat Layout Editor</title>
 
 <style>
 body{
   margin:0;
   font-family:system-ui, sans-serif;
-  background:#f2f2f2;
+  background:#f4f4f4;
+}
+header{
+  background:#111;
+  color:#fff;
+  padding:12px 20px;
+  font-size:18px;
+}
+#app{
+  display:flex;
+  height:calc(100vh - 48px);
+}
+#sidebar{
+  width:260px;
+  background:#fff;
+  border-right:1px solid #ddd;
+  padding:16px;
+}
+#sidebar h3{
+  font-size:14px;
+  margin:14px 0 6px;
+}
+label{
+  font-size:13px;
+  display:block;
+  margin-bottom:6px;
+}
+button{
+  width:100%;
+  padding:10px;
+  margin-top:10px;
+  border:1px solid #ccc;
+  background:#fafafa;
+  cursor:pointer;
+}
+button:hover{ background:#eee; }
+
+#canvasWrap{
+  flex:1;
   display:flex;
   justify-content:center;
   align-items:center;
-  height:100vh;
+  background:#eaeaea;
 }
-button{
-  padding:14px 22px;
-  font-size:16px;
-  border:1px solid #ccc;
+svg{
   background:#fff;
-  cursor:pointer;
+  border:1px solid #ccc;
 }
-button:hover{
-  background:#eee;
-}
+
+/* Layers */
+.wall{ stroke:#000; stroke-width:6; }
+.window{ stroke:#2b8cff; stroke-width:4; }
+.door{ stroke:#b36a3c; stroke-width:3; fill:none; }
+.furniture{ stroke:#444; stroke-width:2; fill:none; }
+.electric{ fill:#d40000; }
+.dimension{ stroke:#666; stroke-width:1; }
+.dim-text{ fill:#333; font-size:12px; }
 </style>
 </head>
 
 <body>
-v2
-<button onclick="generatePDF()">Generate PDF</button>
 
-<!-- Hidden SVG (internal use only) -->
-<svg id="plan" width="900" height="550" style="display:none"></svg>
+<header>Minimalist 2D Flat Layout – Editor</header>
+
+<div id="app">
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <h3>Layers</h3>
+  <label><input type="checkbox" checked onchange="toggle('wall')"> Walls</label>
+  <label><input type="checkbox" checked onchange="toggle('furniture')"> Furniture</label>
+  <label><input type="checkbox" checked onchange="toggle('electric')"> Electrical</label>
+  <label><input type="checkbox" checked onchange="toggle('dimension')"> Dimensions</label>
+
+  <h3>Output</h3>
+  <button onclick="exportPDF()">Export PDF</button>
+
+  <div style="margin-top:10px;font-size:12px;color:#777;">
+    v3 · editable web CAD
+  </div>
+</div>
+
+<!-- CANVAS -->
+<div id="canvasWrap">
+  <svg id="plan" width="900" height="550"></svg>
+</div>
+
+</div>
 
 <!-- Libraries -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -41,81 +104,72 @@ v2
 <script>
 const svg = document.getElementById("plan");
 
+/* ---------- Helper ---------- */
 function el(type, attrs){
   const e = document.createElementNS("http://www.w3.org/2000/svg", type);
   for(let k in attrs) e.setAttribute(k, attrs[k]);
   svg.appendChild(e);
 }
 
-/* ---------------- DRAW PLAN ---------------- */
-function drawPlan(){
+/* ---------- DRAWING ---------- */
+function draw(){
   svg.innerHTML = "";
 
-  // OUTER WALLS
-  el("line",{x1:60,y1:60,x2:840,y2:60,stroke:"#000","stroke-width":6});
-  el("line",{x1:840,y1:60,x2:840,y2:480,stroke:"#000","stroke-width":6});
-  el("line",{x1:840,y1:480,x2:60,y2:480,stroke:"#000","stroke-width":6});
-  el("line",{x1:60,y1:480,x2:60,y2:60,stroke:"#000","stroke-width":6});
+  // Walls
+  el("line",{x1:60,y1:60,x2:840,y2:60,class:"wall"});
+  el("line",{x1:840,y1:60,x2:840,y2:480,class:"wall"});
+  el("line",{x1:840,y1:480,x2:60,y2:480,class:"wall"});
+  el("line",{x1:60,y1:480,x2:60,y2:60,class:"wall"});
+  el("line",{x1:420,y1:60,x2:420,y2:480,class:"wall"});
 
-  // INTERNAL WALL
-  el("line",{x1:420,y1:60,x2:420,y2:480,stroke:"#000","stroke-width":6});
+  // Window
+  el("line",{x1:200,y1:60,x2:320,y2:60,class:"window"});
 
-  // WINDOW
-  el("line",{x1:200,y1:60,x2:320,y2:60,stroke:"#2b8cff","stroke-width":4});
+  // Door
+  el("path",{d:"M420 300 A60 60 0 0 1 480 360",class:"door"});
 
-  // DOOR (arc)
-  el("path",{
-    d:"M420 300 A60 60 0 0 1 480 360",
-    stroke:"#b36a3c",
-    fill:"none",
-    "stroke-width":3
+  // Furniture
+  el("rect",{x:120,y:320,width:160,height:80,class:"furniture"});
+  el("rect",{x:520,y:120,width:180,height:70,class:"furniture"});
+  el("rect",{x:560,y:300,width:120,height:120,class:"furniture"});
+
+  // Electrical
+  el("circle",{cx:150,cy:290,r:5,class:"electric"});
+  el("circle",{cx:650,cy:180,r:5,class:"electric"});
+  el("circle",{cx:700,cy:360,r:5,class:"electric"});
+
+  // Dimensions
+  dim(60,60,840,60,"7800 mm");
+  dim(60,60,60,480,"4200 mm");
+}
+
+/* ---------- DIMENSION ---------- */
+function dim(x1,y1,x2,y2,label){
+  const o=20;
+  const dx=y1===y2?0:o;
+  const dy=x1===x2?0:o;
+
+  el("line",{x1:x1,y1:y1,x2:x1+dx,y2:y1+dy,class:"dimension"});
+  el("line",{x1:x2,y1:y2,x2:x2+dx,y2:y2+dy,class:"dimension"});
+  el("line",{x1:x1+dx,y1:y1+dy,x2:x2+dx,y2:y2+dy,class:"dimension"});
+  el("text",{x:(x1+x2)/2+dx,y:(y1+y2)/2+dy-4,class:"dim-text"}).textContent=label;
+}
+
+/* ---------- TOGGLE ---------- */
+function toggle(cls){
+  document.querySelectorAll("."+cls).forEach(e=>{
+    e.style.display = e.style.display==="none"?"block":"none";
   });
-
-  // FURNITURE
-  el("rect",{x:120,y:320,width:160,height:80,fill:"none",stroke:"#444","stroke-width":2});
-  el("rect",{x:520,y:120,width:180,height:70,fill:"none",stroke:"#444","stroke-width":2});
-  el("rect",{x:560,y:300,width:120,height:120,fill:"none",stroke:"#444","stroke-width":2});
-
-  // ELECTRICAL POINTS
-  el("circle",{cx:150,cy:290,r:5,fill:"#d40000"});
-  el("circle",{cx:650,cy:180,r:5,fill:"#d40000"});
-  el("circle",{cx:700,cy:360,r:5,fill:"#d40000"});
-
-  // DIMENSIONS
-  dimension(60,60,840,60,"7800 mm");
-  dimension(60,60,60,480,"4200 mm");
 }
 
-/* -------- DIMENSION FUNCTION -------- */
-function dimension(x1,y1,x2,y2,label){
-  const offset = 20;
-  const dx = y1===y2 ? 0 : offset;
-  const dy = x1===x2 ? 0 : offset;
-
-  el("line",{x1:x1,y1:y1,x2:x1+dx,y2:y1+dy,stroke:"#666","stroke-width":1});
-  el("line",{x1:x2,y1:y2,x2:x2+dx,y2:y2+dy,stroke:"#666","stroke-width":1});
-  el("line",{x1:x1+dx,y1:y1+dy,x2:x2+dx,y2:y2+dy,stroke:"#666","stroke-width":1});
-
-  el("text",{
-    x:(x1+x2)/2+dx,
-    y:(y1+y2)/2+dy-4,
-    fill:"#333",
-    "font-size":"12"
-  }).textContent = label;
-}
-
-/* ---------------- PDF FIRST ---------------- */
-async function generatePDF(){
-  drawPlan();
-
+/* ---------- PDF EXPORT ---------- */
+async function exportPDF(){
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF("landscape","pt","a4");
 
   const svgData = new XMLSerializer().serializeToString(svg);
-
   const canvas = document.createElement("canvas");
-  canvas.width = 1200;
-  canvas.height = 700;
+  canvas.width=1200; canvas.height=700;
   const ctx = canvas.getContext("2d");
 
   const v = await canvg.Canvg.fromString(ctx, svgData);
@@ -123,14 +177,13 @@ async function generatePDF(){
 
   const img = canvas.toDataURL("image/png");
 
-  pdf.setFontSize(16);
   pdf.text("Minimalist 2D Flat Layout",40,40);
-  pdf.setFontSize(10);
-  pdf.text("2D floor plan | furniture | electrical | dimensions",40,56);
-
-  pdf.addImage(img,"PNG",40,70,760,440);
-  pdf.save("Minimalist-2D-Flat-Layout.pdf");
+  pdf.addImage(img,"PNG",40,60,760,440);
+  pdf.save("2D-Flat-Layout.pdf");
 }
+
+/* INIT */
+draw();
 </script>
 
 </body>
