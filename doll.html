@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Puppet X Axis Control</title>
+<title>Puppet XY Control</title>
 <style>
   body { background:#111; display:flex; justify-content:center; }
   canvas { background:#fff; margin-top:20px; touch-action:none; }
@@ -10,16 +10,17 @@
 </head>
 <body>
 
-<canvas id="stage" width="420" height="540"></canvas>
+<canvas id="stage" width="460" height="560"></canvas>
 
 <script>
 const canvas = document.getElementById("stage");
 const ctx = canvas.getContext("2d");
 
 const puppet = {
-  cx: 210,
-  cy: 220,
-  barX: 210,
+  barX: 230,
+  barY: 70,
+  cx: 230,
+  cy: 240,
   strings: {
     head:{y:70},
     lh:{y:90},
@@ -29,26 +30,26 @@ const puppet = {
   }
 };
 
-let dragTarget = null;
+let drag = null;
 
-function line(x1,y1,x2,y2){
-  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-}
-function dot(x,y){
-  ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill();
-}
+const line=(x1,y1,x2,y2)=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+const dot =(x,y)=>{ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();}
 
 function draw(){
-  ctx.clearRect(0,0,420,540);
-  ctx.lineWidth = 2;
+  ctx.clearRect(0,0,460,560);
+  ctx.lineWidth=2;
   ctx.strokeStyle="#000";
   ctx.fillStyle="#c00";
 
-  // CONTROL BAR
-  line(puppet.barX-60,50,puppet.barX+60,50);
+  // CONTROL BARS
+  line(puppet.barX-60,50,puppet.barX+60,50); // X bar
   dot(puppet.barX,50);
 
-  puppet.cx = puppet.barX; // 🔑 X-AXIS LINK
+  line(400,puppet.barY-40,400,puppet.barY+40); // Y bar
+  dot(400,puppet.barY);
+
+  puppet.cx = puppet.barX;
+  puppet.cy = 240 + (puppet.barY-70); // 🔑 Y-axis control
 
   const {cx,cy,strings}=puppet;
 
@@ -89,28 +90,22 @@ function pos(e){
 
 canvas.onmousedown=canvas.ontouchstart=e=>{
   const p=pos(e);
-  if(Math.abs(p.y-50)<10 && Math.abs(p.x-puppet.barX)<60){
-    dragTarget="bar"; return;
-  }
-  for(const k in puppet.strings){
-    if(Math.abs(p.y-puppet.strings[k].y)<10){
-      dragTarget=k; return;
-    }
-  }
+  if(Math.abs(p.y-50)<10 && Math.abs(p.x-puppet.barX)<60) drag="barX";
+  else if(Math.abs(p.x-400)<10 && Math.abs(p.y-puppet.barY)<40) drag="barY";
+  else for(const k in puppet.strings)
+    if(Math.abs(p.y-puppet.strings[k].y)<10) drag=k;
 };
 
 canvas.onmousemove=canvas.ontouchmove=e=>{
-  if(!dragTarget) return;
+  if(!drag) return;
   const p=pos(e);
-  if(dragTarget==="bar"){
-    puppet.barX=Math.max(80,Math.min(340,p.x));
-  } else {
-    puppet.strings[dragTarget].y=p.y;
-  }
+  if(drag==="barX") puppet.barX=Math.max(80,Math.min(340,p.x));
+  else if(drag==="barY") puppet.barY=Math.max(50,Math.min(200,p.y));
+  else puppet.strings[drag].y=p.y;
   draw();
 };
 
-canvas.onmouseup=canvas.ontouchend=()=>dragTarget=null;
+canvas.onmouseup=canvas.ontouchend=()=>drag=null;
 
 draw();
 </script>
