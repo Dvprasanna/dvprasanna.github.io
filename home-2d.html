@@ -5,106 +5,89 @@
 <title>Minimalist 2D Flat Layout</title>
 
 <style>
-  body {
-    margin: 0;
-    font-family: system-ui, sans-serif;
-    background: #f4f4f4;
-  }
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f4f4f4;
+}
+header {
+  background: #111;
+  color: #fff;
+  padding: 12px 20px;
+  font-size: 18px;
+}
+#container {
+  display: flex;
+  height: calc(100vh - 48px);
+}
+#tools {
+  width: 260px;
+  background: #fff;
+  border-right: 1px solid #ddd;
+  padding: 16px;
+}
+h3 {
+  font-size: 14px;
+  margin-top: 16px;
+}
+button {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  background: #fafafa;
+  cursor: pointer;
+}
+label {
+  font-size: 12px;
+  display: block;
+  margin: 6px 0;
+}
+input[type="checkbox"] {
+  margin-right: 6px;
+}
+#canvasWrap {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #eaeaea;
+}
+svg {
+  background: #fff;
+  border: 1px solid #ccc;
+}
 
-  header {
-    background: #111;
-    color: #fff;
-    padding: 12px 20px;
-    font-size: 18px;
-  }
-
-  #container {
-    display: flex;
-    height: calc(100vh - 48px);
-  }
-
-  /* LEFT TOOLBAR */
-  #tools {
-    width: 240px;
-    background: #fff;
-    border-right: 1px solid #ddd;
-    padding: 16px;
-  }
-
-  #tools h3 {
-    margin-top: 0;
-    font-size: 14px;
-    color: #333;
-  }
-
-  button {
-    width: 100%;
-    margin-bottom: 10px;
-    padding: 8px;
-    border: 1px solid #ccc;
-    background: #fafafa;
-    cursor: pointer;
-  }
-
-  button:hover {
-    background: #eee;
-  }
-
-  label {
-    font-size: 12px;
-    display: block;
-    margin: 10px 0 4px;
-  }
-
-  input[type="range"] {
-    width: 100%;
-  }
-
-  /* CANVAS */
-  #canvasWrap {
-    flex: 1;
-    background: #eaeaea;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  }
-
-  svg {
-    background: #fff;
-    border: 1px solid #ccc;
-  }
-
-  .wall { stroke: #000; }
-  .door { stroke: #b36a3c; fill: none; }
-  .window { stroke: #2b8cff; }
-  .furniture { stroke: #444; fill: none; }
-  .electric { fill: #d40000; }
+/* DRAWING STYLES */
+.wall { stroke: #000; }
+.window { stroke: #2b8cff; }
+.door { stroke: #b36a3c; fill: none; }
+.furniture { stroke: #444; fill: none; }
+.electric { fill: #d40000; }
+.dimension { stroke: #666; stroke-width: 1; }
+.dim-text { fill: #333; font-size: 12px; }
 </style>
 </head>
 
 <body>
 
-<header>Minimalist 2D Flat Layout – Archicad Style</header>
+<header>Minimalist 2D Flat Layout – 2D Drafting Demo</header>
 
 <div id="container">
 
-  <!-- TOOLS -->
-  <div id="tools">
-    <h3>Drawing Tools</h3>
-    <button onclick="drawWalls()">Draw Walls</button>
-    <button onclick="drawFurniture()">Add Furniture</button>
-    <button onclick="drawElectric()">Add Electric Point</button>
+<div id="tools">
+  <h3>Visibility</h3>
+  <label><input type="checkbox" checked onchange="toggle('furniture')">Furniture</label>
+  <label><input type="checkbox" checked onchange="toggle('electric')">Electrical</label>
+  <label><input type="checkbox" checked onchange="toggle('dimension')">Dimensions</label>
 
-    <label>Wall Thickness</label>
-    <input type="range" min="4" max="12" value="6" oninput="setWallThickness(this.value)">
+  <h3>Controls</h3>
+  <button onclick="exportPDF()">Export PDF</button>
+</div>
 
-    <button onclick="exportPDF()">Export PDF</button>
-  </div>
-
-  <!-- CANVAS -->
-  <div id="canvasWrap">
-    <svg id="plan" width="900" height="550"></svg>
-  </div>
+<div id="canvasWrap">
+  <svg id="plan" width="900" height="550"></svg>
+</div>
 
 </div>
 
@@ -112,103 +95,82 @@
 
 <script>
 const svg = document.getElementById("plan");
-let wallThickness = 6;
 
-function clearPlan() {
-  svg.innerHTML = "";
+// --- HELPERS ---
+function el(type, attrs) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", type);
+  for (let k in attrs) e.setAttribute(k, attrs[k]);
+  svg.appendChild(e);
+  return e;
 }
 
-function line(x1, y1, x2, y2, cls, w = wallThickness) {
-  const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
-  l.setAttribute("x1", x1);
-  l.setAttribute("y1", y1);
-  l.setAttribute("x2", x2);
-  l.setAttribute("y2", y2);
-  l.setAttribute("class", cls);
-  l.setAttribute("stroke-width", w);
-  svg.appendChild(l);
-}
-
+// --- WALLS ---
 function drawWalls() {
-  clearPlan();
-
-  // Outer walls
-  line(60, 60, 840, 60, "wall");
-  line(840, 60, 840, 480, "wall");
-  line(840, 480, 60, 480, "wall");
-  line(60, 480, 60, 60, "wall");
-
-  // Internal walls
-  line(420, 60, 420, 480, "wall");
-  line(420, 260, 840, 260, "wall");
-
-  // Window
-  line(200, 60, 320, 60, "window", 4);
-
-  // Door
-  const door = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  door.setAttribute("d", "M420 300 A60 60 0 0 1 480 360");
-  door.setAttribute("class", "door");
-  door.setAttribute("stroke-width", 3);
-  svg.appendChild(door);
+  el("line",{x1:60,y1:60,x2:840,y2:60,class:"wall","stroke-width":6});
+  el("line",{x1:840,y1:60,x2:840,y2:480,class:"wall","stroke-width":6});
+  el("line",{x1:840,y1:480,x2:60,y2:480,class:"wall","stroke-width":6});
+  el("line",{x1:60,y1:480,x2:60,y2:60,class:"wall","stroke-width":6});
+  el("line",{x1:420,y1:60,x2:420,y2:480,class:"wall","stroke-width":6});
 }
 
+// --- FURNITURE ---
 function drawFurniture() {
-  // Bed
-  rect(120, 320, 160, 80, "furniture");
-
-  // Sofa
-  rect(520, 120, 180, 70, "furniture");
-
-  // Table
-  rect(550, 320, 120, 120, "furniture");
+  el("rect",{x:120,y:320,width:160,height:80,class:"furniture"});
+  el("rect",{x:520,y:120,width:180,height:70,class:"furniture"});
 }
 
-function rect(x, y, w, h, cls) {
-  const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  r.setAttribute("x", x);
-  r.setAttribute("y", y);
-  r.setAttribute("width", w);
-  r.setAttribute("height", h);
-  r.setAttribute("class", cls);
-  r.setAttribute("stroke-width", 2);
-  svg.appendChild(r);
-}
-
+// --- ELECTRICAL ---
 function drawElectric() {
-  electric(150, 290);
-  electric(600, 260);
-  electric(700, 150);
+  el("circle",{cx:150,cy:290,r:5,class:"electric"});
+  el("circle",{cx:650,cy:180,r:5,class:"electric"});
 }
 
-function electric(cx, cy) {
-  const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-  c.setAttribute("cx", cx);
-  c.setAttribute("cy", cy);
-  c.setAttribute("r", 5);
-  c.setAttribute("class", "electric");
-  svg.appendChild(c);
+// --- DIMENSIONS (CAD STYLE) ---
+function drawDimension(x1,y1,x2,y2,label,offset=20) {
+  const dx = y1 === y2 ? offset : 0;
+  const dy = x1 === x2 ? offset : 0;
+
+  // Extension lines
+  el("line",{x1:x1,y1:y1,x2:x1+dx,y2:y1+dy,class:"dimension"});
+  el("line",{x1:x2,y1:y2,x2:x2+dx,y2:y2+dy,class:"dimension"});
+
+  // Dimension line
+  el("line",{x1:x1+dx,y1:y1+dy,x2:x2+dx,y2:y2+dy,class:"dimension"});
+
+  // Arrowheads
+  el("line",{x1:x1+dx,y1:y1+dy,x2:x1+dx+6,y2:y1+dy-6,class:"dimension"});
+  el("line",{x1:x2+dx,y1:y2+dy,x2:x2+dx-6,y2:y2+dy-6,class:"dimension"});
+
+  // Text
+  el("text",{x:(x1+x2)/2+dx,y:(y1+y2)/2+dy-4,class:"dim-text"}).textContent = label;
 }
 
-function setWallThickness(val) {
-  wallThickness = val;
-  drawWalls();
+function drawDimensions() {
+  drawDimension(60,60,840,60,"7800 mm");
+  drawDimension(60,60,60,480,"4200 mm");
 }
 
+// --- TOGGLE ---
+function toggle(cls) {
+  document.querySelectorAll("."+cls).forEach(e=>{
+    e.style.display = e.style.display === "none" ? "block" : "none";
+  });
+}
+
+// --- EXPORT ---
 function exportPDF() {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF("landscape");
-  const svgData = new XMLSerializer().serializeToString(svg);
-
-  pdf.text("Minimalist 2D Flat Layout", 10, 10);
-  pdf.addSvgAsImage(svgData, 10, 20, 260, 160);
+  const data = new XMLSerializer().serializeToString(svg);
+  pdf.addSvgAsImage(data,10,10,260,160);
   pdf.save("2D-flat-layout.pdf");
 }
 
-// Initial draw
+// --- INIT ---
 drawWalls();
 drawFurniture();
 drawElectric();
+drawDimensions();
 </script>
 
 </body>
