@@ -2,10 +2,10 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Puppet Unified XY Control</title>
+<title>Puppet Global Y Offset</title>
 <style>
-  body { background:#111; display:flex; justify-content:center; }
-  canvas { background:#fff; margin-top:20px; touch-action:none; }
+  body{background:#111;display:flex;justify-content:center;}
+  canvas{background:#fff;margin-top:20px;touch-action:none;}
 </style>
 </head>
 <body>
@@ -14,56 +14,79 @@
 
 <script>
 const c = document.getElementById("stage");
-const x = c.getContext("2d");
+const g = c.getContext("2d");
 
 const puppet = {
   barX: 230,
-  barY: 90,
-  baseX: 230,
-  baseY: 260,
-  pose: { head:0, lh:0, rh:0 }
+  barY: 0,              // GLOBAL Y OFFSET
+  baseY: 240,
+  pose: {
+    head: 0,
+    lh: 0,
+    rh: 0,
+    ll: 0,
+    rl: 0
+  }
 };
 
 let drag = null;
 
-const L=(a,b,c,d)=>{x.beginPath();x.moveTo(a,b);x.lineTo(c,d);x.stroke();}
-const D=(a,b)=>{x.beginPath();x.arc(a,b,6,0,Math.PI*2);x.fill();}
+const L=(x1,y1,x2,y2)=>{g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke();}
+const D=(x,y)=>{g.beginPath();g.arc(x,y,6,0,Math.PI*2);g.fill();}
 
 function draw(){
-  x.clearRect(0,0,460,560);
-  x.lineWidth=2;
-  x.strokeStyle="#000";
-  x.fillStyle="#c00";
+  g.clearRect(0,0,460,560);
+  g.lineWidth=2;
+  g.strokeStyle="#000";
+  g.fillStyle="#c00";
 
   // CONTROL BARS
-  L(puppet.barX-60,50,puppet.barX+60,50); // X bar
+  L(puppet.barX-60,50,puppet.barX+60,50);
   D(puppet.barX,50);
 
-  L(400,puppet.barY-40,400,puppet.barY+40); // Y bar
-  D(400,puppet.barY);
+  L(400,80+puppet.barY,400,160+puppet.barY);
+  D(400,120+puppet.barY);
 
-  // 🔑 unified movement
   const cx = puppet.barX;
-  const cy = puppet.baseY + (puppet.barY-90);
+  const gy = puppet.barY;  // GLOBAL Y
 
-  // STRINGS (visual only)
-  L(cx,50,cx,cy-60);
+  // STRINGS
+  L(cx,50,cx,puppet.baseY+gy-60);
 
   // HEAD
-  x.beginPath();
-  x.arc(cx,cy-40+puppet.pose.head,20,0,Math.PI*2);
-  x.stroke();
+  g.beginPath();
+  g.arc(cx,
+    puppet.baseY+gy-40+puppet.pose.head,
+    20,0,Math.PI*2);
+  g.stroke();
 
   // BODY
-  L(cx,cy,cx,cy+90);
+  L(cx,
+    puppet.baseY+gy,
+    cx,
+    puppet.baseY+gy+90);
 
   // HANDS
-  L(cx,cy+20,cx-50,cy+40+puppet.pose.lh);
-  L(cx,cy+20,cx+50,cy+40+puppet.pose.rh);
+  L(cx,
+    puppet.baseY+gy+20,
+    cx-50,
+    puppet.baseY+gy+40+puppet.pose.lh);
+
+  L(cx,
+    puppet.baseY+gy+20,
+    cx+50,
+    puppet.baseY+gy+40+puppet.pose.rh);
 
   // LEGS
-  L(cx,cy+90,cx-30,cy+150);
-  L(cx,cy+90,cx+30,cy+150);
+  L(cx,
+    puppet.baseY+gy+90,
+    cx-30,
+    puppet.baseY+gy+140+puppet.pose.ll);
+
+  L(cx,
+    puppet.baseY+gy+90,
+    cx+30,
+    puppet.baseY+gy+140+puppet.pose.rl);
 }
 
 function P(e){
@@ -75,20 +98,20 @@ function P(e){
 c.onmousedown=c.ontouchstart=e=>{
   const p=P(e);
   if(Math.abs(p.y-50)<10 && Math.abs(p.x-puppet.barX)<60) drag="x";
-  else if(Math.abs(p.x-400)<10 && Math.abs(p.y-puppet.barY)<40) drag="y";
+  else if(Math.abs(p.x-400)<10 && Math.abs(p.y-(120+puppet.barY))<40) drag="y";
 };
 
 c.onmousemove=c.ontouchmove=e=>{
   if(!drag) return;
   const p=P(e);
   if(drag==="x") puppet.barX=Math.max(80,Math.min(340,p.x));
-  if(drag==="y") puppet.barY=Math.max(60,Math.min(220,p.y));
+  if(drag==="y") puppet.barY=Math.max(-80,Math.min(120,p.y-120));
   draw();
 };
 
 c.onmouseup=c.ontouchend=()=>drag=null;
 
-// idle pose motion
+// idle articulation (strings still matter)
 setInterval(()=>{
   puppet.pose.lh = Math.sin(Date.now()/300)*8;
   puppet.pose.rh = -Math.sin(Date.now()/300)*8;
