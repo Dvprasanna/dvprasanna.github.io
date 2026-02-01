@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Puppet Hybrid Animator</title>
+<title>Puppet Animator (Simple UI)</title>
 
 <style>
 body{
@@ -19,56 +19,54 @@ canvas{
   margin:10px auto;
   touch-action:none;
 }
-#ui button{
-  padding:8px 14px;
-  margin:4px;
-  font-size:15px;
-  border-radius:8px;
+#ui{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:8px;
+}
+button,input{
+  padding:8px 12px;
+  font-size:14px;
+  border-radius:6px;
   border:none;
-  background:#444;
-  color:#fff;
 }
-#timeline{
-  background:#222;
-  border-radius:8px;
-}
+button{background:#444;color:#fff}
+input{width:80px}
 </style>
 </head>
-
 <body>
 
 <canvas id="stage" width="360" height="420"></canvas>
 
 <div id="ui">
-  <button id="edit">✏️ Edit</button>
   <button id="play">▶ Play</button>
-  <button id="stop">■ Stop</button>
-  <button id="fill">＋ Fill Frame</button>
-  <button id="mode">Mode: Smooth</button>
+  <button id="restart">⟲ Restart</button>
+
+  Max Frame:
+  <input id="maxFrame" type="number" value="60" min="1">
+
+  <button id="add">＋ Add Frame</button>
+  <button id="export">⬇ Export GIF</button>
+
   Frame: <span id="frame">0</span>
 </div>
 
-<canvas id="timeline" width="360" height="70"></canvas>
+<!-- GIF encoder -->
+<script src="https://cdn.jsdelivr.net/npm/gif-encoder-2@1.0.5/dist/gif-encoder.min.js"></script>
 
 <script>
 /* ================= CONFIG ================= */
 const FPS = 12;
-const TOTAL_FRAMES = 100;
+
+/* ================= CANVAS ================= */
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
 
 /* ================= STATE ================= */
 let currentFrame = 0;
 let playing = false;
-let mode = "edit";            // edit | play
-let animMode = "smooth";      // smooth | stepped
-
-const frames = {};            // frame-by-frame storage
-const keyframes = [];         // smooth animation storage
-
-/* ================= CANVAS ================= */
-const stage = document.getElementById("stage");
-const ctx = stage.getContext("2d");
-const tl = document.getElementById("timeline");
-const tctx = tl.getContext("2d");
+let frames = {}; // frameNumber -> puppet snapshot
 
 /* ================= PUPPET ================= */
 const puppet = {
@@ -86,13 +84,12 @@ const puppet = {
 
 let drag=null;
 
-/* ================= DRAW HELPERS ================= */
-const L=(x1,y1,x2,y2)=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
-const D=(x,y)=>{ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();}
+/* ================= DRAW ================= */
+function L(x1,y1,x2,y2){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+function D(x,y){ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();}
 
-/* ================= DRAW PUPPET ================= */
-function drawPuppet(){
-  ctx.clearRect(0,0,stage.width,stage.height);
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.lineWidth=3;
   ctx.strokeStyle="#000";
   ctx.fillStyle="#d00";
@@ -100,92 +97,41 @@ function drawPuppet(){
   const cx=puppet.barX;
   const cy=puppet.baseY+puppet.barY;
 
+  // body
   L(cx,cy,cx,cy+70);
 
+  // head
   const hx=cx+puppet.parts.head.x;
   const hy=cy+puppet.parts.head.y;
   L(cx,cy,hx,hy);
   ctx.beginPath();ctx.arc(hx,hy,16,0,Math.PI*2);ctx.stroke();D(hx,hy);
 
+  // hands
   ["lh","rh"].forEach(k=>{
     const p=puppet.parts[k];
     L(cx,cy+15,cx+p.x,cy+p.y);D(cx+p.x,cy+p.y);
   });
 
+  // legs
   ["ll","rl"].forEach(k=>{
     const p=puppet.parts[k];
     L(cx,cy+70,cx+p.x,cy+p.y);D(cx+p.x,cy+p.y);
   });
 
-  // X bar
+  // bars
   L(cx-50,40,cx+50,40);D(cx,40);
-  // Y bar
   L(330,90+puppet.barY,330,150+puppet.barY);D(330,120+puppet.barY);
-}
-
-/* ================= TIMELINE ================= */
-function drawTimeline(){
-  tctx.clearRect(0,0,tl.width,tl.height);
-
-  // base line
-  tctx.fillStyle="#555";
-  tctx.fillRect(20,34,320,4);
-
-  // stepped frames
-  Object.keys(frames).forEach(f=>{
-    const x=20+(f/TOTAL_FRAMES)*320;
-    tctx.fillStyle="#f00";
-    tctx.beginPath();tctx.arc(x,36,5,0,Math.PI*2);tctx.fill();
-  });
-
-  // smooth keyframes
-  keyframes.forEach(k=>{
-    const x=20+(k.time/TOTAL_FRAMES)*320;
-    tctx.fillStyle="#ff0";
-    tctx.beginPath();tctx.arc(x,36,5,0,Math.PI*2);tctx.fill();
-  });
-
-  // playhead
-  const px=20+(currentFrame/TOTAL_FRAMES)*320;
-  tctx.fillStyle="#0f0";
-  tctx.beginPath();tctx.arc(px,36,8,0,Math.PI*2);tctx.fill();
-}
-
-/* ================= APPLY FRAME ================= */
-const lerp=(a,b,t)=>a+(b-a)*t;
-
-function applyFrame(f){
-  if(animMode==="stepped"){
-    if(frames[f]){
-      Object.assign(puppet, JSON.parse(JSON.stringify(frames[f])));
-    }
-    return;
-  }
-
-  // smooth
-  const a=[...keyframes].filter(k=>k.time<=f).pop();
-  const b=[...keyframes].filter(k=>k.time>f)[0];
-  if(!a||!b) return;
-  const t=(f-a.time)/(b.time-a.time);
-
-  puppet.barX=lerp(a.state.barX,b.state.barX,t);
-  puppet.barY=lerp(a.state.barY,b.state.barY,t);
-  for(const k in puppet.parts){
-    puppet.parts[k].x=lerp(a.state.parts[k].x,b.state.parts[k].x,t);
-    puppet.parts[k].y=lerp(a.state.parts[k].y,b.state.parts[k].y,t);
-  }
 }
 
 /* ================= INTERACTION ================= */
 function pos(e){
-  const r=stage.getBoundingClientRect();
+  const r=canvas.getBoundingClientRect();
   const t=e.touches?e.touches[0]:e;
   return{x:t.clientX-r.left,y:t.clientY-r.top};
 }
 function hit(px,py,x,y){return Math.hypot(px-x,py-y)<12;}
 
-stage.onmousedown=stage.ontouchstart=e=>{
-  if(mode!=="edit") return;
+canvas.onmousedown=canvas.ontouchstart=e=>{
   const p=pos(e);
   const cx=puppet.barX,cy=puppet.baseY+puppet.barY;
 
@@ -199,63 +145,78 @@ stage.onmousedown=stage.ontouchstart=e=>{
   }
 };
 
-stage.onmousemove=stage.ontouchmove=e=>{
-  if(!drag||mode!=="edit") return;
+canvas.onmousemove=canvas.ontouchmove=e=>{
+  if(!drag) return;
   const p=pos(e);
   const cx=puppet.barX,cy=puppet.baseY+puppet.barY;
 
-  if(drag.type==="x") puppet.barX=Math.max(60,Math.min(300,p.x));
-  if(drag.type==="y") puppet.barY=Math.max(-100,Math.min(100,p.y-120));
+  if(drag.type==="x") puppet.barX=p.x;
+  if(drag.type==="y") puppet.barY=p.y-120;
   if(drag.type==="part"){
     puppet.parts[drag.key].x=p.x-cx;
     puppet.parts[drag.key].y=p.y-cy;
   }
-  drawPuppet();
+  draw();
 };
 
-stage.onmouseup=stage.ontouchend=()=>drag=null;
-
-/* ================= TIMELINE SCRUB ================= */
-tl.onmousedown=tl.ontouchstart=e=>{
-  const r=tl.getBoundingClientRect();
-  const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
-  const t=Math.max(0,Math.min(1,(x-20)/320));
-  currentFrame=Math.round(t*TOTAL_FRAMES);
-  applyFrame(currentFrame);
-  document.getElementById("frame").innerText=currentFrame;
-  drawPuppet();drawTimeline();
-};
+canvas.onmouseup=canvas.ontouchend=()=>drag=null;
 
 /* ================= UI ================= */
-document.getElementById("edit").onclick=()=>{mode="edit";playing=false;};
-document.getElementById("play").onclick=()=>{mode="play";playing=true;};
-document.getElementById("stop").onclick=()=>playing=false;
+document.getElementById("play").onclick=()=>{
+  playing=true;
+};
 
-document.getElementById("fill").onclick=()=>{
-  frames[currentFrame]=JSON.parse(JSON.stringify(puppet));
-  if(animMode==="smooth"){
-    keyframes.push({time:currentFrame,state:JSON.parse(JSON.stringify(puppet))});
+document.getElementById("restart").onclick=()=>{
+  currentFrame=0;
+  applyFrame(0);
+};
+
+document.getElementById("add").onclick=()=>{
+  const max=parseInt(document.getElementById("maxFrame").value);
+  const f=parseInt(prompt(`Enter frame number (0-${max})`));
+  if(isNaN(f)||f<0||f>max) return;
+  frames[f]=JSON.parse(JSON.stringify(puppet));
+};
+
+function applyFrame(f){
+  if(frames[f]){
+    Object.assign(puppet, JSON.parse(JSON.stringify(frames[f])));
   }
-  drawTimeline();
-};
-
-document.getElementById("mode").onclick=e=>{
-  animMode=animMode==="smooth"?"stepped":"smooth";
-  e.target.innerText="Mode: "+(animMode==="smooth"?"Smooth":"Stepped");
-};
+  document.getElementById("frame").innerText=f;
+  draw();
+}
 
 /* ================= PLAYBACK ================= */
 setInterval(()=>{
   if(!playing) return;
+  const max=parseInt(document.getElementById("maxFrame").value);
   currentFrame++;
-  if(currentFrame>TOTAL_FRAMES) currentFrame=0;
+  if(currentFrame>max) currentFrame=0;
   applyFrame(currentFrame);
-  document.getElementById("frame").innerText=currentFrame;
-  drawPuppet();drawTimeline();
 },1000/FPS);
 
+/* ================= EXPORT GIF ================= */
+document.getElementById("export").onclick=()=>{
+  const max=parseInt(document.getElementById("maxFrame").value);
+  const encoder = new GIFEncoder(canvas.width,canvas.height);
+  encoder.setDelay(1000/FPS);
+  encoder.start();
+
+  for(let f=0;f<=max;f++){
+    applyFrame(f);
+    encoder.addFrame(ctx);
+  }
+
+  encoder.finish();
+  const blob = new Blob([encoder.out.getData()],{type:"image/gif"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="puppet.gif";
+  a.click();
+};
+
 /* ================= START ================= */
-drawPuppet();drawTimeline();
+draw();
 </script>
 
 </body>
