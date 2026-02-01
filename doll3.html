@@ -5,7 +5,7 @@
 <meta name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
-<title>Auto Stickman Animator</title>
+<title>Auto Stickman Animator – Thick Lines</title>
 
 <style>
 body{
@@ -55,13 +55,19 @@ button{
 </div>
 
 <script>
-/* ================= CONFIG ================= */
-const FPS = 10;
-const HEAD_R = 20;
+/* ================= VISUAL CONFIG ================= */
+const LINE_TORSO = 6;
+const LINE_UPPER = 5;
+const LINE_LOWER = 4;
+const LINE_HEAD  = 5;
+const HEAD_R     = 20;
+const FPS        = 10;
 
 /* ================= CANVAS ================= */
 const c = document.getElementById("c");
 const ctx = c.getContext("2d");
+ctx.lineCap  = "round";
+ctx.lineJoin = "round";
 
 /* ================= STATE ================= */
 let frames = [];
@@ -75,11 +81,9 @@ function newPuppet(){
     x:180, y:150,
     head:{ x:0, y:-40, sx:1, sy:1 },
 
-    // arms (2-bone)
     lh:{ mx:-20,my:15, ex:-40,ey:30 },
     rh:{ mx:20,my:15,  ex:40, ey:30 },
 
-    // legs (2-bone, REAL MIDPOINT)
     ll:{ mx:-10,my:60, ex:-20,ey:120 },
     rl:{ mx:10, my:60, ex:20, ey:120 }
   };
@@ -101,11 +105,12 @@ function pos(e){
 function dot(x,y,col){
   ctx.fillStyle=col;
   ctx.beginPath();
-  ctx.arc(x,y,5,0,Math.PI*2);
+  ctx.arc(x,y,6,0,Math.PI*2);
   ctx.fill();
 }
 
-function line(x1,y1,x2,y2){
+function line(x1,y1,x2,y2,w){
+  ctx.lineWidth = w;
   ctx.beginPath();
   ctx.moveTo(x1,y1);
   ctx.lineTo(x2,y2);
@@ -115,61 +120,61 @@ function line(x1,y1,x2,y2){
 /* ================= DRAW ================= */
 function draw(){
   ctx.clearRect(0,0,c.width,c.height);
-  ctx.lineWidth=3;
   ctx.strokeStyle="#000";
 
   const cx=puppet.x, cy=puppet.y;
 
-  // spine
-  line(cx,cy,cx,cy+70);
-  line(cx,cy,cx+puppet.head.x,cy+puppet.head.y);
+  /* spine & neck */
+  line(cx,cy,cx,cy+70,LINE_TORSO);
+  line(cx,cy,cx+puppet.head.x,cy+puppet.head.y,LINE_TORSO);
 
-  // arms
-  limb(puppet.lh,cy+10);
-  limb(puppet.rh,cy+10);
+  /* arms */
+  drawLimb(puppet.lh,cy+10);
+  drawLimb(puppet.rh,cy+10);
 
-  // legs (FIXED)
-  limb(puppet.ll,cy+70);
-  limb(puppet.rl,cy+70);
+  /* legs */
+  drawLimb(puppet.ll,cy+70);
+  drawLimb(puppet.rl,cy+70);
 
-  // head
+  /* head */
   const hx=cx+puppet.head.x;
   const hy=cy+puppet.head.y;
   ctx.save();
   ctx.translate(hx,hy);
   ctx.scale(puppet.head.sx,puppet.head.sy);
+  ctx.lineWidth = LINE_HEAD;
   ctx.beginPath();
   ctx.arc(0,0,HEAD_R,0,Math.PI*2);
   ctx.stroke();
   ctx.restore();
 
-  // control points
-  dot(cx,cy,"#000");          // body
-  dot(hx,hy,"#00f");          // head
+  /* control points */
+  dot(cx,cy,"#000");        // body
+  dot(hx,hy,"#00f");        // head move
 
-  // head X scale
+  // head scale X
   dot(hx-HEAD_R*puppet.head.sx,hy,"#0ff");
   dot(hx+HEAD_R*puppet.head.sx,hy,"#0ff");
 
   // arms
-  controls(puppet.lh,cy+10,"#0a0");
-  controls(puppet.rh,cy+10,"#0a0");
+  drawControls(puppet.lh,cy+10,"#0a0");
+  drawControls(puppet.rh,cy+10,"#0a0");
 
-  // legs (NOW MOVABLE)
-  controls(puppet.ll,cy+70,"#a00");
-  controls(puppet.rl,cy+70,"#a00");
+  // legs
+  drawControls(puppet.ll,cy+70,"#a00");
+  drawControls(puppet.rl,cy+70,"#a00");
 }
 
-function limb(l,sy){
+function drawLimb(l,sy){
   const cx=puppet.x;
-  line(cx,sy,cx+l.mx,sy+l.my);
-  line(cx+l.mx,sy+l.my,cx+l.ex,sy+l.ey);
+  line(cx,sy,cx+l.mx,sy+l.my,LINE_UPPER);
+  line(cx+l.mx,sy+l.my,cx+l.ex,sy+l.ey,LINE_LOWER);
 }
 
-function controls(l,sy,col){
+function drawControls(l,sy,col){
   const cx=puppet.x;
-  dot(cx+l.mx,sy+l.my,col);   // MID
-  dot(cx+l.ex,sy+l.ey,col);   // END
+  dot(cx+l.mx,sy+l.my,col);
+  dot(cx+l.ex,sy+l.ey,col);
 }
 
 /* ================= AUTO KEY ================= */
@@ -189,23 +194,18 @@ c.onmousedown=c.ontouchstart=e=>{
   if(hit(p.x,p.y,cx,cy)) return drag={t:"root"};
   if(hit(p.x,p.y,hx,hy)) return drag={t:"headMove"};
 
-  // head scale
   if(hit(p.x,p.y,hx-HEAD_R*puppet.head.sx,hy) ||
      hit(p.x,p.y,hx+HEAD_R*puppet.head.sx,hy))
     return drag={t:"headScale"};
 
-  // arms
   for(const k of ["lh","rh"]){
-    const l=puppet[k];
-    const sy=cy+10;
+    const l=puppet[k], sy=cy+10;
     if(hit(p.x,p.y,cx+l.mx,sy+l.my)) return drag={t:"armMid",k};
     if(hit(p.x,p.y,cx+l.ex,sy+l.ey)) return drag={t:"armEnd",k};
   }
 
-  // legs (FIXED)
   for(const k of ["ll","rl"]){
-    const l=puppet[k];
-    const sy=cy+70;
+    const l=puppet[k], sy=cy+70;
     if(hit(p.x,p.y,cx+l.mx,sy+l.my)) return drag={t:"legMid",k};
     if(hit(p.x,p.y,cx+l.ex,sy+l.ey)) return drag={t:"legEnd",k};
   }
@@ -215,9 +215,7 @@ c.onmousemove=c.ontouchmove=e=>{
   if(!drag) return;
   const p=pos(e);
 
-  if(drag.t==="root"){
-    puppet.x=p.x; puppet.y=p.y;
-  }
+  if(drag.t==="root"){ puppet.x=p.x; puppet.y=p.y; }
   if(drag.t==="headMove"){
     puppet.head.x=p.x-puppet.x;
     puppet.head.y=p.y-puppet.y;
