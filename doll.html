@@ -2,15 +2,33 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Digital String Puppet with Costume</title>
+<title>Puppet with Costume Selector</title>
 <style>
-  body { background:#111; display:flex; justify-content:center; }
-  canvas { background:#fff; margin-top:20px; touch-action:none; }
+  body { background:#111; color:#fff; font-family:sans-serif; }
+  #wrap { display:flex; justify-content:center; }
+  canvas { background:#fff; margin:10px auto; touch-action:none; display:block; }
+  #controls { text-align:center; margin-top:8px; }
+  button {
+    margin:4px; padding:6px 12px;
+    border:none; border-radius:4px;
+    background:#444; color:#fff;
+    cursor:pointer;
+  }
+  button:hover { background:#666; }
 </style>
 </head>
 <body>
 
-<canvas id="stage" width="500" height="600"></canvas>
+<div id="wrap">
+  <canvas id="stage" width="500" height="600"></canvas>
+</div>
+
+<div id="controls">
+  <button onclick="setCostume('rama')">Rama</button>
+  <button onclick="setCostume('sita')">Sita</button>
+  <button onclick="setCostume('hanuman')">Hanuman</button>
+  <button onclick="setCostume('ravana')">Ravana</button>
+</div>
 
 <script>
 const canvas = document.getElementById("stage");
@@ -24,11 +42,16 @@ const costume = {
   leg:  new Image()
 };
 
-// 🔁 change names to switch characters
-costume.head.src = "assets/head-rama.png";
-costume.body.src = "assets/body-rama.png";
-costume.hand.src = "assets/hand.png";
-costume.leg.src  = "assets/leg.png";
+function setCostume(name){
+  costume.head.src = `assets/head-${name}.png`;
+  costume.body.src = `assets/body-${name}.png`;
+  costume.hand.src = `assets/hand.png`;
+  costume.leg.src  = `assets/leg.png`;
+  draw();
+}
+
+// default
+setCostume("rama");
 
 /* ---------------- PUPPET MODEL ---------------- */
 const puppet = {
@@ -53,9 +76,7 @@ const D=(x,y)=>{ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();}
 function drawImageSafe(img,x,y,w,h,fallback){
   if(img.complete && img.naturalWidth>0){
     ctx.drawImage(img,x,y,w,h);
-  } else {
-    fallback();
-  }
+  } else fallback();
 }
 
 /* ---------------- DRAW ---------------- */
@@ -65,21 +86,21 @@ function draw(){
   ctx.strokeStyle="#000";
   ctx.fillStyle="#c00";
 
-  /* CONTROL BARS */
-  L(puppet.barX-70,50,puppet.barX+70,50); D(puppet.barX,50);        // X bar
-  L(460,90+puppet.barY,460,170+puppet.barY); D(460,130+puppet.barY); // Y bar
+  // CONTROL BARS
+  L(puppet.barX-70,50,puppet.barX+70,50); D(puppet.barX,50);
+  L(460,90+puppet.barY,460,170+puppet.barY); D(460,130+puppet.barY);
 
   const cx = puppet.barX;
   const cy = puppet.baseY + puppet.barY;
 
-  /* BODY */
+  // BODY
   drawImageSafe(
     costume.body,
     cx-30, cy, 60, 100,
     ()=>L(cx,cy,cx,cy+100)
   );
 
-  /* NECK + HEAD */
+  // NECK + HEAD
   const neckX = cx;
   const neckY = cy;
   const headX = neckX + puppet.parts.head.x;
@@ -98,7 +119,7 @@ function draw(){
   );
   D(headX,headY);
 
-  /* HANDS */
+  // HANDS
   ["lh","rh"].forEach(k=>{
     const px = cx + puppet.parts[k].x;
     const py = cy + puppet.parts[k].y;
@@ -106,7 +127,7 @@ function draw(){
     drawImageSafe(costume.hand,px-10,py-10,20,20,()=>D(px,py));
   });
 
-  /* LEGS */
+  // LEGS
   ["ll","rl"].forEach(k=>{
     const px = cx + puppet.parts[k].x;
     const py = cy + puppet.parts[k].y;
