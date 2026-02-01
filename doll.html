@@ -1,187 +1,181 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Puppet with Costume Selector</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Working Digital Puppet</title>
 <style>
-  body { background:#111; color:#fff; font-family:sans-serif; }
-  #wrap { display:flex; justify-content:center; }
-  canvas { background:#fff; margin:10px auto; touch-action:none; display:block; }
-  #controls { text-align:center; margin-top:8px; }
-  button {
-    margin:4px; padding:6px 12px;
-    border:none; border-radius:4px;
-    background:#444; color:#fff;
-    cursor:pointer;
+  body {
+    margin: 0;
+    background: #111;
+    color: #fff;
+    font-family: sans-serif;
+    text-align: center;
   }
-  button:hover { background:#666; }
+  canvas {
+    background: #eaeaea;
+    display: block;
+    margin: 10px auto;
+    touch-action: none;
+  }
+  button {
+    margin: 6px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    background: #444;
+    color: #fff;
+  }
 </style>
 </head>
 <body>
 
-<div id="wrap">
-  <canvas id="stage" width="500" height="600"></canvas>
-</div>
+<canvas id="stage" width="360" height="480"></canvas>
 
-<div id="controls">
-  <button onclick="setCostume('rama')">Rama</button>
-  <button onclick="setCostume('sita')">Sita</button>
-  <button onclick="setCostume('hanuman')">Hanuman</button>
-  <button onclick="setCostume('ravana')">Ravana</button>
+<div>
+  <button>Rama</button>
+  <button>Sita</button>
+  <button>Hanuman</button>
+  <button>Ravana</button>
 </div>
 
 <script>
-const canvas = document.getElementById("stage");
-const ctx = canvas.getContext("2d");
+window.onload = function () {
 
-/* ---------------- COSTUMES ---------------- */
-const costume = {
-  head: new Image(),
-  body: new Image(),
-  hand: new Image(),
-  leg:  new Image()
-};
+  const canvas = document.getElementById("stage");
+  const ctx = canvas.getContext("2d");
 
-function setCostume(name){
-  costume.head.src = `assets/head-${name}.png`;
-  costume.body.src = `assets/body-${name}.png`;
-  costume.hand.src = `assets/hand.png`;
-  costume.leg.src  = `assets/leg.png`;
-  draw();
-}
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "#000";
+  ctx.fillStyle = "#d00";
 
-// default
-setCostume("rama");
-
-/* ---------------- PUPPET MODEL ---------------- */
-const puppet = {
-  barX: 250,
-  barY: 0,
-  baseY: 260,
-  parts: {
-    head:{x:0,y:-50},
-    lh:{x:-60,y:40},
-    rh:{x:60,y:40},
-    ll:{x:-35,y:160},
-    rl:{x:35,y:160}
-  }
-};
-
-let drag = null;
-
-/* ---------------- HELPERS ---------------- */
-const L=(x1,y1,x2,y2)=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
-const D=(x,y)=>{ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();}
-
-function drawImageSafe(img,x,y,w,h,fallback){
-  if(img.complete && img.naturalWidth>0){
-    ctx.drawImage(img,x,y,w,h);
-  } else fallback();
-}
-
-/* ---------------- DRAW ---------------- */
-function draw(){
-  ctx.clearRect(0,0,500,600);
-  ctx.lineWidth=2;
-  ctx.strokeStyle="#000";
-  ctx.fillStyle="#c00";
-
-  // CONTROL BARS
-  L(puppet.barX-70,50,puppet.barX+70,50); D(puppet.barX,50);
-  L(460,90+puppet.barY,460,170+puppet.barY); D(460,130+puppet.barY);
-
-  const cx = puppet.barX;
-  const cy = puppet.baseY + puppet.barY;
-
-  // BODY
-  drawImageSafe(
-    costume.body,
-    cx-30, cy, 60, 100,
-    ()=>L(cx,cy,cx,cy+100)
-  );
-
-  // NECK + HEAD
-  const neckX = cx;
-  const neckY = cy;
-  const headX = neckX + puppet.parts.head.x;
-  const headY = neckY + puppet.parts.head.y;
-
-  L(neckX,neckY,headX,headY);
-
-  drawImageSafe(
-    costume.head,
-    headX-25, headY-25, 50, 50,
-    ()=>{
-      ctx.beginPath();
-      ctx.arc(headX,headY,20,0,Math.PI*2);
-      ctx.stroke();
+  const puppet = {
+    barX: 180,
+    barY: 0,
+    baseY: 220,
+    parts: {
+      head:{x:0,y:-50},
+      lh:{x:-50,y:30},
+      rh:{x:50,y:30},
+      ll:{x:-25,y:130},
+      rl:{x:25,y:130}
     }
-  );
-  D(headX,headY);
+  };
 
-  // HANDS
-  ["lh","rh"].forEach(k=>{
-    const px = cx + puppet.parts[k].x;
-    const py = cy + puppet.parts[k].y;
-    L(cx,cy+20,px,py);
-    drawImageSafe(costume.hand,px-10,py-10,20,20,()=>D(px,py));
-  });
+  let drag = null;
 
-  // LEGS
-  ["ll","rl"].forEach(k=>{
-    const px = cx + puppet.parts[k].x;
-    const py = cy + puppet.parts[k].y;
-    L(cx,cy+100,px,py);
-    drawImageSafe(costume.leg,px-10,py-10,20,30,()=>D(px,py));
-  });
-}
-
-/* ---------------- INTERACTION ---------------- */
-function pos(e){
-  const r=canvas.getBoundingClientRect();
-  const t=e.touches?e.touches[0]:e;
-  return {x:t.clientX-r.left,y:t.clientY-r.top};
-}
-function hit(px,py,x,y){ return Math.hypot(px-x,py-y)<12; }
-
-canvas.onmousedown=canvas.ontouchstart=e=>{
-  const p=pos(e);
-
-  if(Math.abs(p.y-50)<10 && Math.abs(p.x-puppet.barX)<70){
-    drag={type:"barX"}; return;
-  }
-  if(Math.abs(p.x-460)<10 && Math.abs(p.y-(130+puppet.barY))<40){
-    drag={type:"barY"}; return;
+  function line(x1,y1,x2,y2){
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x2,y2);
+    ctx.stroke();
   }
 
-  const cx=puppet.barX, cy=puppet.baseY+puppet.barY;
-  for(const k in puppet.parts){
-    const px=cx+puppet.parts[k].x;
-    const py=cy+puppet.parts[k].y;
-    if(hit(p.x,p.y,px,py)){
-      drag={type:"part",key:k}; return;
+  function dot(x,y){
+    ctx.beginPath();
+    ctx.arc(x,y,7,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    const cx = puppet.barX;
+    const cy = puppet.baseY + puppet.barY;
+
+    /* TOP BAR (X) */
+    line(cx-60,40,cx+60,40);
+    dot(cx,40);
+
+    /* SIDE BAR (Y) */
+    line(330,80+puppet.barY,330,160+puppet.barY);
+    dot(330,120+puppet.barY);
+
+    /* BODY */
+    line(cx,cy,cx,cy+80);
+
+    /* NECK + HEAD */
+    const hx = cx + puppet.parts.head.x;
+    const hy = cy + puppet.parts.head.y;
+    line(cx,cy,hx,hy);
+    ctx.beginPath();
+    ctx.arc(hx,hy,18,0,Math.PI*2);
+    ctx.stroke();
+    dot(hx,hy);
+
+    /* HANDS */
+    ["lh","rh"].forEach(k=>{
+      const px = cx + puppet.parts[k].x;
+      const py = cy + puppet.parts[k].y;
+      line(cx,cy+15,px,py);
+      dot(px,py);
+    });
+
+    /* LEGS */
+    ["ll","rl"].forEach(k=>{
+      const px = cx + puppet.parts[k].x;
+      const py = cy + puppet.parts[k].y;
+      line(cx,cy+80,px,py);
+      dot(px,py);
+    });
+  }
+
+  function pos(e){
+    const r = canvas.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return {x:t.clientX-r.left,y:t.clientY-r.top};
+  }
+
+  function hit(px,py,x,y){
+    return Math.hypot(px-x,py-y) < 15;
+  }
+
+  canvas.onmousedown = canvas.ontouchstart = e => {
+    const p = pos(e);
+
+    if(Math.abs(p.y-40)<12 && Math.abs(p.x-puppet.barX)<60){
+      drag={type:"x"}; return;
     }
-  }
-};
+    if(Math.abs(p.x-330)<12 && Math.abs(p.y-(120+puppet.barY))<40){
+      drag={type:"y"}; return;
+    }
 
-canvas.onmousemove=canvas.ontouchmove=e=>{
-  if(!drag) return;
-  const p=pos(e);
-  const cx=puppet.barX, cy=puppet.baseY+puppet.barY;
+    const cx = puppet.barX;
+    const cy = puppet.baseY + puppet.barY;
 
-  if(drag.type==="barX") puppet.barX=Math.max(80,Math.min(420,p.x));
-  if(drag.type==="barY") puppet.barY=Math.max(-140,Math.min(140,p.y-130));
-  if(drag.type==="part"){
-    puppet.parts[drag.key].x = p.x - cx;
-    puppet.parts[drag.key].y = p.y - cy;
-  }
+    for(const k in puppet.parts){
+      const px = cx + puppet.parts[k].x;
+      const py = cy + puppet.parts[k].y;
+      if(hit(p.x,p.y,px,py)){
+        drag={type:"part",key:k};
+        return;
+      }
+    }
+  };
+
+  canvas.onmousemove = canvas.ontouchmove = e => {
+    if(!drag) return;
+    const p = pos(e);
+    const cx = puppet.barX;
+    const cy = puppet.baseY + puppet.barY;
+
+    if(drag.type==="x"){
+      puppet.barX = Math.max(80,Math.min(280,p.x));
+    }
+    if(drag.type==="y"){
+      puppet.barY = Math.max(-120,Math.min(120,p.y-120));
+    }
+    if(drag.type==="part"){
+      puppet.parts[drag.key].x = p.x - cx;
+      puppet.parts[drag.key].y = p.y - cy;
+    }
+    draw();
+  };
+
+  canvas.onmouseup = canvas.ontouchend = () => drag=null;
+
   draw();
 };
-
-canvas.onmouseup=canvas.ontouchend=()=>drag=null;
-
-/* ---------------- START ---------------- */
-draw();
 </script>
 
 </body>
