@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Simple Puppet Animator – Full Controls</title>
+<title>Puppet Animator – Real Control Points</title>
 
 <style>
 body{
@@ -32,59 +32,37 @@ canvas{
   justify-content:center;
   gap:8px;
 }
-#anim-ui button,
-#anim-ui input{
-  padding:8px 12px;
-  font-size:14px;
+#anim-ui input, #anim-ui button{
+  padding:8px;
   border:none;
   border-radius:6px;
-}
-#anim-ui button{
-  background:#444;
-  color:#fff;
-}
-#anim-ui input{
-  width:70px;
-  text-align:center;
 }
 </style>
 </head>
 
 <body>
 
-<h3>Simple Puppet Animator (All Control Points)</h3>
+<h3>Real Control Points (All Work)</h3>
 
 <canvas id="stage" width="360" height="360"></canvas>
 
 <div id="anim-ui">
-  <button id="play">▶ Play</button>
-  <button id="restart">⟲ Restart</button>
-  Frame:
-  <input id="curFrame" type="number" value="0" min="0">
-  Max:
-  <input id="maxFrame" type="number" value="40" min="1">
+  Frame <input id="curFrame" type="number" value="0" min="0">
 </div>
 
 <script>
-/* ===== CONFIG ===== */
-const FPS = 10;
-const AUTO_THRESHOLD = 8;
-
 /* ===== CANVAS ===== */
 const canvas = document.getElementById("stage");
 const ctx = canvas.getContext("2d");
 
 /* ===== STATE ===== */
 let currentFrame = 0;
-let playing = false;
 let frames = {};
-let lastAutoPose = null;
 let drag = null;
 
 /* ===== PUPPET ===== */
 const puppet = {
-  x: 180,
-  y: 160,
+  x:180, y:160,
   parts:{
     head:{x:0,y:-40},
     lh:{x:-40,y:20},
@@ -95,47 +73,38 @@ const puppet = {
 };
 
 /* ===== HELPERS ===== */
-const clone=o=>JSON.parse(JSON.stringify(o));
-
+const dot=(x,y,c="#d00")=>{
+  ctx.fillStyle=c;
+  ctx.beginPath();
+  ctx.arc(x,y,5,0,Math.PI*2);
+  ctx.fill();
+};
 const line=(x1,y1,x2,y2)=>{
   ctx.beginPath();
   ctx.moveTo(x1,y1);
   ctx.lineTo(x2,y2);
   ctx.stroke();
 };
-
-const dot=(x,y,color="#d00",r=5)=>{
-  ctx.fillStyle=color;
-  ctx.beginPath();
-  ctx.arc(x,y,r,0,Math.PI*2);
-  ctx.fill();
-};
-
-function pos(e){
+const pos=e=>{
   const r=canvas.getBoundingClientRect();
   const t=e.touches?e.touches[0]:e;
   return {x:t.clientX-r.left,y:t.clientY-r.top};
-}
-
-function hit(px,py,x,y,r=10){
-  return Math.hypot(px-x,py-y)<=r;
-}
+};
+const hit=(px,py,x,y)=>Math.hypot(px-x,py-y)<10;
 
 /* ===== DRAW ===== */
 function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.lineWidth=3;
+  ctx.clearRect(0,0,360,360);
   ctx.strokeStyle="#000";
+  ctx.lineWidth=3;
 
   const cx=puppet.x, cy=puppet.y;
 
   // bones
   line(cx,cy,cx,cy+70);
   line(cx,cy,cx+puppet.parts.head.x,cy+puppet.parts.head.y);
-
   line(cx,cy+10,cx+puppet.parts.lh.x,cy+puppet.parts.lh.y);
   line(cx,cy+10,cx+puppet.parts.rh.x,cy+puppet.parts.rh.y);
-
   line(cx,cy+70,cx+puppet.parts.ll.x,cy+puppet.parts.ll.y);
   line(cx,cy+70,cx+puppet.parts.rl.x,cy+puppet.parts.rl.y);
 
@@ -146,15 +115,15 @@ function draw(){
   ctx.arc(hx,hy,16,0,Math.PI*2);
   ctx.stroke();
 
-  // ===== CONTROL POINTS =====
+  /* ===== CONTROL POINTS ===== */
 
-  // body center
+  // root
   dot(cx,cy,"#000");
 
   // head center + ears
-  dot(hx,hy,"#00a");
-  dot(hx-16,hy,"#00a");
-  dot(hx+16,hy,"#00a");
+  dot(hx,hy,"#00f");
+  dot(hx-16,hy,"#00f");
+  dot(hx+16,hy,"#00f");
 
   // arm mids + ends
   const sy=cy+10;
@@ -173,114 +142,72 @@ function draw(){
   dot(cx+puppet.parts.rl.x, cy+puppet.parts.rl.y, "#a00");
 }
 
-/* ===== AUTO KEY ===== */
-function poseMovedEnough(curr,last){
-  if(!last) return true;
-  for(const k in curr.parts){
-    const dx=curr.parts[k].x-last.parts[k].x;
-    const dy=curr.parts[k].y-last.parts[k].y;
-    if(Math.hypot(dx,dy)>=AUTO_THRESHOLD) return true;
-  }
-  return false;
-}
-
-function autoAddFrame(){
-  if(poseMovedEnough(puppet,lastAutoPose)){
-    frames[currentFrame]=clone(puppet);
-    lastAutoPose=clone(puppet);
-  }
-}
-
 /* ===== INPUT ===== */
 canvas.onmousedown=canvas.ontouchstart=e=>{
-  if(playing) return;
   const p=pos(e);
   const cx=puppet.x, cy=puppet.y;
-
-  // body center
-  if(hit(p.x,p.y,cx,cy)){ drag={type:"root"}; return; }
-
-  // head center & ears
   const hx=cx+puppet.parts.head.x;
   const hy=cy+puppet.parts.head.y;
-  if(hit(p.x,p.y,hx,hy)||hit(p.x,p.y,hx-16,hy)||hit(p.x,p.y,hx+16,hy)){
-    drag={type:"part",k:"head"}; return;
-  }
 
-  // arm mid & end
-  const sy=cy+10;
-  if(hit(p.x,p.y,cx+puppet.parts.lh.x/2, sy+(puppet.parts.lh.y-10)/2) ||
-     hit(p.x,p.y,cx+puppet.parts.lh.x, cy+puppet.parts.lh.y)){
-    drag={type:"part",k:"lh"}; return;
-  }
-  if(hit(p.x,p.y,cx+puppet.parts.rh.x/2, sy+(puppet.parts.rh.y-10)/2) ||
-     hit(p.x,p.y,cx+puppet.parts.rh.x, cy+puppet.parts.rh.y)){
-    drag={type:"part",k:"rh"}; return;
-  }
+  if(hit(p.x,p.y,cx,cy)){ drag={t:"root"}; return; }
 
-  // leg mid & end
-  const hy2=cy+70;
-  if(hit(p.x,p.y,cx+puppet.parts.ll.x/2, hy2+(puppet.parts.ll.y-70)/2) ||
-     hit(p.x,p.y,cx+puppet.parts.ll.x, cy+puppet.parts.ll.y)){
-    drag={type:"part",k:"ll"}; return;
-  }
-  if(hit(p.x,p.y,cx+puppet.parts.rl.x/2, hy2+(puppet.parts.rl.y-70)/2) ||
-     hit(p.x,p.y,cx+puppet.parts.rl.x, cy+puppet.parts.rl.y)){
-    drag={type:"part",k:"rl"}; return;
-  }
+  if(hit(p.x,p.y,hx,hy)) drag={t:"head"};
+  else if(hit(p.x,p.y,hx-16,hy)) drag={t:"earL"};
+  else if(hit(p.x,p.y,hx+16,hy)) drag={t:"earR"};
+
+  // arms
+  else if(hit(p.x,p.y,cx+puppet.parts.lh.x/2, cy+10+(puppet.parts.lh.y-10)/2))
+    drag={t:"mid",k:"lh"};
+  else if(hit(p.x,p.y,cx+puppet.parts.lh.x, cy+puppet.parts.lh.y))
+    drag={t:"end",k:"lh"};
+
+  else if(hit(p.x,p.y,cx+puppet.parts.rh.x/2, cy+10+(puppet.parts.rh.y-10)/2))
+    drag={t:"mid",k:"rh"};
+  else if(hit(p.x,p.y,cx+puppet.parts.rh.x, cy+puppet.parts.rh.y))
+    drag={t:"end",k:"rh"};
+
+  // legs
+  else if(hit(p.x,p.y,cx+puppet.parts.ll.x/2, cy+70+(puppet.parts.ll.y-70)/2))
+    drag={t:"mid",k:"ll"};
+  else if(hit(p.x,p.y,cx+puppet.parts.ll.x, cy+puppet.parts.ll.y))
+    drag={t:"end",k:"ll"};
+
+  else if(hit(p.x,p.y,cx+puppet.parts.rl.x/2, cy+70+(puppet.parts.rl.y-70)/2))
+    drag={t:"mid",k:"rl"};
+  else if(hit(p.x,p.y,cx+puppet.parts.rl.x, cy+puppet.parts.rl.y))
+    drag={t:"end",k:"rl"};
 };
 
 canvas.onmousemove=canvas.ontouchmove=e=>{
-  if(!drag||playing) return;
+  if(!drag) return;
   const p=pos(e);
 
-  if(drag.type==="root"){
-    puppet.x=p.x;
-    puppet.y=p.y;
-  }else{
+  if(drag.t==="root"){
+    puppet.x=p.x; puppet.y=p.y;
+  }
+  else if(drag.t==="head"){
+    puppet.parts.head.x=p.x-puppet.x;
+    puppet.parts.head.y=p.y-puppet.y;
+  }
+  else if(drag.t==="earL"){
+    puppet.parts.head.x -= 1;
+  }
+  else if(drag.t==="earR"){
+    puppet.parts.head.x += 1;
+  }
+  else if(drag.t==="end"){
     puppet.parts[drag.k].x=p.x-puppet.x;
     puppet.parts[drag.k].y=p.y-puppet.y;
   }
+  else if(drag.t==="mid"){
+    puppet.parts[drag.k].x += (p.x-puppet.x - puppet.parts[drag.k].x)*0.3;
+    puppet.parts[drag.k].y += (p.y-puppet.y - puppet.parts[drag.k].y)*0.3;
+  }
 
-  autoAddFrame();
   draw();
 };
 
 canvas.onmouseup=canvas.ontouchend=()=>drag=null;
-
-/* ===== ANIMATION ===== */
-function applyFrame(f){
-  if(frames[f]){
-    Object.assign(puppet,clone(frames[f]));
-    lastAutoPose=clone(puppet);
-  }
-  document.getElementById("curFrame").value=f;
-  draw();
-}
-
-document.getElementById("curFrame").onchange=e=>{
-  const max=parseInt(document.getElementById("maxFrame").value);
-  currentFrame=Math.max(0,Math.min(max,parseInt(e.target.value)||0));
-  applyFrame(currentFrame);
-};
-
-document.getElementById("play").onclick=e=>{
-  playing=!playing;
-  e.target.innerText=playing?"⏸ Stop":"▶ Play";
-};
-
-document.getElementById("restart").onclick=()=>{
-  currentFrame=0;
-  applyFrame(0);
-};
-
-setInterval(()=>{
-  if(!playing) return;
-  const max=parseInt(document.getElementById("maxFrame").value);
-  currentFrame++;
-  if(currentFrame>max) currentFrame=0;
-  applyFrame(currentFrame);
-},1000/FPS);
 
 /* ===== START ===== */
 draw();
