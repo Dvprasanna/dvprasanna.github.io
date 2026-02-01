@@ -3,40 +3,74 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Puppet Animator (Fixed)</title>
+<title>Puppet Hybrid Animator</title>
+
 <style>
-body{margin:0;background:#111;color:#fff;font-family:sans-serif;text-align:center}
-canvas{background:#eee;display:block;margin:10px auto;touch-action:none}
-#ui{display:flex;justify-content:center;gap:10px;align-items:center}
-#timeline{background:#222}
-button{padding:4px 10px}
+body{
+  margin:0;
+  background:#111;
+  color:#fff;
+  font-family:sans-serif;
+  text-align:center;
+}
+canvas{
+  background:#eee;
+  display:block;
+  margin:10px auto;
+  touch-action:none;
+}
+#ui button{
+  padding:8px 14px;
+  margin:4px;
+  font-size:15px;
+  border-radius:8px;
+  border:none;
+  background:#444;
+  color:#fff;
+}
+#timeline{
+  background:#222;
+  border-radius:8px;
+}
 </style>
 </head>
+
 <body>
 
 <canvas id="stage" width="360" height="420"></canvas>
 
 <div id="ui">
-  <button id="play">▶</button>
-  <button id="stop">■</button>
+  <button id="edit">✏️ Edit</button>
+  <button id="play">▶ Play</button>
+  <button id="stop">■ Stop</button>
+  <button id="fill">＋ Fill Frame</button>
+  <button id="mode">Mode: Smooth</button>
   Frame: <span id="frame">0</span>
 </div>
 
-<canvas id="timeline" width="360" height="60"></canvas>
+<canvas id="timeline" width="360" height="70"></canvas>
 
 <script>
+/* ================= CONFIG ================= */
 const FPS = 12;
+const TOTAL_FRAMES = 100;
+
+/* ================= STATE ================= */
+let currentFrame = 0;
+let playing = false;
+let mode = "edit";            // edit | play
+let animMode = "smooth";      // smooth | stepped
+
+const frames = {};            // frame-by-frame storage
+const keyframes = [];         // smooth animation storage
+
+/* ================= CANVAS ================= */
 const stage = document.getElementById("stage");
 const ctx = stage.getContext("2d");
 const tl = document.getElementById("timeline");
 const tctx = tl.getContext("2d");
 
-let currentFrame = 0;
-let playing = false;
-let drag = null;
-let keyframes = [];
-
-/* ---------------- PUPPET MODEL ---------------- */
+/* ================= PUPPET ================= */
 const puppet = {
   barX: 180,
   barY: 0,
@@ -50,113 +84,85 @@ const puppet = {
   }
 };
 
-/* ---------------- DRAW HELPERS ---------------- */
-function L(x1,y1,x2,y2){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
-function D(x,y){ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();}
+let drag=null;
 
-/* ---------------- DRAW PUPPET ---------------- */
+/* ================= DRAW HELPERS ================= */
+const L=(x1,y1,x2,y2)=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+const D=(x,y)=>{ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();}
+
+/* ================= DRAW PUPPET ================= */
 function drawPuppet(){
   ctx.clearRect(0,0,stage.width,stage.height);
-  ctx.lineWidth=3; ctx.strokeStyle="#000"; ctx.fillStyle="#d00";
+  ctx.lineWidth=3;
+  ctx.strokeStyle="#000";
+  ctx.fillStyle="#d00";
 
   const cx=puppet.barX;
   const cy=puppet.baseY+puppet.barY;
 
-  // BODY
   L(cx,cy,cx,cy+70);
 
-  // HEAD
   const hx=cx+puppet.parts.head.x;
   const hy=cy+puppet.parts.head.y;
   L(cx,cy,hx,hy);
   ctx.beginPath();ctx.arc(hx,hy,16,0,Math.PI*2);ctx.stroke();D(hx,hy);
 
-  // HANDS
   ["lh","rh"].forEach(k=>{
     const p=puppet.parts[k];
-    L(cx,cy+15,cx+p.x,cy+p.y);
-    D(cx+p.x,cy+p.y);
+    L(cx,cy+15,cx+p.x,cy+p.y);D(cx+p.x,cy+p.y);
   });
 
-  // LEGS
   ["ll","rl"].forEach(k=>{
     const p=puppet.parts[k];
-    L(cx,cy+70,cx+p.x,cy+p.y);
-    D(cx+p.x,cy+p.y);
+    L(cx,cy+70,cx+p.x,cy+p.y);D(cx+p.x,cy+p.y);
   });
 
-  // X BAR
+  // X bar
   L(cx-50,40,cx+50,40);D(cx,40);
-
-  // Y BAR
+  // Y bar
   L(330,90+puppet.barY,330,150+puppet.barY);D(330,120+puppet.barY);
 }
 
-/* ---------------- TIMELINE ---------------- */
+/* ================= TIMELINE ================= */
 function drawTimeline(){
   tctx.clearRect(0,0,tl.width,tl.height);
-  for(let i=0;i<60;i++){
-    tctx.fillStyle=i===currentFrame?"#0f0":"#555";
-    tctx.fillRect(i*6,20,4,20);
-  }
-  keyframes.forEach(k=>{
+
+  // base line
+  tctx.fillStyle="#555";
+  tctx.fillRect(20,34,320,4);
+
+  // stepped frames
+  Object.keys(frames).forEach(f=>{
+    const x=20+(f/TOTAL_FRAMES)*320;
     tctx.fillStyle="#f00";
-    tctx.fillRect(k.time*6,10,6,40);
+    tctx.beginPath();tctx.arc(x,36,5,0,Math.PI*2);tctx.fill();
   });
+
+  // smooth keyframes
+  keyframes.forEach(k=>{
+    const x=20+(k.time/TOTAL_FRAMES)*320;
+    tctx.fillStyle="#ff0";
+    tctx.beginPath();tctx.arc(x,36,5,0,Math.PI*2);tctx.fill();
+  });
+
+  // playhead
+  const px=20+(currentFrame/TOTAL_FRAMES)*320;
+  tctx.fillStyle="#0f0";
+  tctx.beginPath();tctx.arc(px,36,8,0,Math.PI*2);tctx.fill();
 }
 
-/* ---------------- INTERACTION ---------------- */
-function pos(e){
-  const r=stage.getBoundingClientRect();
-  const t=e.touches?e.touches[0]:e;
-  return{x:t.clientX-r.left,y:t.clientY-r.top};
-}
-function hit(px,py,x,y){return Math.hypot(px-x,py-y)<12;}
-
-stage.onmousedown=stage.ontouchstart=e=>{
-  if(playing) return; // 🔒 lock during play
-  const p=pos(e);
-  const cx=puppet.barX, cy=puppet.baseY+puppet.barY;
-
-  if(Math.abs(p.y-40)<12 && Math.abs(p.x-cx)<50){drag={type:"x"};return;}
-  if(Math.abs(p.x-330)<12 && Math.abs(p.y-(120+puppet.barY))<30){drag={type:"y"};return;}
-
-  for(const k in puppet.parts){
-    const px=cx+puppet.parts[k].x;
-    const py=cy+puppet.parts[k].y;
-    if(hit(p.x,p.y,px,py)){drag={type:"part",key:k};return;}
-  }
-};
-
-stage.onmousemove=stage.ontouchmove=e=>{
-  if(!drag||playing) return;
-  const p=pos(e);
-  const cx=puppet.barX, cy=puppet.baseY+puppet.barY;
-
-  if(drag.type==="x") puppet.barX=Math.max(60,Math.min(300,p.x));
-  if(drag.type==="y") puppet.barY=Math.max(-100,Math.min(100,p.y-120));
-  if(drag.type==="part"){
-    puppet.parts[drag.key].x=p.x-cx;
-    puppet.parts[drag.key].y=p.y-cy;
-  }
-  drawPuppet();
-};
-
-stage.onmouseup=stage.ontouchend=()=>drag=null;
-
-/* ---------------- KEYFRAMES ---------------- */
-stage.ondblclick=()=>{
-  keyframes.push({
-    time:currentFrame,
-    state:JSON.parse(JSON.stringify(puppet))
-  });
-  drawTimeline();
-};
-
-/* ---------------- PLAYBACK ---------------- */
-function lerp(a,b,t){return a+(b-a)*t;}
+/* ================= APPLY FRAME ================= */
+const lerp=(a,b,t)=>a+(b-a)*t;
 
 function applyFrame(f){
+  if(animMode==="stepped"){
+    if(frames[f]){
+      Object.assign(puppet, JSON.parse(JSON.stringify(frames[f])));
+    }
+    return;
+  }
+
+  // smooth
   const a=[...keyframes].filter(k=>k.time<=f).pop();
   const b=[...keyframes].filter(k=>k.time>f)[0];
   if(!a||!b) return;
@@ -170,20 +176,86 @@ function applyFrame(f){
   }
 }
 
+/* ================= INTERACTION ================= */
+function pos(e){
+  const r=stage.getBoundingClientRect();
+  const t=e.touches?e.touches[0]:e;
+  return{x:t.clientX-r.left,y:t.clientY-r.top};
+}
+function hit(px,py,x,y){return Math.hypot(px-x,py-y)<12;}
+
+stage.onmousedown=stage.ontouchstart=e=>{
+  if(mode!=="edit") return;
+  const p=pos(e);
+  const cx=puppet.barX,cy=puppet.baseY+puppet.barY;
+
+  if(Math.abs(p.y-40)<12&&Math.abs(p.x-cx)<50){drag={type:"x"};return;}
+  if(Math.abs(p.x-330)<12&&Math.abs(p.y-(120+puppet.barY))<30){drag={type:"y"};return;}
+
+  for(const k in puppet.parts){
+    const px=cx+puppet.parts[k].x;
+    const py=cy+puppet.parts[k].y;
+    if(hit(p.x,p.y,px,py)){drag={type:"part",key:k};return;}
+  }
+};
+
+stage.onmousemove=stage.ontouchmove=e=>{
+  if(!drag||mode!=="edit") return;
+  const p=pos(e);
+  const cx=puppet.barX,cy=puppet.baseY+puppet.barY;
+
+  if(drag.type==="x") puppet.barX=Math.max(60,Math.min(300,p.x));
+  if(drag.type==="y") puppet.barY=Math.max(-100,Math.min(100,p.y-120));
+  if(drag.type==="part"){
+    puppet.parts[drag.key].x=p.x-cx;
+    puppet.parts[drag.key].y=p.y-cy;
+  }
+  drawPuppet();
+};
+
+stage.onmouseup=stage.ontouchend=()=>drag=null;
+
+/* ================= TIMELINE SCRUB ================= */
+tl.onmousedown=tl.ontouchstart=e=>{
+  const r=tl.getBoundingClientRect();
+  const x=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+  const t=Math.max(0,Math.min(1,(x-20)/320));
+  currentFrame=Math.round(t*TOTAL_FRAMES);
+  applyFrame(currentFrame);
+  document.getElementById("frame").innerText=currentFrame;
+  drawPuppet();drawTimeline();
+};
+
+/* ================= UI ================= */
+document.getElementById("edit").onclick=()=>{mode="edit";playing=false;};
+document.getElementById("play").onclick=()=>{mode="play";playing=true;};
+document.getElementById("stop").onclick=()=>playing=false;
+
+document.getElementById("fill").onclick=()=>{
+  frames[currentFrame]=JSON.parse(JSON.stringify(puppet));
+  if(animMode==="smooth"){
+    keyframes.push({time:currentFrame,state:JSON.parse(JSON.stringify(puppet))});
+  }
+  drawTimeline();
+};
+
+document.getElementById("mode").onclick=e=>{
+  animMode=animMode==="smooth"?"stepped":"smooth";
+  e.target.innerText="Mode: "+(animMode==="smooth"?"Smooth":"Stepped");
+};
+
+/* ================= PLAYBACK ================= */
 setInterval(()=>{
   if(!playing) return;
   currentFrame++;
+  if(currentFrame>TOTAL_FRAMES) currentFrame=0;
   applyFrame(currentFrame);
   document.getElementById("frame").innerText=currentFrame;
-  drawPuppet(); drawTimeline();
+  drawPuppet();drawTimeline();
 },1000/FPS);
 
-/* ---------------- UI ---------------- */
-document.getElementById("play").onclick=()=>playing=true;
-document.getElementById("stop").onclick=()=>playing=false;
-
-/* ---------------- START ---------------- */
-drawPuppet(); drawTimeline();
+/* ================= START ================= */
+drawPuppet();drawTimeline();
 </script>
 
 </body>
