@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Puppet XY Control</title>
+<title>Puppet Unified XY Control</title>
 <style>
   body { background:#111; display:flex; justify-content:center; }
   canvas { background:#fff; margin-top:20px; touch-action:none; }
@@ -13,99 +13,88 @@
 <canvas id="stage" width="460" height="560"></canvas>
 
 <script>
-const canvas = document.getElementById("stage");
-const ctx = canvas.getContext("2d");
+const c = document.getElementById("stage");
+const x = c.getContext("2d");
 
 const puppet = {
   barX: 230,
-  barY: 70,
-  cx: 230,
-  cy: 240,
-  strings: {
-    head:{y:70},
-    lh:{y:90},
-    rh:{y:90},
-    ll:{y:110},
-    rl:{y:110}
-  }
+  barY: 90,
+  baseX: 230,
+  baseY: 260,
+  pose: { head:0, lh:0, rh:0 }
 };
 
 let drag = null;
 
-const line=(x1,y1,x2,y2)=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
-const dot =(x,y)=>{ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();}
+const L=(a,b,c,d)=>{x.beginPath();x.moveTo(a,b);x.lineTo(c,d);x.stroke();}
+const D=(a,b)=>{x.beginPath();x.arc(a,b,6,0,Math.PI*2);x.fill();}
 
 function draw(){
-  ctx.clearRect(0,0,460,560);
-  ctx.lineWidth=2;
-  ctx.strokeStyle="#000";
-  ctx.fillStyle="#c00";
+  x.clearRect(0,0,460,560);
+  x.lineWidth=2;
+  x.strokeStyle="#000";
+  x.fillStyle="#c00";
 
   // CONTROL BARS
-  line(puppet.barX-60,50,puppet.barX+60,50); // X bar
-  dot(puppet.barX,50);
+  L(puppet.barX-60,50,puppet.barX+60,50); // X bar
+  D(puppet.barX,50);
 
-  line(400,puppet.barY-40,400,puppet.barY+40); // Y bar
-  dot(400,puppet.barY);
+  L(400,puppet.barY-40,400,puppet.barY+40); // Y bar
+  D(400,puppet.barY);
 
-  puppet.cx = puppet.barX;
-  puppet.cy = 240 + (puppet.barY-70); // 🔑 Y-axis control
+  // 🔑 unified movement
+  const cx = puppet.barX;
+  const cy = puppet.baseY + (puppet.barY-90);
 
-  const {cx,cy,strings}=puppet;
-
-  // STRINGS
-  line(cx,50,cx,strings.head.y);
-  line(cx-40,50,cx-40,strings.lh.y);
-  line(cx+40,50,cx+40,strings.rh.y);
+  // STRINGS (visual only)
+  L(cx,50,cx,cy-60);
 
   // HEAD
-  ctx.beginPath();
-  ctx.arc(cx,cy-40+(strings.head.y-70)/2,20,0,Math.PI*2);
-  ctx.stroke();
+  x.beginPath();
+  x.arc(cx,cy-40+puppet.pose.head,20,0,Math.PI*2);
+  x.stroke();
 
   // BODY
-  line(cx,cy,cx,cy+90);
+  L(cx,cy,cx,cy+90);
 
   // HANDS
-  line(cx,cy+20,cx-50,cy+40+(strings.lh.y-90));
-  line(cx,cy+20,cx+50,cy+40+(strings.rh.y-90));
+  L(cx,cy+20,cx-50,cy+40+puppet.pose.lh);
+  L(cx,cy+20,cx+50,cy+40+puppet.pose.rh);
 
   // LEGS
-  line(cx,cy+90,cx-30,cy+140+(strings.ll.y-110));
-  line(cx,cy+90,cx+30,cy+140+(strings.rl.y-110));
-
-  // STRING HANDLES
-  dot(cx,strings.head.y);
-  dot(cx-40,strings.lh.y);
-  dot(cx+40,strings.rh.y);
-  dot(cx-20,strings.ll.y);
-  dot(cx+20,strings.rl.y);
+  L(cx,cy+90,cx-30,cy+150);
+  L(cx,cy+90,cx+30,cy+150);
 }
 
-function pos(e){
-  const r=canvas.getBoundingClientRect();
+function P(e){
+  const r=c.getBoundingClientRect();
   const t=e.touches?e.touches[0]:e;
   return {x:t.clientX-r.left,y:t.clientY-r.top};
 }
 
-canvas.onmousedown=canvas.ontouchstart=e=>{
-  const p=pos(e);
-  if(Math.abs(p.y-50)<10 && Math.abs(p.x-puppet.barX)<60) drag="barX";
-  else if(Math.abs(p.x-400)<10 && Math.abs(p.y-puppet.barY)<40) drag="barY";
-  else for(const k in puppet.strings)
-    if(Math.abs(p.y-puppet.strings[k].y)<10) drag=k;
+c.onmousedown=c.ontouchstart=e=>{
+  const p=P(e);
+  if(Math.abs(p.y-50)<10 && Math.abs(p.x-puppet.barX)<60) drag="x";
+  else if(Math.abs(p.x-400)<10 && Math.abs(p.y-puppet.barY)<40) drag="y";
 };
 
-canvas.onmousemove=canvas.ontouchmove=e=>{
+c.onmousemove=c.ontouchmove=e=>{
   if(!drag) return;
-  const p=pos(e);
-  if(drag==="barX") puppet.barX=Math.max(80,Math.min(340,p.x));
-  else if(drag==="barY") puppet.barY=Math.max(50,Math.min(200,p.y));
-  else puppet.strings[drag].y=p.y;
+  const p=P(e);
+  if(drag==="x") puppet.barX=Math.max(80,Math.min(340,p.x));
+  if(drag==="y") puppet.barY=Math.max(60,Math.min(220,p.y));
   draw();
 };
 
-canvas.onmouseup=canvas.ontouchend=()=>drag=null;
+c.onmouseup=c.ontouchend=()=>drag=null;
+
+// idle pose motion
+setInterval(()=>{
+  puppet.pose.lh = Math.sin(Date.now()/300)*8;
+  puppet.pose.rh = -Math.sin(Date.now()/300)*8;
+  puppet.pose.head = Math.sin(Date.now()/400)*4;
+  draw();
+},30);
 
 draw();
 </script>
