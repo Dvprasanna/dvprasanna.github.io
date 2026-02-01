@@ -2,115 +2,154 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Full Puppet Control</title>
+<title>Digital String Puppet with Costume</title>
 <style>
- body{background:#111;display:flex;justify-content:center;}
- canvas{background:#fff;margin-top:20px;touch-action:none;}
+  body { background:#111; display:flex; justify-content:center; }
+  canvas { background:#fff; margin-top:20px; touch-action:none; }
 </style>
 </head>
 <body>
 
-<canvas id="stage" width="480" height="580"></canvas>
+<canvas id="stage" width="500" height="600"></canvas>
 
 <script>
-const c = document.getElementById("stage");
-const ctx = c.getContext("2d");
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
 
+/* ---------------- COSTUMES ---------------- */
+const costume = {
+  head: new Image(),
+  body: new Image(),
+  hand: new Image(),
+  leg:  new Image()
+};
+
+// 🔁 change names to switch characters
+costume.head.src = "assets/head-rama.png";
+costume.body.src = "assets/body-rama.png";
+costume.hand.src = "assets/hand.png";
+costume.leg.src  = "assets/leg.png";
+
+/* ---------------- PUPPET MODEL ---------------- */
 const puppet = {
-  barX: 240,
+  barX: 250,
   barY: 0,
   baseY: 260,
   parts: {
-    head:{x:0,y:-40},
-    lh:{x:-50,y:40},
-    rh:{x:50,y:40},
-    ll:{x:-30,y:150},
-    rl:{x:30,y:150}
+    head:{x:0,y:-50},
+    lh:{x:-60,y:40},
+    rh:{x:60,y:40},
+    ll:{x:-35,y:160},
+    rl:{x:35,y:160}
   }
 };
 
 let drag = null;
 
+/* ---------------- HELPERS ---------------- */
 const L=(x1,y1,x2,y2)=>{ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
 const D=(x,y)=>{ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.fill();}
 
+function drawImageSafe(img,x,y,w,h,fallback){
+  if(img.complete && img.naturalWidth>0){
+    ctx.drawImage(img,x,y,w,h);
+  } else {
+    fallback();
+  }
+}
+
+/* ---------------- DRAW ---------------- */
 function draw(){
-  ctx.clearRect(0,0,480,580);
+  ctx.clearRect(0,0,500,600);
   ctx.lineWidth=2;
   ctx.strokeStyle="#000";
   ctx.fillStyle="#c00";
 
-  // CONTROL BARS
-  L(puppet.barX-60,50,puppet.barX+60,50); D(puppet.barX,50);
-  L(430,80+puppet.barY,430,160+puppet.barY); D(430,120+puppet.barY);
+  /* CONTROL BARS */
+  L(puppet.barX-70,50,puppet.barX+70,50); D(puppet.barX,50);        // X bar
+  L(460,90+puppet.barY,460,170+puppet.barY); D(460,130+puppet.barY); // Y bar
 
   const cx = puppet.barX;
   const cy = puppet.baseY + puppet.barY;
 
-  // BODY
-  L(cx,cy,cx,cy+90);
+  /* BODY */
+  drawImageSafe(
+    costume.body,
+    cx-30, cy, 60, 100,
+    ()=>L(cx,cy,cx,cy+100)
+  );
 
-  // HEAD
- // NECK JOINT (top of body)
-const neckX = cx;
-const neckY = cy;
+  /* NECK + HEAD */
+  const neckX = cx;
+  const neckY = cy;
+  const headX = neckX + puppet.parts.head.x;
+  const headY = neckY + puppet.parts.head.y;
 
-// HEAD POSITION (relative to neck)
-const headX = neckX + puppet.parts.head.x;
-const headY = neckY + puppet.parts.head.y;
+  L(neckX,neckY,headX,headY);
 
-// NECK (connection line)
-L(neckX, neckY, headX, headY);
+  drawImageSafe(
+    costume.head,
+    headX-25, headY-25, 50, 50,
+    ()=>{
+      ctx.beginPath();
+      ctx.arc(headX,headY,20,0,Math.PI*2);
+      ctx.stroke();
+    }
+  );
+  D(headX,headY);
 
-// HEAD
-ctx.beginPath();
-ctx.arc(headX, headY, 20, 0, Math.PI*2);
-ctx.stroke();
-
-// HEAD CONTROL HANDLE
-D(headX, headY);
-  // HANDS
+  /* HANDS */
   ["lh","rh"].forEach(k=>{
-    L(cx,cy+20,cx+puppet.parts[k].x,cy+puppet.parts[k].y);
-    D(cx+puppet.parts[k].x,cy+puppet.parts[k].y);
+    const px = cx + puppet.parts[k].x;
+    const py = cy + puppet.parts[k].y;
+    L(cx,cy+20,px,py);
+    drawImageSafe(costume.hand,px-10,py-10,20,20,()=>D(px,py));
   });
 
-  // LEGS
+  /* LEGS */
   ["ll","rl"].forEach(k=>{
-    L(cx,cy+90,cx+puppet.parts[k].x,cy+puppet.parts[k].y);
-    D(cx+puppet.parts[k].x,cy+puppet.parts[k].y);
+    const px = cx + puppet.parts[k].x;
+    const py = cy + puppet.parts[k].y;
+    L(cx,cy+100,px,py);
+    drawImageSafe(costume.leg,px-10,py-10,20,30,()=>D(px,py));
   });
 }
 
+/* ---------------- INTERACTION ---------------- */
 function pos(e){
-  const r=c.getBoundingClientRect();
+  const r=canvas.getBoundingClientRect();
   const t=e.touches?e.touches[0]:e;
   return {x:t.clientX-r.left,y:t.clientY-r.top};
 }
+function hit(px,py,x,y){ return Math.hypot(px-x,py-y)<12; }
 
-function hit(px,py,x,y){ return Math.hypot(px-x,py-y)<10; }
-
-c.onmousedown=c.ontouchstart=e=>{
+canvas.onmousedown=canvas.ontouchstart=e=>{
   const p=pos(e);
 
-  if(Math.abs(p.y-50)<10 && Math.abs(p.x-puppet.barX)<60){ drag={type:"barX"}; return; }
-  if(Math.abs(p.x-430)<10 && Math.abs(p.y-(120+puppet.barY))<40){ drag={type:"barY"}; return; }
+  if(Math.abs(p.y-50)<10 && Math.abs(p.x-puppet.barX)<70){
+    drag={type:"barX"}; return;
+  }
+  if(Math.abs(p.x-460)<10 && Math.abs(p.y-(130+puppet.barY))<40){
+    drag={type:"barY"}; return;
+  }
 
   const cx=puppet.barX, cy=puppet.baseY+puppet.barY;
   for(const k in puppet.parts){
     const px=cx+puppet.parts[k].x;
     const py=cy+puppet.parts[k].y;
-    if(hit(p.x,p.y,px,py)){ drag={type:"part",key:k}; return; }
+    if(hit(p.x,p.y,px,py)){
+      drag={type:"part",key:k}; return;
+    }
   }
 };
 
-c.onmousemove=c.ontouchmove=e=>{
+canvas.onmousemove=canvas.ontouchmove=e=>{
   if(!drag) return;
   const p=pos(e);
   const cx=puppet.barX, cy=puppet.baseY+puppet.barY;
 
-  if(drag.type==="barX") puppet.barX=Math.max(80,Math.min(380,p.x));
-  if(drag.type==="barY") puppet.barY=Math.max(-120,Math.min(120,p.y-120));
+  if(drag.type==="barX") puppet.barX=Math.max(80,Math.min(420,p.x));
+  if(drag.type==="barY") puppet.barY=Math.max(-140,Math.min(140,p.y-130));
   if(drag.type==="part"){
     puppet.parts[drag.key].x = p.x - cx;
     puppet.parts[drag.key].y = p.y - cy;
@@ -118,9 +157,11 @@ c.onmousemove=c.ontouchmove=e=>{
   draw();
 };
 
-c.onmouseup=c.ontouchend=()=>drag=null;
+canvas.onmouseup=canvas.ontouchend=()=>drag=null;
 
+/* ---------------- START ---------------- */
 draw();
 </script>
+
 </body>
 </html>
