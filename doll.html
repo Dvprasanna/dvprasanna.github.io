@@ -51,11 +51,24 @@ function draw(){
   L(cx,cy,cx,cy+90);
 
   // HEAD
-  ctx.beginPath();
-  ctx.arc(cx+puppet.parts.head.x, cy+puppet.parts.head.y,20,0,Math.PI*2);
-  ctx.stroke();
-  D(cx+puppet.parts.head.x, cy+puppet.parts.head.y);
+ // NECK JOINT (top of body)
+const neckX = cx;
+const neckY = cy;
 
+// HEAD POSITION (relative to neck)
+const headX = neckX + puppet.parts.head.x;
+const headY = neckY + puppet.parts.head.y;
+
+// NECK (connection line)
+L(neckX, neckY, headX, headY);
+
+// HEAD
+ctx.beginPath();
+ctx.arc(headX, headY, 20, 0, Math.PI*2);
+ctx.stroke();
+
+// HEAD CONTROL HANDLE
+D(headX, headY);
   // HANDS
   ["lh","rh"].forEach(k=>{
     L(cx,cy+20,cx+puppet.parts[k].x,cy+puppet.parts[k].y);
