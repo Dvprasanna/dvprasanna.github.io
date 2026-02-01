@@ -2,28 +2,39 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>String Puppet Demo</title>
+<title>User Controlled Puppet</title>
 <style>
   body { background:#111; display:flex; justify-content:center; }
-  canvas { background:#fff; margin-top:20px; }
+  canvas { background:#fff; margin-top:20px; touch-action:none; }
 </style>
 </head>
 <body>
 
-<canvas id="stage" width="400" height="500"></canvas>
+<canvas id="stage" width="400" height="520"></canvas>
 
 <script>
 const canvas = document.getElementById("stage");
 const ctx = canvas.getContext("2d");
 
-// STRING CONTROLS (like real threads)
-let strings = {
-  head: 0,
-  lh: 0,
-  rh: 0,
-  ll: 0,
-  rl: 0
+const puppet = {
+  cx: 200,
+  cy: 200,
+  strings: {
+    head: {x:200,y:70},
+    lh:   {x:140,y:90},
+    rh:   {x:260,y:90},
+    ll:   {x:170,y:110},
+    rl:   {x:230,y:110}
+  }
 };
+
+let dragging = null;
+
+function drawCircle(x,y,r){
+  ctx.beginPath();
+  ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fill();
+}
 
 function drawLine(x1,y1,x2,y2){
   ctx.beginPath();
@@ -32,54 +43,76 @@ function drawLine(x1,y1,x2,y2){
   ctx.stroke();
 }
 
-function drawPuppet(){
+function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.lineWidth = 2;
   ctx.strokeStyle = "#000";
+  ctx.fillStyle = "#d00";
 
-  const cx = 200;
-  const cy = 160;
+  const {cx,cy,strings} = puppet;
 
   // CONTROL BAR
-  drawLine(150,50,250,50);
+  drawLine(120,50,280,50);
 
   // STRINGS
-  drawLine(200,50,200,cy-30);
-  drawLine(150,50,cx-40,cy+30);
-  drawLine(250,50,cx+40,cy+30);
+  Object.values(strings).forEach(s=>{
+    drawLine(s.x,s.y,cx,cy);
+    drawCircle(s.x,s.y,6);
+  });
 
   // HEAD
   ctx.beginPath();
-  ctx.arc(cx, cy-25 + strings.head, 20, 0, Math.PI*2);
+  ctx.arc(cx, cy-40 + (strings.head.y-70)/2, 20, 0, Math.PI*2);
   ctx.stroke();
 
   // BODY
   drawLine(cx,cy,cx,cy+90);
 
-  // LEFT HAND
-  drawLine(cx,cy+20,cx-50,cy+40 + strings.lh);
+  // HANDS
+  drawLine(cx,cy+20,cx-50,cy+40 + (strings.lh.y-90));
+  drawLine(cx,cy+20,cx+50,cy+40 + (strings.rh.y-90));
 
-  // RIGHT HAND
-  drawLine(cx,cy+20,cx+50,cy+40 + strings.rh);
-
-  // LEFT LEG
-  drawLine(cx,cy+90,cx-30,cy+140 + strings.ll);
-
-  // RIGHT LEG
-  drawLine(cx,cy+90,cx+30,cy+140 + strings.rl);
+  // LEGS
+  drawLine(cx,cy+90,cx-30,cy+140 + (strings.ll.y-110));
+  drawLine(cx,cy+90,cx+30,cy+140 + (strings.rl.y-110));
 }
 
-// ANIMATION (pulling strings)
-let t = 0;
-setInterval(()=>{
-  t += 0.1;
-  strings.head = Math.sin(t)*4;
-  strings.lh   = Math.sin(t)*12;
-  strings.rh   = -Math.sin(t)*12;
-  strings.ll   = Math.sin(t)*8;
-  strings.rl   = -Math.sin(t)*8;
-  drawPuppet();
-},30);
+function getPos(e){
+  const r = canvas.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return {x:t.clientX-r.left, y:t.clientY-r.top};
+}
+
+function hitTest(p,x,y){
+  return Math.hypot(p.x-x,p.y-y) < 10;
+}
+
+canvas.addEventListener("mousedown",start);
+canvas.addEventListener("touchstart",start);
+canvas.addEventListener("mousemove",move);
+canvas.addEventListener("touchmove",move);
+canvas.addEventListener("mouseup",()=>dragging=null);
+canvas.addEventListener("touchend",()=>dragging=null);
+
+function start(e){
+  const pos = getPos(e);
+  for(const k in puppet.strings){
+    if(hitTest(puppet.strings[k],pos.x,pos.y)){
+      dragging = puppet.strings[k];
+      break;
+    }
+  }
+}
+
+function move(e){
+  if(!dragging) return;
+  const pos = getPos(e);
+  dragging.x = pos.x;
+  dragging.y = pos.y;
+  draw();
+}
+
+draw();
 </script>
 
 </body>
