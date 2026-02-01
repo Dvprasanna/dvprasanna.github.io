@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Puppet Animator (Simple UI)</title>
+<title>Puppet Animator (Play Toggle)</title>
 
 <style>
 body{
@@ -132,6 +132,7 @@ function pos(e){
 function hit(px,py,x,y){return Math.hypot(px-x,py-y)<12;}
 
 canvas.onmousedown=canvas.ontouchstart=e=>{
+  if(playing) return; // lock while playing
   const p=pos(e);
   const cx=puppet.barX,cy=puppet.baseY+puppet.barY;
 
@@ -146,7 +147,7 @@ canvas.onmousedown=canvas.ontouchstart=e=>{
 };
 
 canvas.onmousemove=canvas.ontouchmove=e=>{
-  if(!drag) return;
+  if(!drag||playing) return;
   const p=pos(e);
   const cx=puppet.barX,cy=puppet.baseY+puppet.barY;
 
@@ -162,8 +163,11 @@ canvas.onmousemove=canvas.ontouchmove=e=>{
 canvas.onmouseup=canvas.ontouchend=()=>drag=null;
 
 /* ================= UI ================= */
-document.getElementById("play").onclick=()=>{
-  playing=true;
+const playBtn = document.getElementById("play");
+
+playBtn.onclick=()=>{
+  playing = !playing;
+  playBtn.innerText = playing ? "⏸ Stop" : "▶ Play";
 };
 
 document.getElementById("restart").onclick=()=>{
