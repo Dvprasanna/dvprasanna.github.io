@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Minimalist 2D Flat Layout</title>
+
+<style>
+  body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background: #f4f4f4;
+  }
+
+  header {
+    background: #111;
+    color: #fff;
+    padding: 12px 20px;
+    font-size: 18px;
+  }
+
+  #container {
+    display: flex;
+    height: calc(100vh - 48px);
+  }
+
+  /* LEFT TOOLBAR */
+  #tools {
+    width: 240px;
+    background: #fff;
+    border-right: 1px solid #ddd;
+    padding: 16px;
+  }
+
+  #tools h3 {
+    margin-top: 0;
+    font-size: 14px;
+    color: #333;
+  }
+
+  button {
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    background: #fafafa;
+    cursor: pointer;
+  }
+
+  button:hover {
+    background: #eee;
+  }
+
+  label {
+    font-size: 12px;
+    display: block;
+    margin: 10px 0 4px;
+  }
+
+  input[type="range"] {
+    width: 100%;
+  }
+
+  /* CANVAS */
+  #canvasWrap {
+    flex: 1;
+    background: #eaeaea;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  svg {
+    background: #fff;
+    border: 1px solid #ccc;
+  }
+
+  .wall { stroke: #000; }
+  .door { stroke: #b36a3c; fill: none; }
+  .window { stroke: #2b8cff; }
+  .furniture { stroke: #444; fill: none; }
+  .electric { fill: #d40000; }
+</style>
+</head>
+
+<body>
+
+<header>Minimalist 2D Flat Layout – Archicad Style</header>
+
+<div id="container">
+
+  <!-- TOOLS -->
+  <div id="tools">
+    <h3>Drawing Tools</h3>
+    <button onclick="drawWalls()">Draw Walls</button>
+    <button onclick="drawFurniture()">Add Furniture</button>
+    <button onclick="drawElectric()">Add Electric Point</button>
+
+    <label>Wall Thickness</label>
+    <input type="range" min="4" max="12" value="6" oninput="setWallThickness(this.value)">
+
+    <button onclick="exportPDF()">Export PDF</button>
+  </div>
+
+  <!-- CANVAS -->
+  <div id="canvasWrap">
+    <svg id="plan" width="900" height="550"></svg>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+const svg = document.getElementById("plan");
+let wallThickness = 6;
+
+function clearPlan() {
+  svg.innerHTML = "";
+}
+
+function line(x1, y1, x2, y2, cls, w = wallThickness) {
+  const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  l.setAttribute("x1", x1);
+  l.setAttribute("y1", y1);
+  l.setAttribute("x2", x2);
+  l.setAttribute("y2", y2);
+  l.setAttribute("class", cls);
+  l.setAttribute("stroke-width", w);
+  svg.appendChild(l);
+}
+
+function drawWalls() {
+  clearPlan();
+
+  // Outer walls
+  line(60, 60, 840, 60, "wall");
+  line(840, 60, 840, 480, "wall");
+  line(840, 480, 60, 480, "wall");
+  line(60, 480, 60, 60, "wall");
+
+  // Internal walls
+  line(420, 60, 420, 480, "wall");
+  line(420, 260, 840, 260, "wall");
+
+  // Window
+  line(200, 60, 320, 60, "window", 4);
+
+  // Door
+  const door = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  door.setAttribute("d", "M420 300 A60 60 0 0 1 480 360");
+  door.setAttribute("class", "door");
+  door.setAttribute("stroke-width", 3);
+  svg.appendChild(door);
+}
+
+function drawFurniture() {
+  // Bed
+  rect(120, 320, 160, 80, "furniture");
+
+  // Sofa
+  rect(520, 120, 180, 70, "furniture");
+
+  // Table
+  rect(550, 320, 120, 120, "furniture");
+}
+
+function rect(x, y, w, h, cls) {
+  const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  r.setAttribute("x", x);
+  r.setAttribute("y", y);
+  r.setAttribute("width", w);
+  r.setAttribute("height", h);
+  r.setAttribute("class", cls);
+  r.setAttribute("stroke-width", 2);
+  svg.appendChild(r);
+}
+
+function drawElectric() {
+  electric(150, 290);
+  electric(600, 260);
+  electric(700, 150);
+}
+
+function electric(cx, cy) {
+  const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  c.setAttribute("cx", cx);
+  c.setAttribute("cy", cy);
+  c.setAttribute("r", 5);
+  c.setAttribute("class", "electric");
+  svg.appendChild(c);
+}
+
+function setWallThickness(val) {
+  wallThickness = val;
+  drawWalls();
+}
+
+function exportPDF() {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF("landscape");
+  const svgData = new XMLSerializer().serializeToString(svg);
+
+  pdf.text("Minimalist 2D Flat Layout", 10, 10);
+  pdf.addSvgAsImage(svgData, 10, 20, 260, 160);
+  pdf.save("2D-flat-layout.pdf");
+}
+
+// Initial draw
+drawWalls();
+drawFurniture();
+drawElectric();
+</script>
+
+</body>
+</html>
