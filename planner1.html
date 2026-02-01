@@ -1,22 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Floor Plan Tracer</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile Floor Plan Tracer</title>
+
 <style>
-  body { margin:0; font-family: system-ui; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system;
+    overflow: hidden;
+    background: #f4f4f4;
+  }
+
+  canvas {
+    display: block;
+    background: #fafafa;
+    touch-action: none; /* CRITICAL for mobile */
+  }
+
   #ui {
     position: fixed;
-    top: 10px;
-    left: 10px;
-    background: #fff;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 92%;
+    background: #ffffff;
     padding: 10px;
-    border-radius: 8px;
-    box-shadow: 0 4px 10px rgba(0,0,0,.2);
+    border-radius: 12px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25);
     z-index: 10;
   }
-  canvas { display:block; background:#fafafa; }
-  button, input { margin: 4px 0; width:100%; }
+
+  #ui button,
+  #ui input {
+    width: 100%;
+    margin: 4px 0;
+    font-size: 16px;
+  }
 </style>
 </head>
 <body>
@@ -25,124 +46,224 @@
   <input type="file" id="imgLoader" accept="image/*">
   <label>Wall Thickness</label>
   <input type="range" id="thickness" min="6" max="40" value="20">
-  <button id="doorBtn">Door Mode</button>
-  <button id="exportBtn">Export SVG</button>
+  <button id="doorBtn">Door: OFF</button>
+  <button id="roomsBtn">Detect Rooms</button>
 </div>
 
-<canvas id="c"></canvas>
+<canvas id="canvas"></canvas>
 
 <script>
-const canvas = document.getElementById("c");
+/* -------------------- CANVAS (RETINA SAFE) -------------------- */
+const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-canvas.width = innerWidth;
-canvas.height = innerHeight;
+function resizeCanvas(){
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = innerWidth * dpr;
+  canvas.height = innerHeight * dpr;
+  canvas.style.width = innerWidth + "px";
+  canvas.style.height = innerHeight + "px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+resizeCanvas();
+addEventListener("resize", resizeCanvas);
 
+/* -------------------- STATE -------------------- */
 let bgImage = null;
 let walls = [];
 let doors = [];
+let rooms = [];
 
 let drawing = false;
 let start = null;
 let doorMode = false;
 let wallThickness = 20;
 
-// --------- IMAGE LOAD ----------
+const SNAP_DIST = 14;
+let snapHit = null;
+
+/* -------------------- IMAGE LOAD -------------------- */
 imgLoader.onchange = e => {
   const img = new Image();
   img.onload = () => bgImage = img;
   img.src = URL.createObjectURL(e.target.files[0]);
 };
 
-// --------- UI ----------
+/* -------------------- UI -------------------- */
 thickness.oninput = e => wallThickness = +e.target.value;
-doorBtn.onclick = () => doorMode = !doorMode;
 
-// --------- HELPERS ----------
-function orthoSnap(a, b) {
-  return Math.abs(b.x - a.x) > Math.abs(b.y - a.y)
-    ? { x: b.x, y: a.y }
-    : { x: a.x, y: b.y };
+doorBtn.onclick = () => {
+  doorMode = !doorMode;
+  doorBtn.textContent = doorMode ? "Door: ON" : "Door: OFF";
+};
+
+/* -------------------- GEOMETRY -------------------- */
+const dist = (a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+
+function orthoSnap(a,b){
+  return Math.abs(b.x-a.x) > Math.abs(b.y-a.y)
+    ? {x:b.x,y:a.y}
+    : {x:a.x,y:b.y};
 }
 
-// --------- INPUT ----------
-canvas.addEventListener("pointerdown", e => {
-  start = { x: e.offsetX, y: e.offsetY };
+/* -------------------- SNAPPING -------------------- */
+function getSnapPoints(){
+  const pts=[];
+  walls.forEach(w=>{
+    pts.push(w.a,w.b);
+    pts.push({
+      x:(w.a.x+w.b.x)/2,
+      y:(w.a.y+w.b.y)/2
+    });
+  });
+  return pts;
+}
+
+function snapToPoint(p){
+  snapHit=null;
+  for(const s of getSnapPoints()){
+    if(dist(s,p)<SNAP_DIST){
+      snapHit=s;
+      return s;
+    }
+  }
+  return p;
+}
+
+/* -------------------- INPUT -------------------- */
+canvas.addEventListener("pointerdown", e=>{
+  start = snapToPoint({x:e.offsetX,y:e.offsetY});
   drawing = true;
 });
 
-canvas.addEventListener("pointerup", e => {
-  if (!drawing) return;
-  let end = orthoSnap(start, { x: e.offsetX, y: e.offsetY });
+canvas.addEventListener("pointerup", e=>{
+  if(!drawing) return;
+  const raw = snapToPoint({x:e.offsetX,y:e.offsetY});
+  const end = orthoSnap(start, raw);
 
-  if (doorMode) {
-    doors.push({ a: start, b: end });
+  if(doorMode){
+    doors.push({a:start,b:end});
   } else {
-    walls.push({ a: start, b: end });
+    walls.push({a:start,b:end});
   }
   drawing = false;
 });
 
-// --------- DRAW ----------
-function draw() {
+/* -------------------- ROOMS -------------------- */
+const key = p => `${Math.round(p.x)}_${Math.round(p.y)}`;
+
+function buildGraph(){
+  const g={};
+  walls.forEach(w=>{
+    const k1=key(w.a), k2=key(w.b);
+    g[k1]??=[]; g[k2]??=[];
+    g[k1].push(w.b);
+    g[k2].push(w.a);
+  });
+  return g;
+}
+
+function polygonArea(pts){
+  let a=0;
+  for(let i=0;i<pts.length;i++){
+    const j=(i+1)%pts.length;
+    a+=pts[i].x*pts[j].y - pts[j].x*pts[i].y;
+  }
+  return Math.abs(a/2);
+}
+
+function detectRooms(){
+  const g=buildGraph();
+  const visited=new Set();
+  rooms=[];
+
+  for(const k in g){
+    if(visited.has(k)) continue;
+    let path=[], cur=k;
+
+    while(!visited.has(cur)){
+      visited.add(cur);
+      path.push(cur);
+      const n=g[cur];
+      if(!n||!n.length) break;
+
+      const next=key(n[0]);
+      if(path.includes(next)){
+        const loop=path.slice(path.indexOf(next)).map(p=>{
+          const [x,y]=p.split("_").map(Number);
+          return {x,y};
+        });
+        if(loop.length>2){
+          rooms.push({pts:loop, area:polygonArea(loop)});
+        }
+        break;
+      }
+      cur=next;
+    }
+  }
+}
+roomsBtn.onclick = detectRooms;
+
+/* -------------------- DRAW LOOP -------------------- */
+function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  if (bgImage) {
-    ctx.globalAlpha = 0.4;
-    ctx.drawImage(bgImage, 0, 0);
-    ctx.globalAlpha = 1;
+  if(bgImage){
+    ctx.globalAlpha=0.4;
+    ctx.drawImage(bgImage,0,0);
+    ctx.globalAlpha=1;
   }
 
-  // WALLS (double-line union via stroke)
-  ctx.strokeStyle = "#333";
-  ctx.lineWidth = wallThickness;
-  ctx.lineJoin = "bevel";
-  ctx.lineCap = "butt";
+  /* Walls */
+  ctx.strokeStyle="#333";
+  ctx.lineWidth=wallThickness;
+  ctx.lineJoin="bevel";
+  ctx.lineCap="butt";
 
-  walls.forEach(w => {
+  walls.forEach(w=>{
     ctx.beginPath();
-    ctx.moveTo(w.a.x, w.a.y);
-    ctx.lineTo(w.b.x, w.b.y);
+    ctx.moveTo(w.a.x,w.a.y);
+    ctx.lineTo(w.b.x,w.b.y);
     ctx.stroke();
   });
 
-  // DOOR CUTS
-  ctx.strokeStyle = "#fafafa";
-  ctx.lineWidth = wallThickness - 6;
-
-  doors.forEach(d => {
+  /* Door cuts */
+  ctx.strokeStyle="#fafafa";
+  ctx.lineWidth=wallThickness-6;
+  doors.forEach(d=>{
     ctx.beginPath();
-    ctx.moveTo(d.a.x, d.a.y);
-    ctx.lineTo(d.b.x, d.b.y);
+    ctx.moveTo(d.a.x,d.a.y);
+    ctx.lineTo(d.b.x,d.b.y);
     ctx.stroke();
   });
+
+  /* Rooms */
+  rooms.forEach(r=>{
+    ctx.fillStyle="rgba(0,150,255,.18)";
+    ctx.beginPath();
+    r.pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+    ctx.closePath();
+    ctx.fill();
+
+    const cx=r.pts.reduce((s,p)=>s+p.x,0)/r.pts.length;
+    const cy=r.pts.reduce((s,p)=>s+p.y,0)/r.pts.length;
+    ctx.fillStyle="#000";
+    ctx.font="14px system-ui";
+    ctx.fillText(Math.round(r.area)+" px²",cx-30,cy);
+  });
+
+  /* Snap indicator */
+  if(snapHit){
+    ctx.strokeStyle="cyan";
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.arc(snapHit.x,snapHit.y,6,0,Math.PI*2);
+    ctx.stroke();
+  }
 
   requestAnimationFrame(draw);
 }
 draw();
-
-// --------- EXPORT SVG ----------
-exportBtn.onclick = () => {
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">`;
-
-  walls.forEach(w => {
-    svg += `<line x1="${w.a.x}" y1="${w.a.y}" x2="${w.b.x}" y2="${w.b.y}"
-      stroke="#000" stroke-width="${wallThickness}" stroke-linejoin="bevel"/>`;
-  });
-
-  doors.forEach(d => {
-    svg += `<line x1="${d.a.x}" y1="${d.a.y}" x2="${d.b.x}" y2="${d.b.y}"
-      stroke="#fff" stroke-width="${wallThickness - 6}"/>`;
-  });
-
-  svg += `</svg>`;
-
-  const blob = new Blob([svg], { type: "image/svg+xml" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "floorplan.svg";
-  a.click();
-};
 </script>
 </body>
 </html>
