@@ -5,7 +5,7 @@
 <meta name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
-<title>Auto Stickman Animator – Head Oval</title>
+<title>Auto Stickman Animator – Refined</title>
 
 <style>
 body{
@@ -46,7 +46,7 @@ button{
 
 <body>
 
-<h3>Auto Stickman Animator – Head Oval Control</h3>
+<h3>Auto Stickman Animator</h3>
 
 <canvas id="c" width="360" height="360"></canvas>
 
@@ -56,8 +56,8 @@ button{
 
 <script>
 /* ================= CONFIG ================= */
-const AUTO_PX = 6;
 const FPS = 10;
+const HEAD_R = 20; // BIGGER HEAD
 
 /* ================= CANVAS ================= */
 const c = document.getElementById("c");
@@ -74,10 +74,10 @@ function newPuppet(){
   return {
     x:180, y:150,
     head:{ x:0, y:-40, sx:1, sy:1 },
-    lh:{mx:-20,my:15, ex:-40,ey:30},
-    rh:{mx:20,my:15,  ex:40, ey:30},
-    ll:{mx:-10,my:90, ex:-20,ey:120},
-    rl:{mx:10,my:90,  ex:20, ey:120}
+    lh:{ mx:-20,my:15, ex:-40,ey:30 },
+    rh:{ mx:20,my:15,  ex:40, ey:30 },
+    ll:{ ex:-20, ey:120 },
+    rl:{ ex:20,  ey:120 }
   };
 }
 
@@ -116,44 +116,44 @@ function draw(){
 
   const cx=puppet.x, cy=puppet.y;
 
-  // spine
+  /* spine */
   line(cx,cy,cx,cy+70);
   line(cx,cy,cx+puppet.head.x,cy+puppet.head.y);
 
-  // limbs
+  /* arms */
   limb(puppet.lh,cy+10);
   limb(puppet.rh,cy+10);
-  limb(puppet.ll,cy+70);
-  limb(puppet.rl,cy+70);
 
-  // head (scaled)
+  /* legs */
+  leg(puppet.ll,cy+70);
+  leg(puppet.rl,cy+70);
+
+  /* head (scaled oval) */
   const hx = cx + puppet.head.x;
   const hy = cy + puppet.head.y;
   ctx.save();
   ctx.translate(hx,hy);
   ctx.scale(puppet.head.sx, puppet.head.sy);
   ctx.beginPath();
-  ctx.arc(0,0,16,0,Math.PI*2);
+  ctx.arc(0,0,HEAD_R,0,Math.PI*2);
   ctx.stroke();
   ctx.restore();
 
-  /* ===== CONTROL POINTS ===== */
+  /* control points */
+  dot(cx,cy,"#000");                // body
+  dot(hx,hy,"#00f");                // head move
 
-  // body
-  dot(cx,cy,"#000");
+  // head scale X
+  dot(hx-HEAD_R*puppet.head.sx,hy,"#0ff");
+  dot(hx+HEAD_R*puppet.head.sx,hy,"#0ff");
 
-  // head center
-  dot(hx,hy,"#00f");
+  // arm controls
+  armControls(puppet.lh,cy+10,"#0a0");
+  armControls(puppet.rh,cy+10,"#0a0");
 
-  // head scale X controls
-  dot(hx - 16*puppet.head.sx, hy, "#0ff");
-  dot(hx + 16*puppet.head.sx, hy, "#0ff");
-
-  // limbs controls
-  controls(puppet.lh,cy+10,"#0a0");
-  controls(puppet.rh,cy+10,"#0a0");
-  controls(puppet.ll,cy+70,"#a00");
-  controls(puppet.rl,cy+70,"#a00");
+  // leg controls (CENTERED)
+  legControls(puppet.ll,cy+70,"#a00");
+  legControls(puppet.rl,cy+70,"#a00");
 }
 
 function limb(l,sy){
@@ -162,9 +162,24 @@ function limb(l,sy){
   line(cx+l.mx,sy+l.my,cx+l.ex,sy+l.ey);
 }
 
-function controls(l,sy,col){
+function leg(l,sy){
+  const cx=puppet.x;
+  line(cx,sy,cx+l.ex/2,sy+l.ey/2);
+  line(cx+l.ex/2,sy+l.ey/2,cx+l.ex,sy+l.ey);
+}
+
+function armControls(l,sy,col){
   const cx=puppet.x;
   dot(cx+l.mx,sy+l.my,col);
+  dot(cx+l.ex,sy+l.ey,col);
+}
+
+function legControls(l,sy,col){
+  const cx=puppet.x;
+  // TRUE midpoint
+  const mx = l.ex/2;
+  const my = l.ey/2;
+  dot(cx+mx,sy+my,col);
   dot(cx+l.ex,sy+l.ey,col);
 }
 
@@ -175,7 +190,7 @@ function autoKey(){
 }
 
 /* ================= INPUT ================= */
-c.onmousedown = c.ontouchstart = e=>{
+c.onmousedown=c.ontouchstart=e=>{
   if(playing) return;
   const p=pos(e);
   const cx=puppet.x, cy=puppet.y;
@@ -186,48 +201,66 @@ c.onmousedown = c.ontouchstart = e=>{
   if(hit(p.x,p.y,hx,hy)) return drag={t:"headMove"};
 
   // head scale
-  if(hit(p.x,p.y,hx-16*puppet.head.sx,hy)) return drag={t:"headScale",side:-1};
-  if(hit(p.x,p.y,hx+16*puppet.head.sx,hy)) return drag={t:"headScale",side:1};
+  if(hit(p.x,p.y,hx-HEAD_R*puppet.head.sx,hy)) return drag={t:"headScale"};
+  if(hit(p.x,p.y,hx+HEAD_R*puppet.head.sx,hy)) return drag={t:"headScale"};
 
-  for(const k of ["lh","rh","ll","rl"]){
+  // arms
+  for(const k of ["lh","rh"]){
     const l=puppet[k];
-    const sy=k.includes("h")?cy+10:cy+70;
-    if(hit(p.x,p.y,cx+l.mx,sy+l.my)) return drag={t:"mid",k};
-    if(hit(p.x,p.y,cx+l.ex,sy+l.ey)) return drag={t:"end",k};
+    const sy=cy+10;
+    if(hit(p.x,p.y,cx+l.mx,sy+l.my)) return drag={t:"armMid",k};
+    if(hit(p.x,p.y,cx+l.ex,sy+l.ey)) return drag={t:"armEnd",k};
+  }
+
+  // legs (CENTERED)
+  for(const k of ["ll","rl"]){
+    const l=puppet[k];
+    const sy=cy+70;
+    const mx=l.ex/2, my=l.ey/2;
+    if(hit(p.x,p.y,cx+mx,sy+my)) return drag={t:"legMid",k};
+    if(hit(p.x,p.y,cx+l.ex,sy+l.ey)) return drag={t:"legEnd",k};
   }
 };
 
-c.onmousemove = c.ontouchmove = e=>{
+c.onmousemove=c.ontouchmove=e=>{
   if(!drag) return;
   const p=pos(e);
 
-  if(drag.t==="root"){
-    puppet.x=p.x; puppet.y=p.y;
-  }
+  if(drag.t==="root"){ puppet.x=p.x; puppet.y=p.y; }
+
   if(drag.t==="headMove"){
     puppet.head.x=p.x-puppet.x;
     puppet.head.y=p.y-puppet.y;
   }
+
   if(drag.t==="headScale"){
-    const dx = (p.x - (puppet.x + puppet.head.x)) / 16;
-    puppet.head.sx = Math.max(0.5, Math.min(2.5, Math.abs(dx)));
+    const dx=(p.x-(puppet.x+puppet.head.x))/HEAD_R;
+    puppet.head.sx=Math.max(0.6,Math.min(2.5,Math.abs(dx)));
   }
-  if(drag.t==="mid"){
+
+  if(drag.t==="armMid"){
     const l=puppet[drag.k];
     l.mx=p.x-puppet.x;
-    l.my=p.y-(drag.k.includes("h")?puppet.y+10:puppet.y+70);
+    l.my=p.y-(puppet.y+10);
   }
-  if(drag.t==="end"){
+
+  if(drag.t==="armEnd"){
     const l=puppet[drag.k];
     l.ex=p.x-puppet.x;
-    l.ey=p.y-(drag.k.includes("h")?puppet.y+10:puppet.y+70);
+    l.ey=p.y-(puppet.y+10);
+  }
+
+  if(drag.t==="legEnd"){
+    const l=puppet[drag.k];
+    l.ex=p.x-puppet.x;
+    l.ey=p.y-(puppet.y+70);
   }
 
   autoKey();
   draw();
 };
 
-c.onmouseup = c.ontouchend = ()=>drag=null;
+c.onmouseup=c.ontouchend=()=>drag=null;
 
 /* ================= PLAY ================= */
 document.getElementById("play").onclick=e=>{
