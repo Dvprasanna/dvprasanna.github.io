@@ -5,7 +5,7 @@
 <meta name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
-<title>Auto Stickman Animator + Objects</title>
+<title>Auto Stickman Animator</title>
 
 <style>
 body{
@@ -47,7 +47,7 @@ select,button{
 
 <body>
 
-<h3>Auto Stickman Animator + Objects</h3>
+<h3>Auto Stickman Animator</h3>
 
 <canvas id="c" width="360" height="360"></canvas>
 
@@ -63,22 +63,21 @@ select,button{
 </div>
 
 <script>
-/* ===== CONFIG ===== */
+/* ================= CONFIG ================= */
 const AUTO_PX = 8;
 const FPS = 10;
 
-/* ===== CANVAS ===== */
+/* ================= CANVAS ================= */
 const c = document.getElementById("c");
 const ctx = c.getContext("2d");
 
-/* ===== STATE ===== */
+/* ================= STATE ================= */
 let frames = [];
 let currentFrame = 0;
 let playing = false;
 let drag = null;
-let lastPose = null;
 
-/* ===== PUPPET ===== */
+/* ================= DATA ================= */
 function newPuppet(){
   return {
     x:180, y:150,
@@ -102,7 +101,7 @@ frames.push(newFrame());
 let puppet = frames[0].puppet;
 let objects = frames[0].objects;
 
-/* ===== HELPERS ===== */
+/* ================= HELPERS ================= */
 const clone=o=>JSON.parse(JSON.stringify(o));
 const hit=(px,py,x,y,r=12)=>Math.hypot(px-x,py-y)<r;
 
@@ -112,7 +111,21 @@ function pos(e){
   return {x:t.clientX-r.left,y:t.clientY-r.top};
 }
 
-/* ===== DRAW OBJECTS ===== */
+function dot(x,y,col){
+  ctx.fillStyle=col;
+  ctx.beginPath();
+  ctx.arc(x,y,5,0,Math.PI*2);
+  ctx.fill();
+}
+
+function line(x1,y1,x2,y2){
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+}
+
+/* ================= DRAW OBJECTS ================= */
 function drawObject(o){
   ctx.save();
   ctx.translate(o.x,o.y);
@@ -155,7 +168,7 @@ function drawObject(o){
   ctx.restore();
 }
 
-/* ===== DRAW ===== */
+/* ================= DRAW ================= */
 function draw(){
   ctx.clearRect(0,0,c.width,c.height);
   ctx.lineWidth=3;
@@ -163,9 +176,10 @@ function draw(){
 
   const cx=puppet.x, cy=puppet.y;
 
-  // stickman
+  /* stickman */
   line(cx,cy,cx,cy+70);
   line(cx,cy,cx+puppet.head.x,cy+puppet.head.y);
+
   limb(puppet.lh,cy+10);
   limb(puppet.rh,cy+10);
   limb(puppet.ll,cy+70);
@@ -175,7 +189,16 @@ function draw(){
   ctx.arc(cx+puppet.head.x,cy+puppet.head.y,16,0,Math.PI*2);
   ctx.stroke();
 
-  // objects
+  /* control points */
+  dot(cx,cy,"#000"); // body
+  dot(cx+puppet.head.x,cy+puppet.head.y,"#00f"); // head
+
+  controls(puppet.lh,cy+10,"#0a0");
+  controls(puppet.rh,cy+10,"#0a0");
+  controls(puppet.ll,cy+70,"#a00");
+  controls(puppet.rl,cy+70,"#a00");
+
+  /* objects */
   objects.forEach(drawObject);
 }
 
@@ -184,34 +207,41 @@ function limb(l,sy){
   line(cx,sy,cx+l.mx,sy+l.my);
   line(cx+l.mx,sy+l.my,cx+l.ex,sy+l.ey);
 }
-function line(x1,y1,x2,y2){
-  ctx.beginPath();
-  ctx.moveTo(x1,y1);
-  ctx.lineTo(x2,y2);
-  ctx.stroke();
+
+function controls(l,sy,col){
+  const cx=puppet.x;
+  dot(cx+l.mx,sy+l.my,col);   // mid
+  dot(cx+l.ex,sy+l.ey,col);   // end
 }
 
-/* ===== AUTO KEY ===== */
+/* ================= AUTO KEY ================= */
 function autoKey(){
   frames.push({
     puppet: clone(puppet),
     objects: clone(objects)
   });
   currentFrame = frames.length-1;
-  lastPose = clone({puppet,objects});
 }
 
-/* ===== INPUT ===== */
+/* ================= INPUT ================= */
 c.onmousedown=c.ontouchstart=e=>{
   if(playing) return;
   const p=pos(e);
+  const cx=puppet.x, cy=puppet.y;
 
-  // object hit
+  if(hit(p.x,p.y,cx,cy)) return drag={t:"root"};
+  if(hit(p.x,p.y,cx+puppet.head.x,cy+puppet.head.y))
+    return drag={t:"head"};
+
+  for(const k of ["lh","rh","ll","rl"]){
+    const l=puppet[k];
+    const sy = k.includes("h")?cy+10:cy+70;
+    if(hit(p.x,p.y,cx+l.mx,sy+l.my)) return drag={t:"mid",k};
+    if(hit(p.x,p.y,cx+l.ex,sy+l.ey)) return drag={t:"end",k};
+  }
+
   for(const o of objects){
-    if(hit(p.x,p.y,o.x,o.y)){
-      drag={t:"obj",o};
-      return;
-    }
+    if(hit(p.x,p.y,o.x,o.y)) return drag={t:"obj",o};
   }
 };
 
@@ -219,6 +249,21 @@ c.onmousemove=c.ontouchmove=e=>{
   if(!drag) return;
   const p=pos(e);
 
+  if(drag.t==="root"){ puppet.x=p.x; puppet.y=p.y; }
+  if(drag.t==="head"){
+    puppet.head.x=p.x-puppet.x;
+    puppet.head.y=p.y-puppet.y;
+  }
+  if(drag.t==="mid"){
+    const l=puppet[drag.k];
+    l.mx=p.x-puppet.x;
+    l.my=p.y-(drag.k.includes("h")?puppet.y+10:puppet.y+70);
+  }
+  if(drag.t==="end"){
+    const l=puppet[drag.k];
+    l.ex=p.x-puppet.x;
+    l.ey=p.y-(drag.k.includes("h")?puppet.y+10:puppet.y+70);
+  }
   if(drag.t==="obj"){
     drag.o.x=p.x;
     drag.o.y=p.y;
@@ -230,14 +275,14 @@ c.onmousemove=c.ontouchmove=e=>{
 
 c.onmouseup=c.ontouchend=()=>drag=null;
 
-/* ===== UI ===== */
+/* ================= UI ================= */
 document.getElementById("addObj").onclick=()=>{
   objects.push({
     type: document.getElementById("objType").value,
-    x:180,
-    y:180
+    x:180, y:180
   });
   autoKey();
+  draw();
 };
 
 document.getElementById("play").onclick=e=>{
@@ -254,7 +299,7 @@ setInterval(()=>{
   draw();
 },1000/FPS);
 
-/* ===== START ===== */
+/* ================= START ================= */
 draw();
 </script>
 
