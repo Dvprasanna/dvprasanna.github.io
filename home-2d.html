@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>2D Flat Layout – Canvas</title>
+<title>Minimalist 2D Flat Layout – Canvas Draft</title>
 
 <style>
 body{
@@ -46,38 +46,49 @@ canvas{
   background:#fff;
   border:1px solid #ccc;
 }
+.small{
+  font-size:12px;
+  color:#777;
+  margin-top:10px;
+}
 </style>
 </head>
 
 <body>
-v2
+
 <header>Minimalist 2D Flat Layout – Canvas Draft</header>
 
 <div id="app">
 
-<div id="sidebar">
-  <button onclick="draw()">Redraw</button>
-  <button onclick="exportJPEG()">Export JPEG</button>
-  <button onclick="exportPDF()">Export PDF</button>
+  <div id="sidebar">
+    <button onclick="draw()">Redraw</button>
+    <button onclick="exportJPEG()">Export JPEG</button>
+    <button onclick="exportPDF()">Export PDF</button>
 
-  <div style="font-size:12px;color:#777;margin-top:10px;">
-    v1 · DWG-style raster output
+    <div class="small">
+      v2 · DWG-style raster output<br>
+      Canvas-first architecture
+    </div>
   </div>
-</div>
 
-<div id="canvasWrap">
-  <canvas id="plan" width="900" height="550"></canvas>
-</div>
+  <div id="canvasWrap">
+    <canvas id="plan" width="900" height="550"></canvas>
+  </div>
 
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script>
+/* ================= SETTINGS ================= */
 const canvas = document.getElementById("plan");
 const ctx = canvas.getContext("2d");
 
-/* -------- BASIC CAD STYLES -------- */
+const OFFSET_X = 80;   // left margin (plot margin)
+const OFFSET_Y = 80;   // top margin
+const SCALE = 1;       // 1px = 1mm (future: 0.02 for 1:50)
+
+/* ================= CORE ================= */
 function setup(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.lineCap = "round";
@@ -86,91 +97,109 @@ function setup(){
   ctx.fillStyle = "#000";
 }
 
-/* -------- DRAWING -------- */
+/* ================= DRAW ================= */
 function draw(){
   setup();
 
-  // Walls
+  // ---- WALLS ----
   ctx.lineWidth = 6;
-  line(60,60,840,60);
-  line(840,60,840,480);
-  line(840,480,60,480);
-  line(60,480,60,60);
-  line(420,60,420,480);
+  line(0,0,7800,0);
+  line(7800,0,7800,4200);
+  line(7800,4200,0,4200);
+  line(0,4200,0,0);
+  line(3900,0,3900,4200);
 
-  // Window
+  // ---- WINDOW ----
   ctx.lineWidth = 4;
-  line(200,60,320,60);
+  line(1400,0,2600,0);
 
-  // Door (arc)
+  // ---- DOOR ----
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(420,300,60,Math.PI*1.5,Math.PI*2);
+  ctx.arc(
+    3900 * SCALE + OFFSET_X,
+    2400 * SCALE + OFFSET_Y,
+    600 * SCALE,
+    Math.PI * 1.5,
+    Math.PI * 2
+  );
   ctx.stroke();
 
-  // Furniture
+  // ---- FURNITURE ----
   ctx.lineWidth = 2;
-  rect(120,320,160,80);
-  rect(520,120,180,70);
-  rect(560,300,120,120);
+  rect(900,2600,1600,800);
+  rect(4600,800,1800,700);
+  rect(4800,2600,1200,1200);
 
-  // Electrical
-  ctx.fillStyle="#000";
-  dot(150,290);
-  dot(650,180);
-  dot(700,360);
+  // ---- ELECTRICAL ----
+  dot(1200,2300);
+  dot(6200,1600);
+  dot(6800,3000);
 
-  // Dimensions
+  // ---- DIMENSIONS ----
   ctx.lineWidth = 1;
-  dimension(60,60,840,60,"7800 mm");
-  dimension(60,60,60,480,"4200 mm");
+  dimension(0,0,7800,0,"7800 mm");
+  dimension(0,0,0,4200,"4200 mm");
 }
 
-/* -------- HELPERS -------- */
+/* ================= HELPERS ================= */
+function tx(x){ return x * SCALE + OFFSET_X; }
+function ty(y){ return y * SCALE + OFFSET_Y; }
+
 function line(x1,y1,x2,y2){
   ctx.beginPath();
-  ctx.moveTo(x1,y1);
-  ctx.lineTo(x2,y2);
+  ctx.moveTo(tx(x1),ty(y1));
+  ctx.lineTo(tx(x2),ty(y2));
   ctx.stroke();
-}
-function rect(x,y,w,h){
-  ctx.strokeRect(x,y,w,h);
-}
-function dot(x,y){
-  ctx.beginPath();
-  ctx.arc(x,y,4,0,Math.PI*2);
-  ctx.fill();
-}
-function dimension(x1,y1,x2,y2,label){
-  const o=20;
-  ctx.beginPath();
-  ctx.moveTo(x1,y1);
-  ctx.lineTo(x1,y1+o);
-  ctx.lineTo(x2,y2+o);
-  ctx.lineTo(x2,y2);
-  ctx.stroke();
-  ctx.font="12px system-ui";
-  ctx.fillText(label,(x1+x2)/2-20,y1+o-4);
 }
 
-/* -------- EXPORTS -------- */
+function rect(x,y,w,h){
+  ctx.strokeRect(tx(x),ty(y),w*SCALE,h*SCALE);
+}
+
+function dot(x,y){
+  ctx.beginPath();
+  ctx.arc(tx(x),ty(y),4,0,Math.PI*2);
+  ctx.fill();
+}
+
+function dimension(x1,y1,x2,y2,label){
+  const o = 240; // offset in mm
+
+  ctx.beginPath();
+  ctx.moveTo(tx(x1),ty(y1));
+  ctx.lineTo(tx(x1),ty(y1-o));
+  ctx.lineTo(tx(x2),ty(y2-o));
+  ctx.lineTo(tx(x2),ty(y2));
+  ctx.stroke();
+
+  ctx.font = "12px Arial";
+  ctx.fillText(
+    label,
+    (tx(x1)+tx(x2))/2 - 24,
+    ty(y1-o) - 6
+  );
+}
+
+/* ================= EXPORT ================= */
 function exportJPEG(){
-  const link=document.createElement("a");
-  link.download="2D-Flat-Layout.jpg";
-  link.href=canvas.toDataURL("image/jpeg",1.0);
+  const link = document.createElement("a");
+  link.download = "2D-Flat-Layout.jpg";
+  link.href = canvas.toDataURL("image/jpeg",1.0);
   link.click();
 }
 
 function exportPDF(){
   const { jsPDF } = window.jspdf;
-  const pdf=new jsPDF("landscape","pt","a4");
-  const img=canvas.toDataURL("image/jpeg",1.0);
+  const pdf = new jsPDF("landscape","pt","a4");
+  const img = canvas.toDataURL("image/jpeg",1.0);
+
   pdf.text("Minimalist 2D Flat Layout",40,40);
   pdf.addImage(img,"JPEG",40,60,760,440);
   pdf.save("2D-Flat-Layout.pdf");
 }
 
-/* INIT */
+/* ================= INIT ================= */
 draw();
 </script>
 
