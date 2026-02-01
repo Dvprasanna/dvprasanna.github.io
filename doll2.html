@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Simple Puppet Animator – All Joints</title>
+<title>Simple Puppet Animator – Extended Controls</title>
 
 <style>
 body{
@@ -52,7 +52,7 @@ canvas{
 
 <body>
 
-<h3>Simple Puppet Animator (All Joint Controls)</h3>
+<h3>Simple Puppet Animator (Extended Control Points)</h3>
 
 <canvas id="stage" width="360" height="360"></canvas>
 
@@ -105,7 +105,7 @@ const line=(x1,y1,x2,y2)=>{
   ctx.stroke();
 };
 
-const dot=(x,y,color="#d00",r=6)=>{
+const dot=(x,y,color="#d00",r=5)=>{
   ctx.fillStyle=color;
   ctx.beginPath();
   ctx.arc(x,y,r,0,Math.PI*2);
@@ -130,7 +130,7 @@ function draw(){
   const cx=puppet.x, cy=puppet.y;
 
   /* bones */
-  line(cx,cy,cx,cy+70);                 // spine
+  line(cx,cy,cx,cy+70);
   line(cx,cy,cx+puppet.parts.head.x,cy+puppet.parts.head.y);
 
   line(cx,cy+10,cx+puppet.parts.lh.x,cy+puppet.parts.lh.y);
@@ -140,21 +140,37 @@ function draw(){
   line(cx,cy+70,cx+puppet.parts.rl.x,cy+puppet.parts.rl.y);
 
   /* head */
+  const hx = cx + puppet.parts.head.x;
+  const hy = cy + puppet.parts.head.y;
   ctx.beginPath();
-  ctx.arc(cx,cy-40,16,0,Math.PI*2);
+  ctx.arc(hx,hy,16,0,Math.PI*2);
   ctx.stroke();
 
-  /* joint dots */
-  dot(cx,cy,"#000");                 // body root
-  dot(cx,cy-40,"#00a");              // neck / head joint
+  /* ===== CONTROL POINTS ===== */
 
-  dot(cx,cy+10,"#000");              // shoulders
-  dot(cx+puppet.parts.lh.x,cy+puppet.parts.lh.y);
-  dot(cx+puppet.parts.rh.x,cy+puppet.parts.rh.y);
+  // body center
+  dot(cx,cy,"#000");
 
-  dot(cx,cy+70,"#000");               // hips
-  dot(cx+puppet.parts.ll.x,cy+puppet.parts.ll.y);
-  dot(cx+puppet.parts.rl.x,cy+puppet.parts.rl.y);
+  // head center
+  dot(hx,hy,"#00a");
+
+  // ears
+  dot(hx-16,hy,"#00a");
+  dot(hx+16,hy,"#00a");
+
+  // arms
+  dot(cx+(puppet.parts.lh.x/2), cy+10+(puppet.parts.lh.y-10)/2, "#0a0");
+  dot(cx+puppet.parts.lh.x, cy+puppet.parts.lh.y, "#0a0");
+
+  dot(cx+(puppet.parts.rh.x/2), cy+10+(puppet.parts.rh.y-10)/2, "#0a0");
+  dot(cx+puppet.parts.rh.x, cy+puppet.parts.rh.y, "#0a0");
+
+  // legs
+  dot(cx+(puppet.parts.ll.x/2), cy+70+(puppet.parts.ll.y-70)/2, "#a00");
+  dot(cx+puppet.parts.ll.x, cy+puppet.parts.ll.y, "#a00");
+
+  dot(cx+(puppet.parts.rl.x/2), cy+70+(puppet.parts.rl.y-70)/2, "#a00");
+  dot(cx+puppet.parts.rl.x, cy+puppet.parts.rl.y, "#a00");
 }
 
 /* ===== AUTO KEY ===== */
@@ -181,12 +197,23 @@ canvas.onmousedown=canvas.ontouchstart=e=>{
   const p=pos(e);
   const cx=puppet.x, cy=puppet.y;
 
+  // body center
   if(hit(p.x,p.y,cx,cy)){ drag={type:"root"}; return; }
 
-  for(const k in puppet.parts){
+  // head center & ears (move head)
+  const hx=cx+puppet.parts.head.x;
+  const hy=cy+puppet.parts.head.y;
+  if(hit(p.x,p.y,hx,hy)||hit(p.x,p.y,hx-16,hy)||hit(p.x,p.y,hx+16,hy)){
+    drag={type:"part",k:"head"}; return;
+  }
+
+  // arm & leg mid / end (move end joint)
+  for(const k of ["lh","rh","ll","rl"]){
     const px=cx+puppet.parts[k].x;
     const py=cy+puppet.parts[k].y;
-    if(hit(p.x,p.y,px,py)){ drag={type:"part",k}; return; }
+    if(hit(p.x,p.y,px,py)){
+      drag={type:"part",k}; return;
+    }
   }
 };
 
