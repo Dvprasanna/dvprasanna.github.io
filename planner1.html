@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Floor Plan Tracer</title>
+<style>
+  body { margin:0; font-family: system-ui; }
+  #ui {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    background: #fff;
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,.2);
+    z-index: 10;
+  }
+  canvas { display:block; background:#fafafa; }
+  button, input { margin: 4px 0; width:100%; }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <input type="file" id="imgLoader" accept="image/*">
+  <label>Wall Thickness</label>
+  <input type="range" id="thickness" min="6" max="40" value="20">
+  <button id="doorBtn">Door Mode</button>
+  <button id="exportBtn">Export SVG</button>
+</div>
+
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+canvas.width = innerWidth;
+canvas.height = innerHeight;
+
+let bgImage = null;
+let walls = [];
+let doors = [];
+
+let drawing = false;
+let start = null;
+let doorMode = false;
+let wallThickness = 20;
+
+// --------- IMAGE LOAD ----------
+imgLoader.onchange = e => {
+  const img = new Image();
+  img.onload = () => bgImage = img;
+  img.src = URL.createObjectURL(e.target.files[0]);
+};
+
+// --------- UI ----------
+thickness.oninput = e => wallThickness = +e.target.value;
+doorBtn.onclick = () => doorMode = !doorMode;
+
+// --------- HELPERS ----------
+function orthoSnap(a, b) {
+  return Math.abs(b.x - a.x) > Math.abs(b.y - a.y)
+    ? { x: b.x, y: a.y }
+    : { x: a.x, y: b.y };
+}
+
+// --------- INPUT ----------
+canvas.addEventListener("pointerdown", e => {
+  start = { x: e.offsetX, y: e.offsetY };
+  drawing = true;
+});
+
+canvas.addEventListener("pointerup", e => {
+  if (!drawing) return;
+  let end = orthoSnap(start, { x: e.offsetX, y: e.offsetY });
+
+  if (doorMode) {
+    doors.push({ a: start, b: end });
+  } else {
+    walls.push({ a: start, b: end });
+  }
+  drawing = false;
+});
+
+// --------- DRAW ----------
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if (bgImage) {
+    ctx.globalAlpha = 0.4;
+    ctx.drawImage(bgImage, 0, 0);
+    ctx.globalAlpha = 1;
+  }
+
+  // WALLS (double-line union via stroke)
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = wallThickness;
+  ctx.lineJoin = "bevel";
+  ctx.lineCap = "butt";
+
+  walls.forEach(w => {
+    ctx.beginPath();
+    ctx.moveTo(w.a.x, w.a.y);
+    ctx.lineTo(w.b.x, w.b.y);
+    ctx.stroke();
+  });
+
+  // DOOR CUTS
+  ctx.strokeStyle = "#fafafa";
+  ctx.lineWidth = wallThickness - 6;
+
+  doors.forEach(d => {
+    ctx.beginPath();
+    ctx.moveTo(d.a.x, d.a.y);
+    ctx.lineTo(d.b.x, d.b.y);
+    ctx.stroke();
+  });
+
+  requestAnimationFrame(draw);
+}
+draw();
+
+// --------- EXPORT SVG ----------
+exportBtn.onclick = () => {
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">`;
+
+  walls.forEach(w => {
+    svg += `<line x1="${w.a.x}" y1="${w.a.y}" x2="${w.b.x}" y2="${w.b.y}"
+      stroke="#000" stroke-width="${wallThickness}" stroke-linejoin="bevel"/>`;
+  });
+
+  doors.forEach(d => {
+    svg += `<line x1="${d.a.x}" y1="${d.a.y}" x2="${d.b.x}" y2="${d.b.y}"
+      stroke="#fff" stroke-width="${wallThickness - 6}"/>`;
+  });
+
+  svg += `</svg>`;
+
+  const blob = new Blob([svg], { type: "image/svg+xml" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "floorplan.svg";
+  a.click();
+};
+</script>
+</body>
+</html>
