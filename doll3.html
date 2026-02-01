@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+<title>Auto Stickman Animator + Objects</title>
+
+<style>
+body{
+  margin:0;
+  background:#111;
+  color:#fff;
+  font-family:sans-serif;
+  text-align:center;
+  padding-bottom: calc(140px + env(safe-area-inset-bottom));
+}
+canvas{
+  background:#eee;
+  display:block;
+  margin:10px auto;
+  touch-action:none;
+}
+#ui{
+  position:fixed;
+  left:0; right:0;
+  bottom: env(safe-area-inset-bottom);
+  padding:10px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  background:#222;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:8px;
+  z-index:9999;
+}
+select,button{
+  padding:8px 12px;
+  border:none;
+  border-radius:6px;
+  background:#444;
+  color:#fff;
+}
+</style>
+</head>
+
+<body>
+
+<h3>Auto Stickman Animator + Objects</h3>
+
+<canvas id="c" width="360" height="360"></canvas>
+
+<div id="ui">
+  <select id="objType">
+    <option value="heart">Heart</option>
+    <option value="rose">Rose</option>
+    <option value="star">Star</option>
+    <option value="circle">Circle</option>
+  </select>
+  <button id="addObj">＋ Add Object</button>
+  <button id="play">▶ Play</button>
+</div>
+
+<script>
+/* ===== CONFIG ===== */
+const AUTO_PX = 8;
+const FPS = 10;
+
+/* ===== CANVAS ===== */
+const c = document.getElementById("c");
+const ctx = c.getContext("2d");
+
+/* ===== STATE ===== */
+let frames = [];
+let currentFrame = 0;
+let playing = false;
+let drag = null;
+let lastPose = null;
+
+/* ===== PUPPET ===== */
+function newPuppet(){
+  return {
+    x:180, y:150,
+    head:{x:0,y:-40},
+    lh:{mx:-20,my:15, ex:-40,ey:30},
+    rh:{mx:20,my:15,  ex:40, ey:30},
+    ll:{mx:-10,my:90, ex:-20,ey:120},
+    rl:{mx:10,my:90,  ex:20, ey:120}
+  };
+}
+
+function newFrame(){
+  return {
+    puppet: newPuppet(),
+    objects: []
+  };
+}
+
+frames.push(newFrame());
+
+let puppet = frames[0].puppet;
+let objects = frames[0].objects;
+
+/* ===== HELPERS ===== */
+const clone=o=>JSON.parse(JSON.stringify(o));
+const hit=(px,py,x,y,r=12)=>Math.hypot(px-x,py-y)<r;
+
+function pos(e){
+  const r=c.getBoundingClientRect();
+  const t=e.touches?e.touches[0]:e;
+  return {x:t.clientX-r.left,y:t.clientY-r.top};
+}
+
+/* ===== DRAW OBJECTS ===== */
+function drawObject(o){
+  ctx.save();
+  ctx.translate(o.x,o.y);
+  ctx.fillStyle="#d00";
+
+  if(o.type==="circle"){
+    ctx.beginPath();
+    ctx.arc(0,0,10,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  if(o.type==="heart"){
+    ctx.beginPath();
+    ctx.moveTo(0,5);
+    ctx.bezierCurveTo(-15,-10,-25,10,0,25);
+    ctx.bezierCurveTo(25,10,15,-10,0,5);
+    ctx.fill();
+  }
+
+  if(o.type==="star"){
+    ctx.beginPath();
+    for(let i=0;i<5;i++){
+      ctx.lineTo(Math.cos((18+i*72)*Math.PI/180)*12,
+                 -Math.sin((18+i*72)*Math.PI/180)*12);
+      ctx.lineTo(Math.cos((54+i*72)*Math.PI/180)*6,
+                 -Math.sin((54+i*72)*Math.PI/180)*6);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if(o.type==="rose"){
+    ctx.beginPath();
+    ctx.arc(0,0,6,0,Math.PI*2);
+    ctx.arc(4,-4,6,0,Math.PI*2);
+    ctx.arc(-4,-4,6,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+/* ===== DRAW ===== */
+function draw(){
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.lineWidth=3;
+  ctx.strokeStyle="#000";
+
+  const cx=puppet.x, cy=puppet.y;
+
+  // stickman
+  line(cx,cy,cx,cy+70);
+  line(cx,cy,cx+puppet.head.x,cy+puppet.head.y);
+  limb(puppet.lh,cy+10);
+  limb(puppet.rh,cy+10);
+  limb(puppet.ll,cy+70);
+  limb(puppet.rl,cy+70);
+
+  ctx.beginPath();
+  ctx.arc(cx+puppet.head.x,cy+puppet.head.y,16,0,Math.PI*2);
+  ctx.stroke();
+
+  // objects
+  objects.forEach(drawObject);
+}
+
+function limb(l,sy){
+  const cx=puppet.x;
+  line(cx,sy,cx+l.mx,sy+l.my);
+  line(cx+l.mx,sy+l.my,cx+l.ex,sy+l.ey);
+}
+function line(x1,y1,x2,y2){
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+}
+
+/* ===== AUTO KEY ===== */
+function autoKey(){
+  frames.push({
+    puppet: clone(puppet),
+    objects: clone(objects)
+  });
+  currentFrame = frames.length-1;
+  lastPose = clone({puppet,objects});
+}
+
+/* ===== INPUT ===== */
+c.onmousedown=c.ontouchstart=e=>{
+  if(playing) return;
+  const p=pos(e);
+
+  // object hit
+  for(const o of objects){
+    if(hit(p.x,p.y,o.x,o.y)){
+      drag={t:"obj",o};
+      return;
+    }
+  }
+};
+
+c.onmousemove=c.ontouchmove=e=>{
+  if(!drag) return;
+  const p=pos(e);
+
+  if(drag.t==="obj"){
+    drag.o.x=p.x;
+    drag.o.y=p.y;
+  }
+
+  autoKey();
+  draw();
+};
+
+c.onmouseup=c.ontouchend=()=>drag=null;
+
+/* ===== UI ===== */
+document.getElementById("addObj").onclick=()=>{
+  objects.push({
+    type: document.getElementById("objType").value,
+    x:180,
+    y:180
+  });
+  autoKey();
+};
+
+document.getElementById("play").onclick=e=>{
+  playing=!playing;
+  e.target.innerText=playing?"⏸ Stop":"▶ Play";
+};
+
+setInterval(()=>{
+  if(!playing) return;
+  currentFrame++;
+  if(currentFrame>=frames.length) currentFrame=0;
+  puppet = clone(frames[currentFrame].puppet);
+  objects = clone(frames[currentFrame].objects);
+  draw();
+},1000/FPS);
+
+/* ===== START ===== */
+draw();
+</script>
+
+</body>
+</html>
