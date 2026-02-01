@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>String Puppet Demo</title>
+<style>
+  body { background:#111; display:flex; justify-content:center; }
+  canvas { background:#fff; margin-top:20px; }
+</style>
+</head>
+<body>
+
+<canvas id="stage" width="400" height="500"></canvas>
+
+<script>
+const canvas = document.getElementById("stage");
+const ctx = canvas.getContext("2d");
+
+// STRING CONTROLS (like real threads)
+let strings = {
+  head: 0,
+  lh: 0,
+  rh: 0,
+  ll: 0,
+  rl: 0
+};
+
+function drawLine(x1,y1,x2,y2){
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+}
+
+function drawPuppet(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#000";
+
+  const cx = 200;
+  const cy = 160;
+
+  // CONTROL BAR
+  drawLine(150,50,250,50);
+
+  // STRINGS
+  drawLine(200,50,200,cy-30);
+  drawLine(150,50,cx-40,cy+30);
+  drawLine(250,50,cx+40,cy+30);
+
+  // HEAD
+  ctx.beginPath();
+  ctx.arc(cx, cy-25 + strings.head, 20, 0, Math.PI*2);
+  ctx.stroke();
+
+  // BODY
+  drawLine(cx,cy,cx,cy+90);
+
+  // LEFT HAND
+  drawLine(cx,cy+20,cx-50,cy+40 + strings.lh);
+
+  // RIGHT HAND
+  drawLine(cx,cy+20,cx+50,cy+40 + strings.rh);
+
+  // LEFT LEG
+  drawLine(cx,cy+90,cx-30,cy+140 + strings.ll);
+
+  // RIGHT LEG
+  drawLine(cx,cy+90,cx+30,cy+140 + strings.rl);
+}
+
+// ANIMATION (pulling strings)
+let t = 0;
+setInterval(()=>{
+  t += 0.1;
+  strings.head = Math.sin(t)*4;
+  strings.lh   = Math.sin(t)*12;
+  strings.rh   = -Math.sin(t)*12;
+  strings.ll   = Math.sin(t)*8;
+  strings.rl   = -Math.sin(t)*8;
+  drawPuppet();
+},30);
+</script>
+
+</body>
+</html>
