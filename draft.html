@@ -3,16 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>JS Movable Ruler (Mini Drafter)</title>
+<title>L-Scale Mini Drafter</title>
 
 <style>
 body{margin:0;background:#ccc;touch-action:none;font-family:system-ui}
 #toolbar{
-  height:40px;background:#222;color:#fff;
+  height:42px;background:#222;color:#fff;
   display:flex;gap:6px;padding:6px
 }
-button{background:#444;color:#fff;border:none;padding:6px 10px}
-button.active{background:#0aa}
+button,select{
+  background:#444;color:#fff;border:none;
+  padding:6px 10px;border-radius:4px
+}
 canvas{display:block;background:#fff}
 </style>
 </head>
@@ -20,91 +22,119 @@ canvas{display:block;background:#fff}
 <body>
 
 <div id="toolbar">
-  <button id="rotateL">⟲</button>
-  <button id="rotateR">⟳</button>
-  <button id="thick">THICK</button>
+  <button id="rotL">⟲</button>
+  <button id="rotR">⟳</button>
+  <select id="unit">
+    <option value="px">px</option>
+    <option value="mm">mm</option>
+    <option value="in">inch</option>
+  </select>
   <button id="clear">CLEAR</button>
 </div>
 
 <canvas id="c"></canvas>
 
 <script>
-/* =====================
+/* =========================
    SETUP
-===================== */
-const c = document.getElementById("c");
-const ctx = c.getContext("2d");
+========================= */
+const c=document.getElementById("c");
+const ctx=c.getContext("2d");
 
 function resize(){
   c.width=window.innerWidth;
-  c.height=window.innerHeight-40;
+  c.height=window.innerHeight-42;
 }
-resize();
-onresize=resize;
+resize(); onresize=resize;
 
-/* =====================
-   RULER STATE
-===================== */
-let ruler = {
-  x: c.width/2,
-  y: c.height/2,
-  angle: 0
+/* =========================
+   L-SCALE STATE
+========================= */
+const L={
+  x:150,
+  y:150,
+  angle:0,
+  arm:300
 };
 
-let draggingRuler=false;
+let draggingScale=false;
+let dragAxis=null;
 let drawing=false;
 let start=null;
-let thick=false;
-
 const lines=[];
 
-/* =====================
+/* =========================
+   SCALE CONFIG
+========================= */
+const DPI=96;
+function unitScale(u){
+  if(u==="mm") return DPI/25.4;
+  if(u==="in") return DPI;
+  return 10;
+}
+
+/* =========================
    MATH
-===================== */
-function projectToRuler(px,py){
-  const dx=px-ruler.x;
-  const dy=py-ruler.y;
-  const t = dx*Math.cos(ruler.angle)+dy*Math.sin(ruler.angle);
+========================= */
+function rot(x,y){
+  const cA=Math.cos(L.angle), sA=Math.sin(L.angle);
   return {
-    x: ruler.x + Math.cos(ruler.angle)*t,
-    y: ruler.y + Math.sin(ruler.angle)*t,
-    t
+    x:L.x + x*cA - y*sA,
+    y:L.y + x*sA + y*cA
   };
 }
 
-/* =====================
-   DRAW
-===================== */
+/* =========================
+   DRAW L-SCALE
+========================= */
+function drawScale(){
+  const s=unitScale(unit.value);
+
+  ctx.lineWidth=2;
+  ctx.strokeStyle="#000";
+
+  // arms
+  ctx.beginPath();
+  ctx.moveTo(...Object.values(rot(0,0)));
+  ctx.lineTo(...Object.values(rot(L.arm,0)));
+  ctx.lineTo(...Object.values(rot(0,0)));
+  ctx.lineTo(...Object.values(rot(0,L.arm)));
+  ctx.stroke();
+
+  // ticks
+  ctx.font="10px monospace";
+  for(let i=0;i<L.arm;i+=s){
+    const p1=rot(i,0);
+    const p2=rot(0,i);
+    ctx.beginPath();
+    ctx.moveTo(p1.x,p1.y);
+    ctx.lineTo(p1.x,p1.y-5);
+    ctx.moveTo(p2.x,p2.y);
+    ctx.lineTo(p2.x-5,p2.y);
+    ctx.stroke();
+    if(i%(s*10)===0){
+      ctx.fillText(i/s, p1.x+2,p1.y-8);
+      ctx.fillText(i/s, p2.x-18,p2.y+4);
+    }
+  }
+}
+
+/* =========================
+   REDRAW
+========================= */
 function redraw(preview){
   ctx.clearRect(0,0,c.width,c.height);
 
-  // drawn lines
+  // lines
   for(let l of lines){
-    ctx.lineWidth=l.thick?4:2;
     ctx.beginPath();
     ctx.moveTo(l.x1,l.y1);
     ctx.lineTo(l.x2,l.y2);
     ctx.stroke();
   }
 
-  // ruler
-  ctx.lineWidth=1;
-  ctx.setLineDash([8,6]);
-  ctx.beginPath();
-  ctx.moveTo(
-    ruler.x - Math.cos(ruler.angle)*2000,
-    ruler.y - Math.sin(ruler.angle)*2000
-  );
-  ctx.lineTo(
-    ruler.x + Math.cos(ruler.angle)*2000,
-    ruler.y + Math.sin(ruler.angle)*2000
-  );
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // preview line
+  // preview
   if(preview){
-    ctx.lineWidth=thick?4:2;
     ctx.setLineDash([6,4]);
     ctx.beginPath();
     ctx.moveTo(preview.x1,preview.y1);
@@ -112,70 +142,63 @@ function redraw(preview){
     ctx.stroke();
     ctx.setLineDash([]);
   }
+
+  drawScale();
 }
 
-/* =====================
+/* =========================
    POINTER
-===================== */
+========================= */
 c.addEventListener("pointerdown",e=>{
-  const p={x:e.offsetX,y:e.offsetY};
-  const d=Math.abs(
-    (p.x-ruler.x)*Math.sin(ruler.angle) -
-    (p.y-ruler.y)*Math.cos(ruler.angle)
-  );
+  const dx=Math.abs(e.offsetX-L.x);
+  const dy=Math.abs(e.offsetY-L.y);
 
-  if(d<10){
-    draggingRuler=true;
+  if(dx<15 && dy<15){
+    draggingScale=true;
+    dragAxis=dx>dy?"x":"y";
   }else{
     drawing=true;
-    start=projectToRuler(p.x,p.y);
+    start={x:L.x,y:L.y};
   }
 });
 
 c.addEventListener("pointermove",e=>{
-  const p={x:e.offsetX,y:e.offsetY};
-
-  if(draggingRuler){
-    ruler.x=p.x;
-    ruler.y=p.y;
+  if(draggingScale){
+    if(dragAxis==="x") L.x=e.offsetX;
+    else L.y=e.offsetY;
     redraw();
   }
-
   if(drawing){
-    const end=projectToRuler(p.x,p.y);
     redraw({
       x1:start.x,y1:start.y,
-      x2:end.x,y2:end.y
+      x2:e.offsetX,y2:e.offsetY
     });
   }
 });
 
 c.addEventListener("pointerup",e=>{
   if(drawing){
-    const p={x:e.offsetX,y:e.offsetY};
-    const end=projectToRuler(p.x,p.y);
     lines.push({
       x1:start.x,y1:start.y,
-      x2:end.x,y2:end.y,
-      thick
+      x2:e.offsetX,y2:e.offsetY
     });
   }
-  draggingRuler=false;
+  draggingScale=false;
   drawing=false;
   redraw();
 });
 
-/* =====================
+/* =========================
    CONTROLS
-===================== */
-rotateL.onclick=()=>{ruler.angle-=Math.PI/180*5;redraw();}
-rotateR.onclick=()=>{ruler.angle+=Math.PI/180*5;redraw();}
-thick.onclick=e=>{thick=!thick;e.target.classList.toggle("active")}
-clear.onclick=()=>{lines.length=0;redraw()}
+========================= */
+rotL.onclick=()=>{L.angle-=Math.PI/12;redraw()};
+rotR.onclick=()=>{L.angle+=Math.PI/12;redraw()};
+unit.onchange=redraw;
+clear.onclick=()=>{lines.length=0;redraw()};
 
 redraw();
 
-/* version: 2.0.0 */
+/* version: 3.0.0 */
 </script>
 </body>
 </html>
