@@ -3,130 +3,77 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>L-Scale Mini Drafter</title>
+<title>L Scale – Parallel Only Drafter</title>
 
 <style>
 body{margin:0;background:#ccc;touch-action:none;font-family:system-ui}
-#toolbar{
-  height:42px;background:#222;color:#fff;
-  display:flex;gap:6px;padding:6px
-}
-button,select{
-  background:#444;color:#fff;border:none;
-  padding:6px 10px;border-radius:4px
-}
+#bar{height:40px;background:#222;color:#fff;padding:6px}
 canvas{display:block;background:#fff}
 </style>
 </head>
 
 <body>
-
-<div id="toolbar">
-  <button id="rotL">⟲</button>
-  <button id="rotR">⟳</button>
-  <select id="unit">
-    <option value="px">px</option>
-    <option value="mm">mm</option>
-    <option value="in">inch</option>
-  </select>
-  <button id="clear">CLEAR</button>
-</div>
-
+<div id="bar">Double-tap circle → set angle snap</div>
 <canvas id="c"></canvas>
 
 <script>
 /* =========================
    SETUP
 ========================= */
-const c=document.getElementById("c");
-const ctx=c.getContext("2d");
+const c = document.getElementById("c");
+const ctx = c.getContext("2d");
 
 function resize(){
-  c.width=window.innerWidth;
-  c.height=window.innerHeight-42;
+  c.width = innerWidth;
+  c.height = innerHeight - 40;
 }
-resize(); onresize=resize;
+resize(); onresize = resize;
 
 /* =========================
    L-SCALE STATE
 ========================= */
-const L={
-  x:150,
-  y:150,
-  angle:0,
-  arm:300
+const L = {
+  x: 200,
+  y: 300,
+  angle: 0,
+  arm: 350,
+  snapAngles: [0,30,45,60,90].map(a=>a*Math.PI/180)
 };
 
-let draggingScale=false;
-let dragAxis=null;
-let drawing=false;
-let start=null;
-const lines=[];
+let mode = null; // "moveX" | "moveY" | "drawH" | "drawV"
+let start = null;
+const lines = [];
 
 /* =========================
-   SCALE CONFIG
-========================= */
-const DPI=96;
-function unitScale(u){
-  if(u==="mm") return DPI/25.4;
-  if(u==="in") return DPI;
-  return 10;
-}
-
-/* =========================
-   MATH
+   MATH HELPERS
 ========================= */
 function rot(x,y){
   const cA=Math.cos(L.angle), sA=Math.sin(L.angle);
   return {
-    x:L.x + x*cA - y*sA,
-    y:L.y + x*sA + y*cA
+    x: L.x + x*cA - y*sA,
+    y: L.y + x*sA + y*cA
+  };
+}
+
+function proj(px,py,dir){
+  const dx = px - L.x;
+  const dy = py - L.y;
+  const t = dx*Math.cos(dir) + dy*Math.sin(dir);
+  return {
+    x: L.x + Math.cos(dir)*t,
+    y: L.y + Math.sin(dir)*t
   };
 }
 
 /* =========================
-   DRAW L-SCALE
-========================= */
-function drawScale(){
-  const s=unitScale(unit.value);
-
-  ctx.lineWidth=2;
-  ctx.strokeStyle="#000";
-
-  // arms
-  ctx.beginPath();
-  ctx.moveTo(...Object.values(rot(0,0)));
-  ctx.lineTo(...Object.values(rot(L.arm,0)));
-  ctx.lineTo(...Object.values(rot(0,0)));
-  ctx.lineTo(...Object.values(rot(0,L.arm)));
-  ctx.stroke();
-
-  // ticks
-  ctx.font="10px monospace";
-  for(let i=0;i<L.arm;i+=s){
-    const p1=rot(i,0);
-    const p2=rot(0,i);
-    ctx.beginPath();
-    ctx.moveTo(p1.x,p1.y);
-    ctx.lineTo(p1.x,p1.y-5);
-    ctx.moveTo(p2.x,p2.y);
-    ctx.lineTo(p2.x-5,p2.y);
-    ctx.stroke();
-    if(i%(s*10)===0){
-      ctx.fillText(i/s, p1.x+2,p1.y-8);
-      ctx.fillText(i/s, p2.x-18,p2.y+4);
-    }
-  }
-}
-
-/* =========================
-   REDRAW
+   DRAW
 ========================= */
 function redraw(preview){
   ctx.clearRect(0,0,c.width,c.height);
 
-  // lines
-  for(let l of lines){
+  // drawn lines
+  ctx.lineWidth = 2;
+  for(const l of lines){
     ctx.beginPath();
     ctx.moveTo(l.x1,l.y1);
     ctx.lineTo(l.x2,l.y2);
@@ -143,62 +90,105 @@ function redraw(preview){
     ctx.setLineDash([]);
   }
 
-  drawScale();
+  // L arms
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  const o = rot(0,0);
+  const h = rot(L.arm,0);
+  const v = rot(0,-L.arm);
+  ctx.moveTo(o.x,o.y); ctx.lineTo(h.x,h.y);
+  ctx.moveTo(o.x,o.y); ctx.lineTo(v.x,v.y);
+  ctx.stroke();
+
+  // pivot circle
+  ctx.beginPath();
+  ctx.arc(o.x,o.y,12,0,Math.PI*2);
+  ctx.stroke();
 }
 
 /* =========================
    POINTER
 ========================= */
 c.addEventListener("pointerdown",e=>{
-  const dx=Math.abs(e.offsetX-L.x);
-  const dy=Math.abs(e.offsetY-L.y);
+  const x=e.offsetX, y=e.offsetY;
+  const o=rot(0,0);
 
-  if(dx<15 && dy<15){
-    draggingScale=true;
-    dragAxis=dx>dy?"x":"y";
-  }else{
-    drawing=true;
-    start={x:L.x,y:L.y};
+  // pivot hit
+  if(Math.hypot(x-o.x,y-o.y)<15){
+    mode="pivot";
+    return;
   }
+
+  // near horizontal arm → draw parallel
+  const ph = proj(x,y,L.angle);
+  if(Math.hypot(ph.x-x,ph.y-y)<10){
+    mode="drawH";
+    start=ph;
+    return;
+  }
+
+  // near vertical arm → draw parallel
+  const pv = proj(x,y,L.angle+Math.PI/2);
+  if(Math.hypot(pv.x-x,pv.y-y)<10){
+    mode="drawV";
+    start=pv;
+    return;
+  }
+
+  // move scale (orthogonal only)
+  mode = Math.abs(x-o.x) > Math.abs(y-o.y) ? "moveX" : "moveY";
 });
 
 c.addEventListener("pointermove",e=>{
-  if(draggingScale){
-    if(dragAxis==="x") L.x=e.offsetX;
-    else L.y=e.offsetY;
-    redraw();
+  if(!mode) return;
+  const x=e.offsetX, y=e.offsetY;
+
+  if(mode==="moveX") L.x = x;
+  if(mode==="moveY") L.y = y;
+
+  if(mode==="drawH"){
+    const p = proj(x,y,L.angle);
+    redraw({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
+    return;
   }
-  if(drawing){
-    redraw({
-      x1:start.x,y1:start.y,
-      x2:e.offsetX,y2:e.offsetY
-    });
+
+  if(mode==="drawV"){
+    const p = proj(x,y,L.angle+Math.PI/2);
+    redraw({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
+    return;
   }
+
+  redraw();
 });
 
 c.addEventListener("pointerup",e=>{
-  if(drawing){
-    lines.push({
-      x1:start.x,y1:start.y,
-      x2:e.offsetX,y2:e.offsetY
-    });
+  if(mode==="drawH"){
+    const p=proj(e.offsetX,e.offsetY,L.angle);
+    lines.push({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
   }
-  draggingScale=false;
-  drawing=false;
+  if(mode==="drawV"){
+    const p=proj(e.offsetX,e.offsetY,L.angle+Math.PI/2);
+    lines.push({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
+  }
+  mode=null;
   redraw();
 });
 
 /* =========================
-   CONTROLS
+   DOUBLE CLICK = ANGLE SNAP
 ========================= */
-rotL.onclick=()=>{L.angle-=Math.PI/12;redraw()};
-rotR.onclick=()=>{L.angle+=Math.PI/12;redraw()};
-unit.onchange=redraw;
-clear.onclick=()=>{lines.length=0;redraw()};
+c.addEventListener("dblclick",e=>{
+  const o=rot(0,0);
+  if(Math.hypot(e.offsetX-o.x,e.offsetY-o.y)<15){
+    const i=L.snapAngles.indexOf(L.angle);
+    L.angle=L.snapAngles[(i+1)%L.snapAngles.length];
+    redraw();
+  }
+});
 
 redraw();
 
-/* version: 3.0.0 */
+/* version: 4.0.0 */
 </script>
 </body>
 </html>
