@@ -3,172 +3,82 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>JS Mini Drafter with Ruler</title>
+<title>JS Movable Ruler (Mini Drafter)</title>
 
 <style>
-body {
-  margin: 0;
-  background: #ddd;
-  font-family: system-ui;
-  overflow: hidden;
+body{margin:0;background:#ccc;touch-action:none;font-family:system-ui}
+#toolbar{
+  height:40px;background:#222;color:#fff;
+  display:flex;gap:6px;padding:6px
 }
-
-#toolbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 40px;
-  background: #222;
-  color: #fff;
-  display: flex;
-  gap: 6px;
-  padding: 5px;
-  z-index: 10;
-}
-
-button {
-  background: #444;
-  color: #fff;
-  border: none;
-  padding: 5px 10px;
-  border-radius: 4px;
-}
-button.active { background: #0aa; }
-
-#board {
-  position: absolute;
-  top: 40px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: grid;
-  grid-template-columns: 40px 1fr;
-  grid-template-rows: 40px 1fr;
-}
-
-#corner {
-  background: #bbb;
-}
-
-canvas {
-  display: block;
-}
-
-#rulerX {
-  background: #f8f8f8;
-}
-
-#rulerY {
-  background: #f8f8f8;
-}
-
-#draw {
-  background: #fff;
-}
+button{background:#444;color:#fff;border:none;padding:6px 10px}
+button.active{background:#0aa}
+canvas{display:block;background:#fff}
 </style>
 </head>
 
 <body>
 
 <div id="toolbar">
-  <button id="ortho">ORTHO</button>
-  <button id="angle">ANGLE</button>
-  <button id="parallel">PARALLEL</button>
+  <button id="rotateL">⟲</button>
+  <button id="rotateR">⟳</button>
   <button id="thick">THICK</button>
   <button id="clear">CLEAR</button>
 </div>
 
-<div id="board">
-  <div id="corner"></div>
-  <canvas id="rulerX"></canvas>
-  <canvas id="rulerY"></canvas>
-  <canvas id="draw"></canvas>
-</div>
+<canvas id="c"></canvas>
 
 <script>
-/* =======================
+/* =====================
    SETUP
-======================= */
-const rX = rulerX.getContext("2d");
-const rY = rulerY.getContext("2d");
-const ctx = draw.getContext("2d");
+===================== */
+const c = document.getElementById("c");
+const ctx = c.getContext("2d");
 
-function resize() {
-  rulerX.width = draw.width = window.innerWidth - 40;
-  rulerX.height = 40;
-  rulerY.width = 40;
-  rulerY.height = draw.height = window.innerHeight - 80;
+function resize(){
+  c.width=window.innerWidth;
+  c.height=window.innerHeight-40;
 }
 resize();
-window.onresize = resize;
+onresize=resize;
 
-/* =======================
-   RULER DRAWING
-======================= */
-const scale = 10; // pixels per mm (visual scale)
+/* =====================
+   RULER STATE
+===================== */
+let ruler = {
+  x: c.width/2,
+  y: c.height/2,
+  angle: 0
+};
 
-function drawRulers() {
-  rX.clearRect(0,0,rulerX.width,rulerX.height);
-  rY.clearRect(0,0,rulerY.width,rulerY.height);
+let draggingRuler=false;
+let drawing=false;
+let start=null;
+let thick=false;
 
-  rX.strokeStyle = rY.strokeStyle = "#000";
-  rX.fillStyle = rY.fillStyle = "#000";
-  rX.font = rY.font = "10px monospace";
+const lines=[];
 
-  // horizontal ruler
-  for (let x=0; x<rulerX.width; x+=scale) {
-    let mm = x/scale;
-    let h = mm%10===0 ? 18 : 10;
-    rX.beginPath();
-    rX.moveTo(x,40);
-    rX.lineTo(x,40-h);
-    rX.stroke();
-    if (mm%10===0) rX.fillText(mm, x+2, 12);
-  }
-
-  // vertical ruler
-  for (let y=0; y<rulerY.height; y+=scale) {
-    let mm = y/scale;
-    let w = mm%10===0 ? 18 : 10;
-    rY.beginPath();
-    rY.moveTo(40, y);
-    rY.lineTo(40-w, y);
-    rY.stroke();
-    if (mm%10===0) rY.fillText(mm, 2, y-2);
-  }
-}
-drawRulers();
-
-/* =======================
-   MINI DRAFTER ENGINE
-======================= */
-let ortho=false, angleLock=true, parallel=false, thick=false;
-let start=null, current=null, lastAngle=0;
-const lines=[], snaps=[];
-
-const ANGLES=[0,30,45,60,90,120,135,150,180].map(a=>a*Math.PI/180);
-
-function snapAngle(dx,dy){
-  let len=Math.hypot(dx,dy);
-  let a=Math.atan2(dy,dx);
-  let best=ANGLES[0], min=1e9;
-  for(let ang of ANGLES){
-    let d=Math.abs(Math.atan2(Math.sin(a-ang),Math.cos(a-ang)));
-    if(d<min){min=d;best=ang;}
-  }
-  return {dx:Math.cos(best)*len,dy:Math.sin(best)*len,angle:best};
+/* =====================
+   MATH
+===================== */
+function projectToRuler(px,py){
+  const dx=px-ruler.x;
+  const dy=py-ruler.y;
+  const t = dx*Math.cos(ruler.angle)+dy*Math.sin(ruler.angle);
+  return {
+    x: ruler.x + Math.cos(ruler.angle)*t,
+    y: ruler.y + Math.sin(ruler.angle)*t,
+    t
+  };
 }
 
-function orthoVec(dx,dy){
-  return Math.abs(dx)>Math.abs(dy)?{dx,dy:0}:{dx:0,dy};
-}
-
-/* =======================
-   DRAWING
-======================= */
+/* =====================
+   DRAW
+===================== */
 function redraw(preview){
-  ctx.clearRect(0,0,draw.width,draw.height);
+  ctx.clearRect(0,0,c.width,c.height);
+
+  // drawn lines
   for(let l of lines){
     ctx.lineWidth=l.thick?4:2;
     ctx.beginPath();
@@ -176,9 +86,26 @@ function redraw(preview){
     ctx.lineTo(l.x2,l.y2);
     ctx.stroke();
   }
+
+  // ruler
+  ctx.lineWidth=1;
+  ctx.setLineDash([8,6]);
+  ctx.beginPath();
+  ctx.moveTo(
+    ruler.x - Math.cos(ruler.angle)*2000,
+    ruler.y - Math.sin(ruler.angle)*2000
+  );
+  ctx.lineTo(
+    ruler.x + Math.cos(ruler.angle)*2000,
+    ruler.y + Math.sin(ruler.angle)*2000
+  );
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // preview line
   if(preview){
-    ctx.setLineDash([5,4]);
     ctx.lineWidth=thick?4:2;
+    ctx.setLineDash([6,4]);
     ctx.beginPath();
     ctx.moveTo(preview.x1,preview.y1);
     ctx.lineTo(preview.x2,preview.y2);
@@ -187,53 +114,68 @@ function redraw(preview){
   }
 }
 
-draw.addEventListener("pointerdown",e=>{
-  start={x:e.offsetX,y:e.offsetY};
+/* =====================
+   POINTER
+===================== */
+c.addEventListener("pointerdown",e=>{
+  const p={x:e.offsetX,y:e.offsetY};
+  const d=Math.abs(
+    (p.x-ruler.x)*Math.sin(ruler.angle) -
+    (p.y-ruler.y)*Math.cos(ruler.angle)
+  );
+
+  if(d<10){
+    draggingRuler=true;
+  }else{
+    drawing=true;
+    start=projectToRuler(p.x,p.y);
+  }
 });
 
-draw.addEventListener("pointermove",e=>{
-  if(!start)return;
-  let dx=e.offsetX-start.x;
-  let dy=e.offsetY-start.y;
-  let v={dx,dy};
+c.addEventListener("pointermove",e=>{
+  const p={x:e.offsetX,y:e.offsetY};
 
-  if(ortho)v=orthoVec(v.dx,v.dy);
-  if(angleLock)v=snapAngle(v.dx,v.dy);
+  if(draggingRuler){
+    ruler.x=p.x;
+    ruler.y=p.y;
+    redraw();
+  }
 
-  current={
-    x1:start.x,y1:start.y,
-    x2:start.x+v.dx,y2:start.y+v.dy,
-    angle:v.angle
-  };
-  redraw(current);
+  if(drawing){
+    const end=projectToRuler(p.x,p.y);
+    redraw({
+      x1:start.x,y1:start.y,
+      x2:end.x,y2:end.y
+    });
+  }
 });
 
-draw.addEventListener("pointerup",()=>{
-  if(!current)return;
-  lines.push({...current,thick});
-  lastAngle=current.angle;
-  start=current=null;
+c.addEventListener("pointerup",e=>{
+  if(drawing){
+    const p={x:e.offsetX,y:e.offsetY};
+    const end=projectToRuler(p.x,p.y);
+    lines.push({
+      x1:start.x,y1:start.y,
+      x2:end.x,y2:end.y,
+      thick
+    });
+  }
+  draggingRuler=false;
+  drawing=false;
   redraw();
 });
 
-/* =======================
-   TOOLBAR
-======================= */
-function toggle(id,ref){
-  document.getElementById(id).onclick=e=>{
-    ref.value=!ref.value;
-    e.target.classList.toggle("active");
-  };
-}
-toggle("ortho",{value:ortho});
-toggle("angle",{value:angleLock});
-toggle("parallel",{value:parallel});
-toggle("thick",{value:thick});
+/* =====================
+   CONTROLS
+===================== */
+rotateL.onclick=()=>{ruler.angle-=Math.PI/180*5;redraw();}
+rotateR.onclick=()=>{ruler.angle+=Math.PI/180*5;redraw();}
+thick.onclick=e=>{thick=!thick;e.target.classList.toggle("active")}
+clear.onclick=()=>{lines.length=0;redraw()}
 
-clear.onclick=()=>{lines.length=0;redraw();};
+redraw();
 
-/* version: 1.1.0 */
+/* version: 2.0.0 */
 </script>
-
 </body>
 </html>
