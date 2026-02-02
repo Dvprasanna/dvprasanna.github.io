@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Canvas CMD – g & d</title>
+
+<style>
+html,body{
+  margin:0;
+  height:100%;
+  background:#000;
+  color:#0f0;
+  font-family:monospace;
+}
+#canvas{ display:block; background:#000; }
+#bar{
+  position:fixed;
+  bottom:0; left:0; right:0;
+  height:44px;
+  background:#111;
+  display:flex;
+  align-items:center;
+  padding:0 8px;
+}
+#cmd{
+  flex:1;
+  background:#000;
+  color:#0f0;
+  border:none;
+  outline:none;
+  font-size:16px;
+}
+#run{
+  margin-left:8px;
+  background:#000;
+  color:#0f0;
+  border:1px solid #0f0;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="bar">
+  <span>&gt;</span>
+  <input id="cmd" type="text" autocomplete="off">
+  <button id="run">RUN</button>
+</div>
+
+<script>
+/* =========================
+   STATE
+========================= */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+/* global origin g = (0,0) fixed at document left-bottom */
+
+/* document size */
+let docW = 0;
+let docH = 0;
+
+/* local origin (relative to g) */
+let local = { x:0, y:0 };
+
+/* cursor (relative to local) */
+let cursor = { x:0, y:0 };
+
+let lines = [];
+
+/* =========================
+   RESIZE / INIT
+========================= */
+function resize(){
+  docW = window.innerWidth;
+  docH = window.innerHeight - 44;
+
+  canvas.width = docW;
+  canvas.height = docH;
+
+  /* initial local origin = center of canvas */
+  local.x = docW / 2;
+  local.y = docH / 2;
+
+  cursor = {x:0,y:0};
+  draw();
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* =========================
+   DRAW
+========================= */
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  ctx.save();
+
+  /* document coordinate system: left-bottom */
+  ctx.translate(0, canvas.height);
+  ctx.scale(1,-1);
+
+  /* document axes */
+  ctx.strokeStyle="#333";
+  ctx.beginPath();
+  ctx.moveTo(0,0); ctx.lineTo(docW,0);
+  ctx.moveTo(0,0); ctx.lineTo(0,docH);
+  ctx.stroke();
+
+  /* local origin marker */
+  ctx.fillStyle="#ff0";
+  ctx.beginPath();
+  ctx.arc(local.x, local.y, 4, 0, Math.PI*2);
+  ctx.fill();
+
+  /* lines */
+  ctx.strokeStyle="#fff";
+  lines.forEach(l=>{
+    ctx.beginPath();
+    ctx.moveTo(l.x1,l.y1);
+    ctx.lineTo(l.x2,l.y2);
+    ctx.stroke();
+  });
+
+  /* cursor */
+  const cx = local.x + cursor.x;
+  const cy = local.y + cursor.y;
+
+  ctx.fillStyle="#0f0";
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* =========================
+   GEOMETRY
+========================= */
+function drawLine(dx,dy){
+  const x1 = local.x + cursor.x;
+  const y1 = local.y + cursor.y;
+
+  cursor.x += dx;
+  cursor.y += dy;
+
+  const x2 = local.x + cursor.x;
+  const y2 = local.y + cursor.y;
+
+  lines.push({x1,y1,x2,y2});
+  draw();
+}
+
+/* =========================
+   COMMAND EXECUTION
+========================= */
+function execCommand(text){
+  text = text.trim();
+  if(!text) return;
+
+  const p = text.split(/\s+/);
+
+  /* cursor position */
+  if(p[0] === "?"){
+    alert(`X=${cursor.x} Y=${cursor.y}`);
+    return;
+  }
+
+  /* document size */
+  if(p[0] === "d"){
+    alert(`WIDTH=${docW} HEIGHT=${docH}`);
+    return;
+  }
+
+  /* g m x y  → move LOCAL origin relative to g */
+  if(p[0] === "g" && p[1] === "m"){
+    local.x = Number(p[2]);
+    local.y = Number(p[3]);
+    cursor = {x:0,y:0};
+    draw();
+    return;
+  }
+
+  /* drawing & movement */
+  switch(p[0]){
+    case "r": drawLine(Number(p[1]),0); break;
+    case "l": drawLine(-Number(p[1]),0); break;
+    case "u": drawLine(0,Number(p[1])); break;
+    case "d": drawLine(0,-Number(p[1])); break;
+
+    case "a":{
+      const len = Number(p[1]);
+      const deg = Number(p[2]);
+      const rad = deg * Math.PI / 180;
+      drawLine(len*Math.cos(rad), len*Math.sin(rad));
+      break;
+    }
+
+    case "m":
+      cursor.x = Number(p[1]);
+      cursor.y = Number(p[2]);
+      draw();
+      break;
+
+    case "undo":
+      lines.pop();
+      draw();
+      break;
+
+    case "cls":
+      lines=[];
+      local = {x:docW/2, y:docH/2};
+      cursor={x:0,y:0};
+      draw();
+      break;
+
+    default:
+      alert("Unknown command");
+  }
+}
+
+/* =========================
+   EVENT HANDLER
+========================= */
+const input = document.getElementById("cmd");
+const run = document.getElementById("run");
+
+run.addEventListener("click", ()=>{
+  execCommand(input.value);
+  input.value="";
+  input.focus();
+});
+
+input.focus();
+</script>
+
+</body>
+</html>
