@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>L-Scale Mini Drafter (Modes)</title>
+<title>L-Scale Mini Drafter</title>
 
 <style>
 body{
@@ -27,12 +27,20 @@ button{
   padding:6px 14px;
   border-radius:4px;
 }
-button.active{
-  background:#0aa;
-}
+button.active{ background:#0aa; }
 canvas{
   display:block;
   background:#fff;
+}
+#hud{
+  position:absolute;
+  right:10px;
+  top:54px;
+  background:rgba(0,0,0,0.7);
+  color:#fff;
+  padding:8px 10px;
+  border-radius:6px;
+  font:12px monospace;
 }
 </style>
 </head>
@@ -45,6 +53,8 @@ canvas{
   <button id="clearBtn">CLEAR</button>
 </div>
 
+<div id="hud">Length: —<br>Angle: —</div>
+
 <canvas id="c"></canvas>
 
 <script>
@@ -53,6 +63,7 @@ canvas{
 ========================= */
 const c = document.getElementById("c");
 const ctx = c.getContext("2d");
+const hud = document.getElementById("hud");
 
 function resize(){
   c.width = innerWidth;
@@ -62,23 +73,24 @@ resize();
 onresize = resize;
 
 /* =========================
-   MODE STATE
+   MODE
 ========================= */
-let MODE = "draw"; // "draw" | "move"
+let MODE = "draw"; // draw | move
 
 /* =========================
-   L-SCALE STATE
+   L-SCALE
 ========================= */
 const L = {
-  x: 220,
-  y: 300,
+  x: 240,
+  y: 320,
   angle: 0,
   arm: 360,
   snapAngles: [0,30,45,60,90].map(a=>a*Math.PI/180)
 };
 
-let action = null; // drawH | drawV | moveX | moveY
+let action = null;
 let start = null;
+let preview = null;
 const lines = [];
 
 /* =========================
@@ -86,30 +98,31 @@ const lines = [];
 ========================= */
 function rot(x,y){
   const cA=Math.cos(L.angle), sA=Math.sin(L.angle);
-  return {
-    x: L.x + x*cA - y*sA,
-    y: L.y + x*sA + y*cA
-  };
+  return { x:L.x+x*cA-y*sA, y:L.y+x*sA+y*cA };
 }
 
 function project(px,py,dir){
-  const dx = px - L.x;
-  const dy = py - L.y;
-  const t = dx*Math.cos(dir) + dy*Math.sin(dir);
+  const dx=px-L.x, dy=py-L.y;
+  const t = dx*Math.cos(dir)+dy*Math.sin(dir);
   return {
-    x: L.x + Math.cos(dir)*t,
-    y: L.y + Math.sin(dir)*t
+    x: L.x+Math.cos(dir)*t,
+    y: L.y+Math.sin(dir)*t,
+    t
   };
+}
+
+function dist(a,b){
+  return Math.hypot(b.x-a.x,b.y-a.y);
 }
 
 /* =========================
    DRAW
 ========================= */
-function redraw(preview){
+function redraw(){
   ctx.clearRect(0,0,c.width,c.height);
 
-  // drawn lines
-  ctx.lineWidth = 2;
+  // final lines
+  ctx.lineWidth=2;
   for(const l of lines){
     ctx.beginPath();
     ctx.moveTo(l.x1,l.y1);
@@ -117,7 +130,7 @@ function redraw(preview){
     ctx.stroke();
   }
 
-  // preview
+  // preview line (not committed)
   if(preview){
     ctx.setLineDash([6,4]);
     ctx.beginPath();
@@ -127,8 +140,11 @@ function redraw(preview){
     ctx.setLineDash([]);
   }
 
-  // scale arms
+  // semi-transparent drafter
+  ctx.save();
+  ctx.globalAlpha = 0.35;
   ctx.lineWidth = 3;
+
   const o = rot(0,0);
   const h = rot(L.arm,0);
   const v = rot(0,-L.arm);
@@ -138,44 +154,33 @@ function redraw(preview){
   ctx.moveTo(o.x,o.y); ctx.lineTo(v.x,v.y);
   ctx.stroke();
 
-  // pivot
   ctx.beginPath();
   ctx.arc(o.x,o.y,12,0,Math.PI*2);
   ctx.stroke();
+
+  ctx.restore();
 }
 
 /* =========================
-   POINTER HANDLING
+   POINTER
 ========================= */
 c.addEventListener("pointerdown",e=>{
   const x=e.offsetX, y=e.offsetY;
   const o=rot(0,0);
 
-  /* -------- MOVE MODE -------- */
   if(MODE==="move"){
-    if(Math.hypot(x-o.x,y-o.y)<15){
-      action="pivot";
-      return;
-    }
-    action = Math.abs(x-o.x) > Math.abs(y-o.y) ? "moveX" : "moveY";
+    action = Math.abs(x-o.x)>Math.abs(y-o.y) ? "moveX" : "moveY";
     return;
   }
 
-  /* -------- DRAW MODE -------- */
-  if(MODE==="draw"){
-    const ph = project(x,y,L.angle);
-    if(Math.hypot(ph.x-x,ph.y-y)<10){
-      action="drawH";
-      start=ph;
-      return;
-    }
-
-    const pv = project(x,y,L.angle+Math.PI/2);
-    if(Math.hypot(pv.x-x,pv.y-y)<10){
-      action="drawV";
-      start=pv;
-      return;
-    }
+  // DRAW MODE
+  const ph = project(x,y,L.angle);
+  if(Math.hypot(ph.x-x,ph.y-y)<10){
+    action="drawH"; start=ph; return;
+  }
+  const pv = project(x,y,L.angle+Math.PI/2);
+  if(Math.hypot(pv.x-x,pv.y-y)<10){
+    action="drawV"; start=pv; return;
   }
 });
 
@@ -183,39 +188,36 @@ c.addEventListener("pointermove",e=>{
   if(!action) return;
   const x=e.offsetX, y=e.offsetY;
 
-  if(action==="moveX") L.x = x;
-  if(action==="moveY") L.y = y;
+  if(action==="moveX") L.x=x;
+  if(action==="moveY") L.y=y;
 
   if(action==="drawH"){
-    const p = project(x,y,L.angle);
-    redraw({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
-    return;
+    const p=project(x,y,L.angle);
+    preview={x1:start.x,y1:start.y,x2:p.x,y2:p.y};
+    hud.innerHTML=`Length: ${dist(start,p).toFixed(1)} px<br>Angle: ${(L.angle*180/Math.PI).toFixed(0)}°`;
   }
 
   if(action==="drawV"){
-    const p = project(x,y,L.angle+Math.PI/2);
-    redraw({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
-    return;
+    const p=project(x,y,L.angle+Math.PI/2);
+    preview={x1:start.x,y1:start.y,x2:p.x,y2:p.y};
+    hud.innerHTML=`Length: ${dist(start,p).toFixed(1)} px<br>Angle: ${((L.angle+Math.PI/2)*180/Math.PI).toFixed(0)}°`;
   }
 
   redraw();
 });
 
 c.addEventListener("pointerup",e=>{
-  if(action==="drawH"){
-    const p = project(e.offsetX,e.offsetY,L.angle);
-    lines.push({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
-  }
-  if(action==="drawV"){
-    const p = project(e.offsetX,e.offsetY,L.angle+Math.PI/2);
-    lines.push({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
+  if(preview){
+    lines.push(preview);
+    preview=null;
+    hud.innerHTML="Length: —<br>Angle: —";
   }
   action=null;
   redraw();
 });
 
 /* =========================
-   DOUBLE CLICK = ROTATE
+   ROTATE (dbl-click pivot)
 ========================= */
 c.addEventListener("dblclick",e=>{
   if(MODE!=="move") return;
@@ -235,13 +237,11 @@ drawBtn.onclick=()=>{
   drawBtn.classList.add("active");
   moveBtn.classList.remove("active");
 };
-
 moveBtn.onclick=()=>{
   MODE="move";
   moveBtn.classList.add("active");
   drawBtn.classList.remove("active");
 };
-
 clearBtn.onclick=()=>{
   lines.length=0;
   redraw();
@@ -249,7 +249,7 @@ clearBtn.onclick=()=>{
 
 redraw();
 
-/* version: 5.0.0 */
+/* version: 6.0.0 */
 </script>
 </body>
 </html>
