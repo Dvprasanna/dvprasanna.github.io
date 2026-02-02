@@ -29,7 +29,7 @@ canvas{ display:block; background:#fff; }
   position:absolute;
   top:60px;
   right:12px;
-  background:rgba(0,0,0,0.75);
+  background:rgba(0,0,0,0.8);
   color:#fff;
   padding:8px 10px;
   border-radius:6px;
@@ -54,6 +54,7 @@ canvas{ display:block; background:#fff; }
 const SNAP_UNIT = 10;
 const DOUBLE_TAP_TIME = 300;
 const LONG_PRESS_TIME = 500;
+const ARM_WIDTH = 18;   // visual thickness of L-scale
 
 /* ================= SETUP ================= */
 const canvas = document.getElementById("c");
@@ -91,12 +92,10 @@ let preview=null;
 let dragStart=null;
 let basePos=null;
 let drawDir=null;
-
+let pressTimer=null;
+let longPress=false;
 let lastTapTime=0;
 let lastTapPos=null;
-
-let pressTimer=null;
-let longPressTriggered=false;
 
 const lines=[];
 
@@ -106,11 +105,10 @@ function snap(v){
 }
 
 function projectFromOrigin(px,py,dir){
-  const dx = px - L.x;
-  const dy = py - L.y;
-  let t = dx*Math.cos(dir) + dy*Math.sin(dir);
+  const dx=px-L.x, dy=py-L.y;
+  let t = dx*Math.cos(dir)+dy*Math.sin(dir);
   t = snap(t);
-  t = Math.max(0, Math.min(L.arm, t));
+  t = Math.max(0,Math.min(L.arm,t));
   return {
     x: L.x + Math.cos(dir)*t,
     y: L.y + Math.sin(dir)*t,
@@ -118,11 +116,22 @@ function projectFromOrigin(px,py,dir){
   };
 }
 
-/* ================= DRAW ================= */
+/* ================= DRAW L-SCALE (REAL SHAPE) ================= */
+function drawArm(x,y,dir){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(dir);
+  ctx.beginPath();
+  ctx.rect(0,-ARM_WIDTH/2,L.arm,ARM_WIDTH);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
 function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // lines
+  // drawn lines
   ctx.strokeStyle="#000";
   ctx.lineWidth=2;
   for(const l of lines){
@@ -142,31 +151,21 @@ function redraw(){
     ctx.setLineDash([]);
   }
 
-  // true L-scale (+X and +Y)
+  // L-scale (solid shape)
   ctx.save();
   ctx.globalAlpha=0.35;
-  ctx.strokeStyle="#0077ff";
-  ctx.lineWidth=4;
+  ctx.fillStyle="#4da3ff";
+  ctx.strokeStyle="#1e6fd9";
+  ctx.lineWidth=2;
 
-  const a = ANGLES[L.angleIndex];
-  const ox=L.x, oy=L.y;
-
-  const hx=ox + Math.cos(a)*L.arm;
-  const hy=oy + Math.sin(a)*L.arm;
-
-  const vx=ox + Math.cos(a+Math.PI/2)*L.arm;
-  const vy=oy + Math.sin(a+Math.PI/2)*L.arm;
-
-  ctx.beginPath();
-  ctx.moveTo(ox,oy); ctx.lineTo(hx,hy);
-  ctx.moveTo(ox,oy); ctx.lineTo(vx,vy);
-  ctx.stroke();
+  const a=ANGLES[L.angleIndex];
+  drawArm(L.x,L.y,a);
+  drawArm(L.x,L.y,a+Math.PI/2);
 
   // pivot
   ctx.beginPath();
-  ctx.arc(ox,oy,12,0,Math.PI*2);
+  ctx.arc(L.x,L.y,12,0,Math.PI*2);
   ctx.stroke();
-
   ctx.restore();
 }
 
@@ -191,11 +190,10 @@ canvas.addEventListener("pointerdown",e=>{
   lastTapPos={x,y};
 
   // long press on pivot → angle
-  const d=Math.hypot(x-L.x,y-L.y);
-  longPressTriggered=false;
-  if(d<15){
+  longPress=false;
+  if(Math.hypot(x-L.x,y-L.y)<15){
     pressTimer=setTimeout(()=>{
-      longPressTriggered=true;
+      longPress=true;
       L.angleIndex=(L.angleIndex+1)%ANGLES.length;
       redraw();
     },LONG_PRESS_TIME);
@@ -205,14 +203,15 @@ canvas.addEventListener("pointerdown",e=>{
     action = Math.abs(x-L.x)>Math.abs(y-L.y)?"moveX":"moveY";
     dragStart={x,y};
     basePos={x:L.x,y:L.y};
+    hud.style.display="block";
     return;
   }
 
-  // DRAW MODE — always from origin
+  // DRAW MODE (origin only)
   const a=ANGLES[L.angleIndex];
   const p1=projectFromOrigin(x,y,a);
   const p2=projectFromOrigin(x,y,a+Math.PI/2);
-  drawDir = Math.abs(p1.len) > Math.abs(p2.len) ? a : a+Math.PI/2;
+  drawDir = Math.abs(p1.len)>Math.abs(p2.len)?a:a+Math.PI/2;
   action="draw";
   hud.style.display="block";
 });
@@ -221,8 +220,14 @@ canvas.addEventListener("pointermove",e=>{
   if(!action) return;
   const x=e.offsetX, y=e.offsetY;
 
-  if(action==="moveX") L.x = basePos.x + (x-dragStart.x);
-  if(action==="moveY") L.y = basePos.y + (y-dragStart.y);
+  if(action==="moveX"){
+    L.x = basePos.x + (x-dragStart.x);
+    hud.innerHTML=`Move X: ${(L.x-basePos.x)|0} px`;
+  }
+  if(action==="moveY"){
+    L.y = basePos.y + (y-dragStart.y);
+    hud.innerHTML=`Move Y: ${(L.y-basePos.y)|0} px`;
+  }
 
   if(action==="draw"){
     const p=projectFromOrigin(x,y,drawDir);
@@ -235,19 +240,19 @@ canvas.addEventListener("pointermove",e=>{
 
 canvas.addEventListener("pointerup",()=>{
   clearTimeout(pressTimer);
-  if(preview && !longPressTriggered){
+  if(action==="draw" && preview && !longPress){
     lines.push(preview);
-    preview=null;
-    hud.style.display="none";
   }
+  preview=null;
   action=null;
+  hud.style.display="none";
   redraw();
 });
 
 /* ================= INIT ================= */
 redraw();
 
-/* version: 10.0.0 */
+/* version: 11.0.0 */
 </script>
 
 </body>
