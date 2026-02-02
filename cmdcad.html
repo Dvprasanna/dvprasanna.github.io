@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Canvas CMD – Angle</title>
+<title>Canvas CMD – g Prefix Final</title>
 
 <style>
 html,body{
@@ -57,15 +57,33 @@ html,body{
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
+let docW = 0;
+let docH = 0;
+
+/* local origin (relative to document/global 0,0) */
+let local = { x:0, y:0 };
+
+/* cursor (relative to local) */
 let cursor = { x:0, y:0 };
+
 let lines = [];
 
 /* =========================
-   RESIZE
+   RESIZE / INIT
 ========================= */
 function resize(){
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight - 44;
+  docW = window.innerWidth;
+  docH = window.innerHeight - 44;
+
+  canvas.width = docW;
+  canvas.height = docH;
+
+  /* initial local origin = center (only once) */
+  if (local.x === 0 && local.y === 0){
+    local.x = docW / 2;
+    local.y = docH / 2;
+  }
+
   draw();
 }
 window.addEventListener("resize", resize);
@@ -76,18 +94,26 @@ resize();
 ========================= */
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
+
   ctx.save();
-  ctx.translate(canvas.width/2, canvas.height/2);
+  /* document coordinates: left-bottom */
+  ctx.translate(0, canvas.height);
   ctx.scale(1,-1);
 
-  // axes
+  /* document axes */
   ctx.strokeStyle="#333";
   ctx.beginPath();
-  ctx.moveTo(-10000,0); ctx.lineTo(10000,0);
-  ctx.moveTo(0,-10000); ctx.lineTo(0,10000);
+  ctx.moveTo(0,0); ctx.lineTo(docW,0);
+  ctx.moveTo(0,0); ctx.lineTo(0,docH);
   ctx.stroke();
 
-  // lines
+  /* local origin marker */
+  ctx.fillStyle="#ff0";
+  ctx.beginPath();
+  ctx.arc(local.x, local.y, 4, 0, Math.PI*2);
+  ctx.fill();
+
+  /* lines */
   ctx.strokeStyle="#fff";
   lines.forEach(l=>{
     ctx.beginPath();
@@ -96,49 +122,49 @@ function draw(){
     ctx.stroke();
   });
 
-  // cursor
+  /* cursor */
+  const cx = local.x + cursor.x;
+  const cy = local.y + cursor.y;
   ctx.fillStyle="#0f0";
   ctx.beginPath();
-  ctx.arc(cursor.x,cursor.y,3,0,Math.PI*2);
+  ctx.arc(cx, cy, 3, 0, Math.PI*2);
   ctx.fill();
 
   ctx.restore();
 }
 
 /* =========================
-   HELP TEXT
+   GEOMETRY HELPERS
 ========================= */
-function helpText(){
-  return `Available commands:
 
-?              show cursor position
-r n            draw right
-l n            draw left
-u n            draw up
-d n            draw down
-a n deg        draw at angle (degrees)
-m x y          move cursor
-undo           remove last line
-cls            clear drawing`;
+/* cursor-based drawing (chained) */
+function drawFromCursor(dx,dy){
+  const x1 = local.x + cursor.x;
+  const y1 = local.y + cursor.y;
+
+  cursor.x += dx;
+  cursor.y += dy;
+
+  const x2 = local.x + cursor.x;
+  const y2 = local.y + cursor.y;
+
+  lines.push({x1,y1,x2,y2});
+  draw();
 }
 
-/* =========================
-   GEOMETRY
-========================= */
-function drawLineTo(x,y){
-  lines.push({
-    x1: cursor.x,
-    y1: cursor.y,
-    x2: x,
-    y2: y
-  });
-  cursor.x = x;
-  cursor.y = y;
+/* origin-based drawing (g prefix, one-shot) */
+function drawFromLocal(dx,dy){
+  const x1 = local.x;
+  const y1 = local.y;
+  const x2 = local.x + dx;
+  const y2 = local.y + dy;
+
+  lines.push({x1,y1,x2,y2});
   draw();
 }
 
 /* =========================
-   COMMAND DISPATCHER
+   COMMAND EXECUTION
 ========================= */
 function execCommand(text){
   text = text.trim();
@@ -146,62 +172,59 @@ function execCommand(text){
 
   const p = text.split(/\s+/);
 
+  /* detect g prefix */
+  let useLocalOrigin = false;
+  if(p[0] === "g"){
+    useLocalOrigin = true;
+    p.shift();
+  }
+
+  /* ? → cursor position */
+  if(p[0] === "?"){
+    alert(`X=${cursor.x} Y=${cursor.y}`);
+    return;
+  }
+
+  /* d → document size */
+  if(p[0] === "d" && p.length === 1){
+    alert(`WIDTH=${docW} HEIGHT=${docH}`);
+    return;
+  }
+
+  /* drawing commands */
+  const drawFn = useLocalOrigin ? drawFromLocal : drawFromCursor;
+
   switch(p[0]){
-    case "?":
-      alert(`X=${cursor.x} Y=${cursor.y}`);
-      break;
+    case "r": return drawFn(Number(p[1]),0);
+    case "l": return drawFn(-Number(p[1]),0);
+    case "u": return drawFn(0,Number(p[1]));
+    case "d": return drawFn(0,-Number(p[1]));
 
-    case "r":
-      drawLineTo(cursor.x + Number(p[1]), cursor.y);
-      break;
-
-    case "l":
-      drawLineTo(cursor.x - Number(p[1]), cursor.y);
-      break;
-
-    case "u":
-      drawLineTo(cursor.x, cursor.y + Number(p[1]));
-      break;
-
-    case "d":
-      drawLineTo(cursor.x, cursor.y - Number(p[1]));
-      break;
-
-    case "a": {
+    case "a":{
       const len = Number(p[1]);
       const deg = Number(p[2]);
-      if(isNaN(len) || isNaN(deg)){
-        alert("Usage: a length angle");
-        return;
-      }
       const rad = deg * Math.PI / 180;
-      const x = cursor.x + len * Math.cos(rad);
-      const y = cursor.y + len * Math.sin(rad);
-      drawLineTo(x,y);
-      break;
+      return drawFn(len*Math.cos(rad), len*Math.sin(rad));
     }
 
     case "m":
-      if(p.length < 3) return alert("Usage: m x y");
-      cursor.x = Number(p[1]);
-      cursor.y = Number(p[2]);
-      draw();
-      break;
-
-    case "undo":
-      lines.pop();
-      draw();
-      break;
-
-    case "cls":
-      lines = [];
-      cursor = {x:0,y:0};
-      draw();
-      break;
-
-    default:
-      alert("Unknown command\n\n" + helpText());
+      if(useLocalOrigin){
+        /* g m x y → move local origin */
+        local.x = Number(p[1]);
+        local.y = Number(p[2]);
+        cursor = {x:0,y:0};
+        draw();
+        return;
+      }else{
+        /* m x y → move cursor */
+        cursor.x = Number(p[1]);
+        cursor.y = Number(p[2]);
+        draw();
+        return;
+      }
   }
+
+  alert("Unknown command");
 }
 
 /* =========================
