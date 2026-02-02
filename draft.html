@@ -62,7 +62,9 @@ canvas{
 /* =============================
    CONFIG
 ============================= */
-const SNAP_UNIT = 10; // px
+const SNAP_UNIT = 10;
+const DOUBLE_TAP_TIME = 300; // ms
+const DOUBLE_TAP_DIST = 20;  // px
 
 /* =============================
    SETUP
@@ -91,14 +93,19 @@ function toggleMode(){
 }
 
 /* =============================
+   DOUBLE TAP STATE
+============================= */
+let lastTapTime = 0;
+let lastTapPos = null;
+
+/* =============================
    L-SCALE STATE
 ============================= */
 const L = {
   x: 260,
   y: 300,
   angle: 0,
-  arm: 380,
-  snapAngles: [0,30,45,60,90].map(a=>a*Math.PI/180)
+  arm: 380
 };
 
 /* =============================
@@ -127,8 +134,7 @@ function project(px,py,dir){
   t = Math.max(0, Math.min(L.arm, t));
   return {
     x: L.x + Math.cos(dir)*t,
-    y: L.y + Math.sin(dir)*t,
-    t
+    y: L.y + Math.sin(dir)*t
   };
 }
 
@@ -142,7 +148,7 @@ function dist(a,b){
 function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // Final lines
+  // lines
   ctx.strokeStyle="#000";
   ctx.lineWidth=2;
   for(const l of lines){
@@ -152,7 +158,7 @@ function redraw(){
     ctx.stroke();
   }
 
-  // Preview
+  // preview
   if(preview){
     ctx.setLineDash([6,4]);
     ctx.beginPath();
@@ -162,7 +168,7 @@ function redraw(){
     ctx.setLineDash([]);
   }
 
-  // Drafter (both arms positive)
+  // drafter
   ctx.save();
   ctx.globalAlpha=0.35;
   ctx.strokeStyle="#0077ff";
@@ -191,7 +197,28 @@ function redraw(){
 ============================= */
 canvas.addEventListener("pointerdown",e=>{
   const x=e.offsetX, y=e.offsetY;
+  const now = Date.now();
 
+  /* ---- DOUBLE TAP DETECTION ---- */
+  if(
+    lastTapPos &&
+    now - lastTapTime < DOUBLE_TAP_TIME &&
+    Math.hypot(x-lastTapPos.x, y-lastTapPos.y) < DOUBLE_TAP_DIST
+  ){
+    toggleMode();
+    lastTapTime = 0;
+    lastTapPos = null;
+    action = null;
+    preview = null;
+    hud.style.display="none";
+    redraw();
+    return;
+  }
+
+  lastTapTime = now;
+  lastTapPos = {x,y};
+
+  /* ---- MOVE MODE ---- */
   if(MODE==="move"){
     action = Math.abs(x-L.x) > Math.abs(y-L.y) ? "moveX" : "moveY";
     dragStart={x,y};
@@ -199,7 +226,7 @@ canvas.addEventListener("pointerdown",e=>{
     return;
   }
 
-  // DRAW MODE — auto choose nearest arm
+  /* ---- DRAW MODE ---- */
   const ph = project(x,y,L.angle);
   const pv = project(x,y,L.angle+Math.PI/2);
   const dh = Math.hypot(ph.x-x,ph.y-y);
@@ -221,7 +248,7 @@ canvas.addEventListener("pointermove",e=>{
   if(action==="draw"){
     const p = project(x,y,drawDir);
     preview={x1:start.x,y1:start.y,x2:p.x,y2:p.y};
-    hud.innerHTML=
+    hud.innerHTML =
       `Length: ${dist(start,p).toFixed(0)} px<br>`+
       `Angle: ${(drawDir*180/Math.PI).toFixed(0)}°`;
   }
@@ -240,18 +267,11 @@ canvas.addEventListener("pointerup",()=>{
 });
 
 /* =============================
-   DOUBLE CLICK = MODE SWITCH
-============================= */
-canvas.addEventListener("dblclick",()=>{
-  toggleMode();
-});
-
-/* =============================
    INIT
 ============================= */
 redraw();
 
-/* version: 9.0.0 */
+/* version: 9.1.0 */
 </script>
 
 </body>
