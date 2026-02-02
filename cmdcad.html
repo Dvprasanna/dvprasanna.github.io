@@ -1,102 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Canvas CMD – Minimal</title>
+
+<style>
+html,body{
+  margin:0;
+  height:100%;
+  background:#000;
+  color:#0f0;
+  font-family:monospace;
+}
+
+/* canvas */
+#canvas{
+  display:block;
+  background:#000;
+}
+
+/* command bar */
+#bar{
+  position:fixed;
+  bottom:0; left:0; right:0;
+  height:44px;
+  background:#111;
+  display:flex;
+  align-items:center;
+  padding:0 8px;
+  box-sizing:border-box;
+}
+
+#cmd{
+  flex:1;
+  background:#000;
+  color:#0f0;
+  border:none;
+  outline:none;
+  font-size:16px;
+}
+
+#run{
+  margin-left:8px;
+  background:#000;
+  color:#0f0;
+  border:1px solid #0f0;
+  font-size:14px;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="bar">
+  <span>&gt;</span>
+  <input id="cmd" type="text" autocomplete="off">
+  <button id="run">RUN</button>
+</div>
+
 <script>
-document.addEventListener("DOMContentLoaded", ()=>{
+/* =========================
+   STATE
+========================= */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
-  /* ===== LOG ===== */
-  const logBox = document.getElementById("log");
-  let logId=0;
-  function LOG(t,m){
-    logId++;
-    logBox.innerHTML += `[${logId}] ${t}: ${m}<br>`;
-    logBox.scrollTop = logBox.scrollHeight;
-  }
-  const DBG=m=>LOG("DBG",m);
-  const OK =m=>LOG("OK ",m);
-  const ERR=m=>LOG("ERR",m);
+let cursor = { x:0, y:0 };
+let lines = [];
 
-  DBG("DOM ready");
+/* =========================
+   RESIZE
+========================= */
+function resize(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight - 44;
+  draw();
+}
+window.addEventListener("resize", resize);
+resize();
 
-  /* ===== CANVAS ===== */
-  const canvas=document.getElementById("canvas");
-  const ctx=canvas.getContext("2d");
+/* =========================
+   DRAW
+========================= */
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  function resize(){
-    DBG("resize()");
-    canvas.width=innerWidth;
-    canvas.height=innerHeight-168;
-    draw();
-  }
-  addEventListener("resize",resize);
+  ctx.save();
+  ctx.translate(canvas.width/2, canvas.height/2);
+  ctx.scale(1,-1);
 
-  let cursor={x:0,y:0};
-  let lines=[];
+  /* axes */
+  ctx.strokeStyle = "#333";
+  ctx.beginPath();
+  ctx.moveTo(-10000,0); ctx.lineTo(10000,0);
+  ctx.moveTo(0,-10000); ctx.lineTo(0,10000);
+  ctx.stroke();
 
-  function draw(){
-    DBG("draw()");
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.save();
-    ctx.translate(canvas.width/2,canvas.height/2);
-    ctx.scale(1,-1);
-
-    ctx.strokeStyle="#333";
+  /* lines */
+  ctx.strokeStyle = "#fff";
+  lines.forEach(l=>{
     ctx.beginPath();
-    ctx.moveTo(-9999,0);ctx.lineTo(9999,0);
-    ctx.moveTo(0,-9999);ctx.lineTo(0,9999);
+    ctx.moveTo(l.x1,l.y1);
+    ctx.lineTo(l.x2,l.y2);
     ctx.stroke();
-
-    ctx.strokeStyle="#fff";
-    lines.forEach(l=>{
-      ctx.beginPath();
-      ctx.moveTo(l.x1,l.y1);
-      ctx.lineTo(l.x2,l.y2);
-      ctx.stroke();
-    });
-
-    ctx.fillStyle="#0f0";
-    ctx.beginPath();
-    ctx.arc(cursor.x,cursor.y,3,0,Math.PI*2);
-    ctx.fill();
-
-    ctx.restore();
-  }
-
-  resize();
-
-  /* ===== COMMAND ===== */
-  function exec(cmd){
-    DBG(`exec("${cmd}")`);
-    cmd=cmd.trim();
-    if(!cmd) return;
-
-    if(cmd==="?"){
-      OK(`X=${cursor.x} Y=${cursor.y}`);
-      return;
-    }
-
-    const p=cmd.split(/\s+/);
-    if(p[0]==="r"){
-      const n=Number(p[1]);
-      if(isNaN(n)) return ERR("invalid number");
-      lines.push({x1:cursor.x,y1:cursor.y,x2:cursor.x+n,y2:cursor.y});
-      cursor.x+=n;
-      draw();
-      OK(`line ${n}`);
-      return;
-    }
-
-    ERR("unknown");
-  }
-
-  /* ===== INPUT ===== */
-  const input=document.getElementById("cmd");
-  const btn=document.getElementById("btn");
-
-  DBG("elements found");
-
-  btn.addEventListener("click",()=>{
-    DBG("RUN clicked");
-    exec(input.value);
-    input.value="";
   });
 
+  /* cursor */
+  ctx.fillStyle = "#0f0";
+  ctx.beginPath();
+  ctx.arc(cursor.x,cursor.y,3,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* =========================
+   COMMANDS
+========================= */
+function cmd_query(){
+  alert(`X=${cursor.x} Y=${cursor.y}`);
+}
+
+function cmd_right(n){
+  lines.push({
+    x1: cursor.x,
+    y1: cursor.y,
+    x2: cursor.x + n,
+    y2: cursor.y
+  });
+  cursor.x += n;
+  draw();
+}
+
+/* =========================
+   COMMAND DISPATCHER
+========================= */
+function execCommand(text){
+  text = text.trim();
+  if(!text) return;
+
+  const p = text.split(/\s+/);
+
+  if(text === "?"){
+    cmd_query();
+    return;
+  }
+
+  if(p[0] === "r"){
+    const n = Number(p[1]);
+    if(isNaN(n)){
+      alert("Invalid number");
+      return;
+    }
+    cmd_right(n);
+    return;
+  }
+
+  alert("Unknown command");
+}
+
+/* =========================
+   EVENT HANDLER
+========================= */
+const input = document.getElementById("cmd");
+const run = document.getElementById("run");
+
+run.addEventListener("click", ()=>{
+  execCommand(input.value);
+  input.value = "";
+  input.focus();
 });
+
+input.focus();
 </script>
+
+</body>
+</html>
