@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>DOS CAD – MOBILE DEBUG</title>
+<title>DOS CAD – MOBILE SAFE</title>
 
 <style>
 html,body{
@@ -14,8 +14,13 @@ html,body{
   font-family:monospace;
   overflow:hidden;
 }
-#canvas{ display:block; background:#000; }
 
+#canvas{
+  display:block;
+  background:#000;
+}
+
+/* ===== CONSOLE ===== */
 #console{
   position:fixed;
   bottom:0; left:0; right:0;
@@ -26,7 +31,7 @@ html,body{
 #log{
   height:120px;
   overflow:auto;
-  padding:4px 6px;
+  padding:6px;
   font-size:12px;
   border-bottom:1px solid #222;
 }
@@ -34,7 +39,7 @@ html,body{
 #bar{
   display:flex;
   align-items:center;
-  height:44px;
+  height:48px;
   padding:0 8px;
 }
 
@@ -44,13 +49,16 @@ html,body{
   color:#0f0;
   border:none;
   outline:none;
+  font-size:16px;
 }
 
 #btn{
-  margin-left:6px;
+  margin-left:8px;
+  padding:6px 12px;
   background:#000;
   color:#0f0;
-  border:1px solid #0f0;
+  border:2px solid #0f0;
+  font-size:16px;
 }
 </style>
 </head>
@@ -61,11 +69,11 @@ html,body{
 
 <div id="console">
   <div id="log"></div>
-  <form id="bar">
+  <div id="bar">
     <span>&gt;</span>
-    <input id="cmd" type="text" autocomplete="off">
-    <button id="btn" type="submit">⏎</button>
-  </form>
+    <input id="cmd" type="text" autocomplete="off" spellcheck="false">
+    <button id="btn">RUN</button>
+  </div>
 </div>
 
 <script>
@@ -92,7 +100,7 @@ const ERR = m=>LOG("ERR",m);
 DBG("script loaded");
 
 /* =========================
-   CANVAS
+   CANVAS SETUP
 ========================= */
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -100,7 +108,7 @@ const ctx = canvas.getContext("2d");
 function resize(){
   DBG("resize()");
   canvas.width = innerWidth;
-  canvas.height = innerHeight - 164;
+  canvas.height = innerHeight - 168;
   draw();
 }
 addEventListener("resize", resize);
@@ -122,12 +130,14 @@ function draw(){
   ctx.translate(canvas.width/2,canvas.height/2);
   ctx.scale(1,-1);
 
+  // axes
   ctx.strokeStyle="#333";
   ctx.beginPath();
   ctx.moveTo(-9999,0); ctx.lineTo(9999,0);
   ctx.moveTo(0,-9999); ctx.lineTo(0,9999);
   ctx.stroke();
 
+  // lines
   ctx.strokeStyle="#fff";
   lines.forEach(l=>{
     ctx.beginPath();
@@ -136,6 +146,7 @@ function draw(){
     ctx.stroke();
   });
 
+  // cursor
   ctx.fillStyle="#0f0";
   ctx.beginPath();
   ctx.arc(cursor.x,cursor.y,3,0,Math.PI*2);
@@ -145,44 +156,50 @@ function draw(){
 }
 
 /* =========================
-   COMMAND EXEC
+   COMMAND EXECUTION
 ========================= */
 function exec(cmd){
   DBG(`exec("${cmd}")`);
+
   cmd = cmd.trim();
-  if(!cmd) return DBG("empty");
+  if(!cmd){
+    DBG("empty command");
+    return;
+  }
 
   const p = cmd.split(/\s+/);
 
   if(cmd === "?"){
-    return OK(`X=${cursor.x} Y=${cursor.y}`);
+    OK(`X=${cursor.x} Y=${cursor.y}`);
+    return;
   }
 
-  if(p[0]==="r"){
+  if(p[0] === "r"){
     const n = Number(p[1]);
     if(isNaN(n)) return ERR("invalid number");
 
     lines.push({
-      x1:cursor.x,y1:cursor.y,
-      x2:cursor.x+n,y2:cursor.y
+      x1:cursor.x, y1:cursor.y,
+      x2:cursor.x+n, y2:cursor.y
     });
-    cursor.x+=n;
+
+    cursor.x += n;
     draw();
-    return OK(`line ${n}`);
+    OK(`line drawn ${n}`);
+    return;
   }
 
   ERR("unknown command");
 }
 
 /* =========================
-   INPUT HANDLING (FIXED)
+   INPUT (TOUCH SAFE)
 ========================= */
-const form = document.getElementById("bar");
 const input = document.getElementById("cmd");
+const btn = document.getElementById("btn");
 
-function runCommand(e){
-  if(e) e.preventDefault();
-  DBG("runCommand()");
+function run(){
+  DBG("RUN pressed");
   const v = input.value;
   DBG(`input="${v}"`);
   input.value="";
@@ -190,18 +207,14 @@ function runCommand(e){
   exec(v);
 }
 
-form.addEventListener("submit", runCommand);
-
-input.addEventListener("keydown", e=>{
-  if(e.key==="Enter"){
-    DBG("ENTER key");
-    e.preventDefault();
-    runCommand(e);
-  }
+// ✅ ONLY reliable mobile trigger
+btn.addEventListener("pointerup", e=>{
+  e.preventDefault();
+  run();
 });
 
-DBG("input handlers attached");
 input.focus();
+DBG("ready");
 </script>
 
 </body>
