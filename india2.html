@@ -2,86 +2,182 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Rangoli Designer (7×7)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rangoli Grid Drawer</title>
+
 <style>
-  body { font-family: sans-serif; text-align: center; margin: 20px; }
-  #grid { display: inline-grid; grid-template-columns: repeat(7, 40px); gap: 2px; }
-  .cell { width: 40px; height: 40px; background: white; border: 1px solid #ccc; cursor: pointer; }
-  .cell.filled { background: #000; }
-  button { margin: 5px; padding: 8px 12px; font-size: 14px; }
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #0f0f0f;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+header {
+  padding: 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+canvas {
+  background: #111;
+  border: 1px solid #333;
+  touch-action: none;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+}
+
+button {
+  background: #222;
+  color: #fff;
+  border: 1px solid #444;
+  padding: 8px 14px;
+  border-radius: 6px;
+}
+button:active {
+  background: #444;
+}
 </style>
 </head>
+
 <body>
 
-<h2>Rangoli Designer (7×7)</h2>
+<header>Rangoli Designer (7 × 7)</header>
 
-<div id="controls">
-  <button onclick="undo()">Undo</button>
-  <button onclick="clearGrid()">Clear</button>
-  <button onclick="exportPNG()">Export PNG</button>
+<canvas id="canvas" width="360" height="360"></canvas>
+
+<div class="controls">
+  <button id="undo">Undo</button>
+  <button id="clear">Clear</button>
+  <button id="export">Export PNG</button>
 </div>
 
-<div id="grid"></div>
-
 <script>
-  const gridEl = document.getElementById("grid");
-  const history = [];
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
-  // Build 7×7 grid
-  for (let r = 0; r < 7; r++) {
-    for (let c = 0; c < 7; c++) {
-      const cell = document.createElement("div");
-      cell.classList.add("cell");
-      cell.dataset.r = r;
-      cell.dataset.c = c;
-      cell.addEventListener("click", () => {
-        cell.classList.toggle("filled");
-        history.push({ cell, prev: !cell.classList.contains("filled") });
-      });
-      gridEl.appendChild(cell);
+/* 🔴 ONLY THESE VALUES CHANGED */
+const GRID = 7;
+const FULL = 7;
+/* 🔴 END */
+
+const PADDING = 40;
+const SIZE = canvas.width - PADDING * 2;
+const STEP = SIZE / (FULL - 1);
+const DOT_RADIUS = 4;
+
+let drawing = false;
+let startDot = null;
+let lines = [];
+
+function dotPos(x, y) {
+  return {
+    x: PADDING + x * STEP,
+    y: PADDING + y * STEP
+  };
+}
+
+function nearestDot(px, py) {
+  let best = null;
+  let dist = 9999;
+  for (let y = 0; y < GRID; y++) {
+    for (let x = 0; x < GRID; x++) {
+      const p = dotPos(x, y);
+      const d = Math.hypot(px - p.x, py - p.y);
+      if (d < 12 && d < dist) {
+        best = { x, y };
+        dist = d;
+      }
+    }
+  }
+  return best;
+}
+
+function mirrorLine(a, b) {
+  const mx = FULL - 1;
+  const my = FULL - 1;
+  return [
+    [a, b],
+    [{ x: mx - a.x, y: a.y }, { x: mx - b.x, y: b.y }],
+    [{ x: a.x, y: my - a.y }, { x: b.x, y: my - b.y }],
+    [{ x: mx - a.x, y: my - a.y }, { x: mx - b.x, y: my - b.y }]
+  ];
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // dots
+  ctx.fillStyle = "#666";
+  for (let y = 0; y < FULL; y++) {
+    for (let x = 0; x < FULL; x++) {
+      const p = dotPos(x, y);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
-  // Undo last action
-  function undo() {
-    const last = history.pop();
-    if (last) {
-      if (last.prev) last.cell.classList.add("filled");
-      else last.cell.classList.remove("filled");
-    }
-  }
-
-  // Clear grid
-  function clearGrid() {
-    document.querySelectorAll(".cell.filled").forEach(cell => {
-      cell.classList.remove("filled");
+  // lines
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  lines.forEach(l => {
+    mirrorLine(l.a, l.b).forEach(([p1, p2]) => {
+      const A = dotPos(p1.x, p1.y);
+      const B = dotPos(p2.x, p2.y);
+      ctx.beginPath();
+      ctx.moveTo(A.x, A.y);
+      ctx.lineTo(B.x, B.y);
+      ctx.stroke();
     });
-    history.length = 0;
+  });
+}
+
+canvas.addEventListener("pointerdown", e => {
+  const r = canvas.getBoundingClientRect();
+  startDot = nearestDot(e.clientX - r.left, e.clientY - r.top);
+  drawing = !!startDot;
+});
+
+canvas.addEventListener("pointerup", e => {
+  if (!drawing) return;
+  const r = canvas.getBoundingClientRect();
+  const endDot = nearestDot(e.clientX - r.left, e.clientY - r.top);
+  if (endDot) {
+    lines.push({ a: startDot, b: endDot });
   }
+  drawing = false;
+  startDot = null;
+  draw();
+});
 
-  // Export as PNG
-  function exportPNG() {
-    const scale = 20;
-    const canvas = document.createElement("canvas");
-    canvas.width = 7 * scale;
-    canvas.height = 7 * scale;
-    const ctx = canvas.getContext("2d");
+document.getElementById("undo").onclick = () => {
+  lines.pop();
+  draw();
+};
 
-    document.querySelectorAll(".cell").forEach((cell, idx) => {
-      const x = (idx % 7) * scale;
-      const y = Math.floor(idx / 7) * scale;
-      ctx.fillStyle = cell.classList.contains("filled") ? "#000" : "#fff";
-      ctx.fillRect(x, y, scale, scale);
-    });
+document.getElementById("clear").onclick = () => {
+  lines = [];
+  draw();
+};
 
-    const link = document.createElement("a");
-    link.download = "rangoli-7x7.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  }
+document.getElementById("export").onclick = () => {
+  const link = document.createElement("a");
+  link.download = "rangoli-7x7.png";
+  link.href = canvas.toDataURL();
+  link.click();
+};
+
+draw();
 </script>
 
-<p>by prasan support me $</p>
-
+by prasan support me $
 </body>
 </html>
