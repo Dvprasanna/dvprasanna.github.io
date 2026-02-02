@@ -1,179 +1,102 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>DOS CAD – iOS SAFE</title>
-
-<style>
-html,body{
-  margin:0;
-  height:100%;
-  background:#000;
-  color:#0f0;
-  font-family:monospace;
-  overflow:hidden;
-}
-#canvas{ display:block; background:#000; }
-
-#console{
-  position:fixed;
-  bottom:0; left:0; right:0;
-  background:#111;
-  border-top:1px solid #222;
-}
-
-#log{
-  height:120px;
-  overflow:auto;
-  padding:6px;
-  font-size:12px;
-  border-bottom:1px solid #222;
-}
-
-#bar{
-  display:flex;
-  align-items:center;
-  height:48px;
-  padding:0 8px;
-}
-
-#cmd{
-  flex:1;
-  background:#000;
-  color:#0f0;
-  border:none;
-  outline:none;
-  font-size:16px;
-}
-
-#btn{
-  margin-left:8px;
-  padding:6px 14px;
-  background:#000;
-  color:#0f0;
-  border:2px solid #0f0;
-  font-size:16px;
-}
-</style>
-</head>
-
-<body>
-
-<canvas id="canvas"></canvas>
-
-<div id="console">
-  <div id="log"></div>
-  <div id="bar">
-    <span>&gt;</span>
-    <input id="cmd" type="text" autocomplete="off">
-    <button id="btn">RUN</button>
-  </div>
-</div>
-
 <script>
-/* ===== LOG ===== */
-const logBox = document.getElementById("log");
-let logId=0;
-function LOG(t,m){
-  logId++;
-  logBox.innerHTML += `[${logId}] ${t}: ${m}<br>`;
-  logBox.scrollTop = logBox.scrollHeight;
-}
-const DBG=m=>LOG("DBG",m);
-const OK =m=>LOG("OK ",m);
-const ERR=m=>LOG("ERR",m);
+document.addEventListener("DOMContentLoaded", ()=>{
 
-/* ===== START ===== */
-DBG("script loaded");
+  /* ===== LOG ===== */
+  const logBox = document.getElementById("log");
+  let logId=0;
+  function LOG(t,m){
+    logId++;
+    logBox.innerHTML += `[${logId}] ${t}: ${m}<br>`;
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+  const DBG=m=>LOG("DBG",m);
+  const OK =m=>LOG("OK ",m);
+  const ERR=m=>LOG("ERR",m);
 
-/* ===== CANVAS ===== */
-const canvas=document.getElementById("canvas");
-const ctx=canvas.getContext("2d");
+  DBG("DOM ready");
 
-function resize(){
-  DBG("resize()");
-  canvas.width=innerWidth;
-  canvas.height=innerHeight-168;
-  draw();
-}
-addEventListener("resize",resize);
-resize();
+  /* ===== CANVAS ===== */
+  const canvas=document.getElementById("canvas");
+  const ctx=canvas.getContext("2d");
 
-/* ===== STATE ===== */
-let cursor={x:0,y:0};
-let lines=[];
+  function resize(){
+    DBG("resize()");
+    canvas.width=innerWidth;
+    canvas.height=innerHeight-168;
+    draw();
+  }
+  addEventListener("resize",resize);
 
-/* ===== DRAW ===== */
-function draw(){
-  DBG("draw()");
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.save();
-  ctx.translate(canvas.width/2,canvas.height/2);
-  ctx.scale(1,-1);
+  let cursor={x:0,y:0};
+  let lines=[];
 
-  ctx.strokeStyle="#333";
-  ctx.beginPath();
-  ctx.moveTo(-9999,0);ctx.lineTo(9999,0);
-  ctx.moveTo(0,-9999);ctx.lineTo(0,9999);
-  ctx.stroke();
+  function draw(){
+    DBG("draw()");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.save();
+    ctx.translate(canvas.width/2,canvas.height/2);
+    ctx.scale(1,-1);
 
-  ctx.strokeStyle="#fff";
-  lines.forEach(l=>{
+    ctx.strokeStyle="#333";
     ctx.beginPath();
-    ctx.moveTo(l.x1,l.y1);
-    ctx.lineTo(l.x2,l.y2);
+    ctx.moveTo(-9999,0);ctx.lineTo(9999,0);
+    ctx.moveTo(0,-9999);ctx.lineTo(0,9999);
     ctx.stroke();
+
+    ctx.strokeStyle="#fff";
+    lines.forEach(l=>{
+      ctx.beginPath();
+      ctx.moveTo(l.x1,l.y1);
+      ctx.lineTo(l.x2,l.y2);
+      ctx.stroke();
+    });
+
+    ctx.fillStyle="#0f0";
+    ctx.beginPath();
+    ctx.arc(cursor.x,cursor.y,3,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  resize();
+
+  /* ===== COMMAND ===== */
+  function exec(cmd){
+    DBG(`exec("${cmd}")`);
+    cmd=cmd.trim();
+    if(!cmd) return;
+
+    if(cmd==="?"){
+      OK(`X=${cursor.x} Y=${cursor.y}`);
+      return;
+    }
+
+    const p=cmd.split(/\s+/);
+    if(p[0]==="r"){
+      const n=Number(p[1]);
+      if(isNaN(n)) return ERR("invalid number");
+      lines.push({x1:cursor.x,y1:cursor.y,x2:cursor.x+n,y2:cursor.y});
+      cursor.x+=n;
+      draw();
+      OK(`line ${n}`);
+      return;
+    }
+
+    ERR("unknown");
+  }
+
+  /* ===== INPUT ===== */
+  const input=document.getElementById("cmd");
+  const btn=document.getElementById("btn");
+
+  DBG("elements found");
+
+  btn.addEventListener("click",()=>{
+    DBG("RUN clicked");
+    exec(input.value);
+    input.value="";
   });
 
-  ctx.fillStyle="#0f0";
-  ctx.beginPath();
-  ctx.arc(cursor.x,cursor.y,3,0,Math.PI*2);
-  ctx.fill();
-
-  ctx.restore();
-}
-
-/* ===== COMMAND ===== */
-function exec(cmd){
-  DBG(`exec("${cmd}")`);
-  cmd=cmd.trim();
-  if(!cmd) return;
-
-  const p=cmd.split(/\s+/);
-
-  if(cmd==="?"){
-    OK(`X=${cursor.x} Y=${cursor.y}`);
-    return;
-  }
-
-  if(p[0]==="r"){
-    const n=Number(p[1]);
-    if(isNaN(n)) return ERR("invalid number");
-    lines.push({x1:cursor.x,y1:cursor.y,x2:cursor.x+n,y2:cursor.y});
-    cursor.x+=n;
-    draw();
-    OK(`line ${n}`);
-    return;
-  }
-
-  ERR("unknown");
-}
-
-/* ===== INPUT (CLICK ONLY) ===== */
-const input=document.getElementById("cmd");
-const btn=document.getElementById("btn");
-
-btn.addEventListener("click",()=>{
-  DBG("RUN clicked");
-  const v=input.value;
-  DBG(`input="${v}"`);
-  input.value="";
-  exec(v);
 });
-
-DBG("ready");
 </script>
-
-</body>
-</html>
