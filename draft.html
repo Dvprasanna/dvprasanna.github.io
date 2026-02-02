@@ -1,261 +1,239 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>JS Mini Drafter</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JS Mini Drafter with Ruler</title>
+
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    background: #f4f4f4;
-    font-family: system-ui, sans-serif;
-    touch-action: none;
-  }
-  #toolbar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: #222;
-    color: #fff;
-    display: flex;
-    gap: 6px;
-    padding: 6px;
-    z-index: 10;
-  }
-  button {
-    background: #444;
-    color: #fff;
-    border: none;
-    padding: 6px 10px;
-    border-radius: 4px;
-  }
-  button.active {
-    background: #0aa;
-  }
-  canvas {
-    display: block;
-    margin-top: 44px;
-    background: #fff;
-  }
+body {
+  margin: 0;
+  background: #ddd;
+  font-family: system-ui;
+  overflow: hidden;
+}
+
+#toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: #222;
+  color: #fff;
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  z-index: 10;
+}
+
+button {
+  background: #444;
+  color: #fff;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+}
+button.active { background: #0aa; }
+
+#board {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  grid-template-rows: 40px 1fr;
+}
+
+#corner {
+  background: #bbb;
+}
+
+canvas {
+  display: block;
+}
+
+#rulerX {
+  background: #f8f8f8;
+}
+
+#rulerY {
+  background: #f8f8f8;
+}
+
+#draw {
+  background: #fff;
+}
 </style>
 </head>
+
 <body>
 
 <div id="toolbar">
-  <button id="orthoBtn">ORTHO</button>
-  <button id="angleBtn">ANGLE</button>
-  <button id="parallelBtn">PARALLEL</button>
-  <button id="thickBtn">THICK</button>
-  <button id="clearBtn">CLEAR</button>
+  <button id="ortho">ORTHO</button>
+  <button id="angle">ANGLE</button>
+  <button id="parallel">PARALLEL</button>
+  <button id="thick">THICK</button>
+  <button id="clear">CLEAR</button>
 </div>
 
-<canvas id="c"></canvas>
+<div id="board">
+  <div id="corner"></div>
+  <canvas id="rulerX"></canvas>
+  <canvas id="rulerY"></canvas>
+  <canvas id="draw"></canvas>
+</div>
 
 <script>
-/* =========================
-   CANVAS SETUP
-========================= */
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
+/* =======================
+   SETUP
+======================= */
+const rX = rulerX.getContext("2d");
+const rY = rulerY.getContext("2d");
+const ctx = draw.getContext("2d");
 
 function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight - 44;
+  rulerX.width = draw.width = window.innerWidth - 40;
+  rulerX.height = 40;
+  rulerY.width = 40;
+  rulerY.height = draw.height = window.innerHeight - 80;
 }
 resize();
-window.addEventListener("resize", resize);
+window.onresize = resize;
 
-/* =========================
-   STATE
-========================= */
-let start = null;
-let current = null;
-let drawing = false;
+/* =======================
+   RULER DRAWING
+======================= */
+const scale = 10; // pixels per mm (visual scale)
 
-let ortho = false;
-let angleLock = true;
-let parallel = false;
-let thick = false;
+function drawRulers() {
+  rX.clearRect(0,0,rulerX.width,rulerX.height);
+  rY.clearRect(0,0,rulerY.width,rulerY.height);
 
-let lastAngle = 0;
-const lines = [];
-const snapPoints = [];
+  rX.strokeStyle = rY.strokeStyle = "#000";
+  rX.fillStyle = rY.fillStyle = "#000";
+  rX.font = rY.font = "10px monospace";
 
-/* =========================
-   ENGINEERING ANGLES
-========================= */
-const ANGLES = [0,30,45,60,90,120,135,150,180].map(
-  a => a * Math.PI / 180
-);
-
-/* =========================
-   VECTOR CONSTRAINTS
-========================= */
-function orthoVector(dx, dy) {
-  return Math.abs(dx) > Math.abs(dy)
-    ? { dx, dy: 0 }
-    : { dx: 0, dy };
-}
-
-function snapVector(dx, dy) {
-  const len = Math.hypot(dx, dy);
-  if (!len) return { dx: 0, dy: 0, angle: 0 };
-
-  const a = Math.atan2(dy, dx);
-  let best = ANGLES[0];
-  let min = Infinity;
-
-  for (let ang of ANGLES) {
-    const d = Math.abs(Math.atan2(Math.sin(a-ang), Math.cos(a-ang)));
-    if (d < min) {
-      min = d;
-      best = ang;
-    }
+  // horizontal ruler
+  for (let x=0; x<rulerX.width; x+=scale) {
+    let mm = x/scale;
+    let h = mm%10===0 ? 18 : 10;
+    rX.beginPath();
+    rX.moveTo(x,40);
+    rX.lineTo(x,40-h);
+    rX.stroke();
+    if (mm%10===0) rX.fillText(mm, x+2, 12);
   }
-  return {
-    dx: Math.cos(best) * len,
-    dy: Math.sin(best) * len,
-    angle: best
-  };
-}
 
-function parallelVector(dx, dy) {
-  const len = Math.hypot(dx, dy);
-  return {
-    dx: Math.cos(lastAngle) * len,
-    dy: Math.sin(lastAngle) * len,
-    angle: lastAngle
-  };
-}
-
-/* =========================
-   SNAP POINTS
-========================= */
-function snapPoint(x, y) {
-  for (let p of snapPoints) {
-    if (Math.hypot(p.x - x, p.y - y) < 12) {
-      return { x: p.x, y: p.y };
-    }
+  // vertical ruler
+  for (let y=0; y<rulerY.height; y+=scale) {
+    let mm = y/scale;
+    let w = mm%10===0 ? 18 : 10;
+    rY.beginPath();
+    rY.moveTo(40, y);
+    rY.lineTo(40-w, y);
+    rY.stroke();
+    if (mm%10===0) rY.fillText(mm, 2, y-2);
   }
-  return { x, y };
+}
+drawRulers();
+
+/* =======================
+   MINI DRAFTER ENGINE
+======================= */
+let ortho=false, angleLock=true, parallel=false, thick=false;
+let start=null, current=null, lastAngle=0;
+const lines=[], snaps=[];
+
+const ANGLES=[0,30,45,60,90,120,135,150,180].map(a=>a*Math.PI/180);
+
+function snapAngle(dx,dy){
+  let len=Math.hypot(dx,dy);
+  let a=Math.atan2(dy,dx);
+  let best=ANGLES[0], min=1e9;
+  for(let ang of ANGLES){
+    let d=Math.abs(Math.atan2(Math.sin(a-ang),Math.cos(a-ang)));
+    if(d<min){min=d;best=ang;}
+  }
+  return {dx:Math.cos(best)*len,dy:Math.sin(best)*len,angle:best};
 }
 
-/* =========================
+function orthoVec(dx,dy){
+  return Math.abs(dx)>Math.abs(dy)?{dx,dy:0}:{dx:0,dy};
+}
+
+/* =======================
    DRAWING
-========================= */
-function redraw(preview) {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // existing lines
-  for (let l of lines) {
-    ctx.lineWidth = l.thick ? 4 : 2;
+======================= */
+function redraw(preview){
+  ctx.clearRect(0,0,draw.width,draw.height);
+  for(let l of lines){
+    ctx.lineWidth=l.thick?4:2;
     ctx.beginPath();
-    ctx.moveTo(l.x1, l.y1);
-    ctx.lineTo(l.x2, l.y2);
+    ctx.moveTo(l.x1,l.y1);
+    ctx.lineTo(l.x2,l.y2);
     ctx.stroke();
   }
-
-  // preview line
-  if (preview) {
-    ctx.setLineDash([6,4]);
-    ctx.lineWidth = thick ? 4 : 2;
+  if(preview){
+    ctx.setLineDash([5,4]);
+    ctx.lineWidth=thick?4:2;
     ctx.beginPath();
-    ctx.moveTo(preview.x1, preview.y1);
-    ctx.lineTo(preview.x2, preview.y2);
+    ctx.moveTo(preview.x1,preview.y1);
+    ctx.lineTo(preview.x2,preview.y2);
     ctx.stroke();
     ctx.setLineDash([]);
   }
 }
 
-/* =========================
-   POINTER EVENTS
-========================= */
-function pos(e) {
-  const r = canvas.getBoundingClientRect();
-  return {
-    x: (e.touches ? e.touches[0].clientX : e.clientX) - r.left,
-    y: (e.touches ? e.touches[0].clientY : e.clientY) - r.top
-  };
-}
-
-canvas.addEventListener("pointerdown", e => {
-  const p = snapPoint(...Object.values(pos(e)));
-  start = p;
-  drawing = true;
+draw.addEventListener("pointerdown",e=>{
+  start={x:e.offsetX,y:e.offsetY};
 });
 
-canvas.addEventListener("pointermove", e => {
-  if (!drawing) return;
-  let p = pos(e);
-  let dx = p.x - start.x;
-  let dy = p.y - start.y;
+draw.addEventListener("pointermove",e=>{
+  if(!start)return;
+  let dx=e.offsetX-start.x;
+  let dy=e.offsetY-start.y;
+  let v={dx,dy};
 
-  let v = { dx, dy };
+  if(ortho)v=orthoVec(v.dx,v.dy);
+  if(angleLock)v=snapAngle(v.dx,v.dy);
 
-  if (ortho) v = orthoVector(v.dx, v.dy);
-  if (angleLock) v = snapVector(v.dx, v.dy);
-  if (parallel) v = parallelVector(v.dx, v.dy);
-
-  current = {
-    x1: start.x,
-    y1: start.y,
-    x2: start.x + v.dx,
-    y2: start.y + v.dy,
-    angle: v.angle ?? lastAngle
+  current={
+    x1:start.x,y1:start.y,
+    x2:start.x+v.dx,y2:start.y+v.dy,
+    angle:v.angle
   };
   redraw(current);
 });
 
-canvas.addEventListener("pointerup", () => {
-  if (!current) return;
-
-  lines.push({
-    ...current,
-    thick
-  });
-
-  snapPoints.push(
-    { x: current.x1, y: current.y1 },
-    { x: current.x2, y: current.y2 }
-  );
-
-  lastAngle = current.angle;
-  start = current = null;
-  drawing = false;
+draw.addEventListener("pointerup",()=>{
+  if(!current)return;
+  lines.push({...current,thick});
+  lastAngle=current.angle;
+  start=current=null;
   redraw();
 });
 
-/* =========================
+/* =======================
    TOOLBAR
-========================= */
-function toggle(btn, cb) {
-  btn.classList.toggle("active");
-  cb();
+======================= */
+function toggle(id,ref){
+  document.getElementById(id).onclick=e=>{
+    ref.value=!ref.value;
+    e.target.classList.toggle("active");
+  };
 }
+toggle("ortho",{value:ortho});
+toggle("angle",{value:angleLock});
+toggle("parallel",{value:parallel});
+toggle("thick",{value:thick});
 
-document.getElementById("orthoBtn").onclick =
-  e => toggle(e.target, () => ortho = !ortho);
+clear.onclick=()=>{lines.length=0;redraw();};
 
-document.getElementById("angleBtn").onclick =
-  e => toggle(e.target, () => angleLock = !angleLock);
-
-document.getElementById("parallelBtn").onclick =
-  e => toggle(e.target, () => parallel = !parallel);
-
-document.getElementById("thickBtn").onclick =
-  e => toggle(e.target, () => thick = !thick);
-
-document.getElementById("clearBtn").onclick = () => {
-  lines.length = 0;
-  snapPoints.length = 0;
-  redraw();
-};
-
-redraw();
-
-/* version: 1.0.0 */
+/* version: 1.1.0 */
 </script>
+
 </body>
 </html>
