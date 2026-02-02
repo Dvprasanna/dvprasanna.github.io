@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>DOS CAD</title>
 
 <style>
@@ -22,7 +23,7 @@ html,body{
   background:#000;
 }
 
-/* COMMAND AREA */
+/* CONSOLE */
 #console{
   position:fixed;
   bottom:0;
@@ -35,7 +36,6 @@ html,body{
 #output{
   padding:4px 8px;
   font-size:13px;
-  color:#0f0;
   border-bottom:1px solid #222;
   white-space:nowrap;
   overflow:hidden;
@@ -49,7 +49,9 @@ html,body{
   padding:0 8px;
 }
 
-#prompt{ margin-right:6px; }
+#prompt{
+  margin-right:6px;
+}
 
 #cmd{
   flex:1;
@@ -105,91 +107,105 @@ window.addEventListener("resize", resize);
 resize();
 
 /* ================= STATE ================= */
-let origin={x:0,y:0};
-let cursor={x:0,y:0};
-let view={zoom:1,panX:0,panY:0};
-let pen={thk:1,col:"#ffffff"};
-let geometry=[];
-let undoStack=[], redoStack=[];
+let origin = {x:0,y:0};
+let cursor = {x:0,y:0};
+let view   = {zoom:1, panX:0, panY:0};
+let pen    = {thk:1, col:"#ffffff"};
+
+let geometry = [];
+let undoStack = [];
+let redoStack = [];
 
 /* ================= UTILS ================= */
-const rad = a => a*Math.PI/180;
+const rad = a => a * Math.PI / 180;
 
 function snapshot(){
   undoStack.push(JSON.stringify({origin,cursor,geometry,pen}));
-  redoStack.length=0;
+  redoStack.length = 0;
 }
 
 function restore(s){
-  const o=JSON.parse(s);
-  origin=o.origin; cursor=o.cursor;
-  geometry=o.geometry; pen=o.pen;
+  const o = JSON.parse(s);
+  origin = o.origin;
+  cursor = o.cursor;
+  geometry = o.geometry;
+  pen = o.pen;
 }
 
 function drawLine(x1,y1,x2,y2){
-  geometry.push({x1,y1,x2,y2,thk:pen.thk,col:pen.col});
+  geometry.push({
+    x1,y1,x2,y2,
+    thk:pen.thk,
+    col:pen.col
+  });
 }
 
 /* ================= RENDER ================= */
 function render(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
+
   ctx.save();
-  ctx.translate(canvas.width/2+view.panX, canvas.height/2+view.panY);
+  ctx.translate(
+    canvas.width/2 + view.panX,
+    canvas.height/2 + view.panY
+  );
   ctx.scale(view.zoom, -view.zoom);
 
-  // axes
+  /* axes */
   ctx.strokeStyle="#333";
-  ctx.lineWidth=1/view.zoom;
+  ctx.lineWidth = 1 / view.zoom;
   ctx.beginPath();
   ctx.moveTo(-10000,0); ctx.lineTo(10000,0);
   ctx.moveTo(0,-10000); ctx.lineTo(0,10000);
   ctx.stroke();
 
-  // geometry
+  /* geometry */
   geometry.forEach(l=>{
-    ctx.strokeStyle=l.col;
-    ctx.lineWidth=l.thk/view.zoom;
+    ctx.strokeStyle = l.col;
+    ctx.lineWidth = l.thk / view.zoom;
     ctx.beginPath();
     ctx.moveTo(origin.x+l.x1, origin.y+l.y1);
     ctx.lineTo(origin.x+l.x2, origin.y+l.y2);
     ctx.stroke();
   });
 
-  // cursor
+  /* cursor */
   ctx.fillStyle="#0f0";
   ctx.beginPath();
-  ctx.arc(origin.x+cursor.x, origin.y+cursor.y, 3/view.zoom, 0, Math.PI*2);
+  ctx.arc(
+    origin.x+cursor.x,
+    origin.y+cursor.y,
+    3/view.zoom, 0, Math.PI*2
+  );
   ctx.fill();
 
   ctx.restore();
 }
 
 /* ================= OUTPUT ================= */
-const output=document.getElementById("output");
-function log(msg,isErr=false){
-  output.textContent=(isErr?"ERR: ":"OK: ")+msg;
+const output = document.getElementById("output");
+function log(msg, err=false){
+  output.textContent = (err?"ERR: ":"OK: ") + msg;
 }
 
 /* ================= COMMAND EXEC ================= */
 function exec(cmd){
-  cmd=cmd.trim();
+  cmd = cmd.trim();
   if(!cmd) return;
 
-  const t=cmd.split(/\s+/);
+  const t = cmd.split(/\s+/);
 
   try{
 
-    if(cmd==="help"){
-      log("type commands; drawing is immediate");
-      return;
+    if(cmd === "?"){
+      return log(`X=${cursor.x} Y=${cursor.y}`);
     }
 
-    if(cmd==="?"){
-      log(`X=${cursor.x} Y=${cursor.y}`);
-      return;
+    if(cmd === "help"){
+      return log("r l u d, or a,n, m, origin, thk, col, un, re, cls");
     }
 
-    if(cmd==="un"){
+    if(cmd === "un"){
       if(!undoStack.length) return log("nothing to undo",true);
       redoStack.push(JSON.stringify({origin,cursor,geometry,pen}));
       restore(undoStack.pop());
@@ -197,7 +213,7 @@ function exec(cmd){
       return log("undo");
     }
 
-    if(cmd==="re"){
+    if(cmd === "re"){
       if(!redoStack.length) return log("nothing to redo",true);
       undoStack.push(JSON.stringify({origin,cursor,geometry,pen}));
       restore(redoStack.pop());
@@ -205,41 +221,46 @@ function exec(cmd){
       return log("redo");
     }
 
-    if(cmd==="cls"){
-      origin={x:0,y:0}; cursor={x:0,y:0};
-      geometry=[]; undoStack=[]; redoStack=[];
+    if(cmd === "cls"){
+      origin={x:0,y:0};
+      cursor={x:0,y:0};
+      geometry=[];
+      undoStack=[]; redoStack=[];
       render();
       return log("cleared");
     }
 
     if(t[0]==="thk"){
       snapshot();
-      pen.thk=parseFloat(t[1]);
+      pen.thk = parseFloat(t[1]);
       return log("thickness set");
     }
 
     if(t[0]==="col"){
       snapshot();
-      pen.col=t[1];
+      pen.col = t[1];
       return log("color set");
     }
 
     if(t[0]==="origin"){
       snapshot();
-      const [x,y]=t[1].split(",").map(Number);
+      const [x,y] = t[1].split(",").map(Number);
       origin={x,y};
       render();
-      return log(`origin set to ${x},${y}`);
+      return log(`origin ${x},${y}`);
     }
 
     let moveOnly=false;
-    if(t[0]==="m"){ moveOnly=true; t.shift(); }
+    if(t[0]==="m"){
+      moveOnly=true;
+      t.shift();
+    }
 
     if(t[0]==="or"){
       snapshot();
-      const [a,n]=t[1].split(",").map(Number);
-      const nx=cursor.x+Math.cos(rad(a))*n;
-      const ny=cursor.y+Math.sin(rad(a))*n;
+      const [a,n] = t[1].split(",").map(Number);
+      const nx = cursor.x + Math.cos(rad(a))*n;
+      const ny = cursor.y + Math.sin(rad(a))*n;
       if(!moveOnly) drawLine(cursor.x,cursor.y,nx,ny);
       cursor={x:nx,y:ny};
       render();
@@ -249,10 +270,10 @@ function exec(cmd){
     const map={r:0,u:90,l:180,d:270};
     if(map[t[0]]!==undefined){
       snapshot();
-      const n=parseFloat(t[1]);
-      const a=map[t[0]];
-      const nx=cursor.x+Math.cos(rad(a))*n;
-      const ny=cursor.y+Math.sin(rad(a))*n;
+      const n = parseFloat(t[1]);
+      const a = map[t[0]];
+      const nx = cursor.x + Math.cos(rad(a))*n;
+      const ny = cursor.y + Math.sin(rad(a))*n;
       if(!moveOnly) drawLine(cursor.x,cursor.y,nx,ny);
       cursor={x:nx,y:ny};
       render();
@@ -261,16 +282,26 @@ function exec(cmd){
 
     log("unknown command",true);
 
-  }catch(e){
-    log("invalid syntax",true);
+  }catch{
+    log("syntax error",true);
   }
 }
 
-/* ================= INPUT ================= */
-const form=document.getElementById("bar");
-const input=document.getElementById("cmd");
+/* ================= INPUT HANDLING ================= */
+const form = document.getElementById("bar");
+const input = document.getElementById("cmd");
+const enterBtn = document.getElementById("enterBtn");
 
-form.addEventListener("submit",e=>{
+/* form submit (keyboard enter) */
+form.addEventListener("submit", e=>{
+  e.preventDefault();
+  exec(input.value);
+  input.value="";
+  input.focus();
+});
+
+/* button click (iOS fix) */
+enterBtn.addEventListener("click", e=>{
   e.preventDefault();
   exec(input.value);
   input.value="";
