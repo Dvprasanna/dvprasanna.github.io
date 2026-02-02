@@ -3,55 +3,39 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>DOS CAD</title>
+<title>DOS CAD – DEBUG</title>
 
 <style>
 html,body{
   margin:0;
   height:100%;
   background:#000;
-  font-family:monospace;
   color:#0f0;
+  font-family:monospace;
   overflow:hidden;
 }
-#canvas{
-  display:block;
-  background:#000;
-}
+#canvas{ background:#000; display:block; }
 #console{
-  position:fixed;
-  bottom:0; left:0; right:0;
+  position:fixed; bottom:0; left:0; right:0;
   background:#111;
 }
 #out{
   padding:4px 8px;
-  font-size:13px;
   border-bottom:1px solid #222;
 }
 #bar{
-  display:flex;
-  align-items:center;
-  height:44px;
-  padding:0 8px;
+  display:flex; align-items:center;
+  height:44px; padding:0 8px;
 }
 #cmd{
   flex:1;
-  background:#000;
-  color:#0f0;
-  border:none;
-  outline:none;
-  font-size:16px;
+  background:#000; color:#0f0;
+  border:none; outline:none;
 }
 #btn{
   margin-left:6px;
-  background:#000;
-  color:#0f0;
+  background:#000; color:#0f0;
   border:1px solid #0f0;
-  padding:6px 10px;
-}
-#btn:active{
-  background:#0f0;
-  color:#000;
 }
 </style>
 </head>
@@ -70,170 +54,135 @@ html,body{
 </div>
 
 <script>
-/* ===== CANVAS ===== */
+/* =========================
+   DBG-01 : SCRIPT LOADED
+========================= */
+console.log("DBG-01 script loaded");
+
+/* =========================
+   CANVAS SETUP
+========================= */
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 function resize(){
+  console.log("DBG-02 resize()");
   canvas.width = innerWidth;
   canvas.height = innerHeight - 88;
   draw();
 }
-addEventListener("resize",resize);
+addEventListener("resize", resize);
 resize();
 
-/* ===== STATE ===== */
+/* =========================
+   STATE
+========================= */
 let cursor = {x:0,y:0};
-let origin = {x:0,y:0};
-let pen = {thk:1,col:"#fff"};
 let lines = [];
-let undo=[], redo=[];
 
-/* ===== UTILS ===== */
-const rad = d => d*Math.PI/180;
-
-function save(){
-  undo.push(JSON.stringify({cursor,origin,pen,lines}));
-  redo.length=0;
-}
-function load(s){
-  const o=JSON.parse(s);
-  cursor=o.cursor; origin=o.origin;
-  pen=o.pen; lines=o.lines;
-}
-
-/* ===== DRAW ===== */
+/* =========================
+   DRAW
+========================= */
 function draw(){
+  console.log("DBG-03 draw()");
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.save();
-  ctx.translate(canvas.width/2,canvas.height/2);
+  ctx.translate(canvas.width/2, canvas.height/2);
   ctx.scale(1,-1);
 
   // axes
   ctx.strokeStyle="#333";
   ctx.beginPath();
-  ctx.moveTo(-9999,0);ctx.lineTo(9999,0);
-  ctx.moveTo(0,-9999);ctx.lineTo(0,9999);
+  ctx.moveTo(-9999,0); ctx.lineTo(9999,0);
+  ctx.moveTo(0,-9999); ctx.lineTo(0,9999);
   ctx.stroke();
 
   // lines
+  ctx.strokeStyle="#fff";
   lines.forEach(l=>{
-    ctx.strokeStyle=l.col;
-    ctx.lineWidth=l.thk;
     ctx.beginPath();
-    ctx.moveTo(origin.x+l.x1,origin.y+l.y1);
-    ctx.lineTo(origin.x+l.x2,origin.y+l.y2);
+    ctx.moveTo(l.x1,l.y1);
+    ctx.lineTo(l.x2,l.y2);
     ctx.stroke();
   });
 
   // cursor
   ctx.fillStyle="#0f0";
   ctx.beginPath();
-  ctx.arc(origin.x+cursor.x,origin.y+cursor.y,3,0,Math.PI*2);
+  ctx.arc(cursor.x,cursor.y,3,0,Math.PI*2);
   ctx.fill();
 
   ctx.restore();
 }
 
-/* ===== OUTPUT ===== */
-const out=document.getElementById("out");
+/* =========================
+   OUTPUT
+========================= */
+const out = document.getElementById("out");
 function ok(t){ out.textContent="OK: "+t; }
 function err(t){ out.textContent="ERR: "+t; }
 
-/* ===== COMMANDS ===== */
+/* =========================
+   COMMAND EXECUTION
+========================= */
 function exec(cmd){
-  cmd=cmd.trim();
-  if(!cmd) return;
+  console.log("DBG-04 exec() called with:", cmd);
 
-  const p=cmd.split(/\s+/);
-
-  try{
-    if(cmd=="?"){
-      return ok(`X=${cursor.x} Y=${cursor.y}`);
-    }
-
-    if(cmd=="cls"){
-      cursor={x:0,y:0};
-      origin={x:0,y:0};
-      lines=[]; undo=[]; redo=[];
-      draw(); return ok("cleared");
-    }
-
-    if(cmd=="un"){
-      if(!undo.length) return err("nothing to undo");
-      redo.push(JSON.stringify({cursor,origin,pen,lines}));
-      load(undo.pop()); draw(); return ok("undo");
-    }
-
-    if(cmd=="re"){
-      if(!redo.length) return err("nothing to redo");
-      undo.push(JSON.stringify({cursor,origin,pen,lines}));
-      load(redo.pop()); draw(); return ok("redo");
-    }
-
-    if(p[0]=="origin"){
-      save();
-      const [x,y]=p[1].split(",").map(Number);
-      origin={x,y}; draw(); return ok("origin set");
-    }
-
-    if(p[0]=="thk"){
-      save(); pen.thk=parseFloat(p[1]); return ok("thickness set");
-    }
-
-    if(p[0]=="col"){
-      save(); pen.col=p[1]; return ok("color set");
-    }
-
-    let moveOnly=false;
-    if(p[0]=="m"){ moveOnly=true; p.shift(); }
-
-    if(p[0]=="or"){
-      save();
-      const [a,n]=p[1].split(",").map(Number);
-      const nx=cursor.x+Math.cos(rad(a))*n;
-      const ny=cursor.y+Math.sin(rad(a))*n;
-      if(!moveOnly)
-        lines.push({x1:cursor.x,y1:cursor.y,x2:nx,y2:ny,thk:pen.thk,col:pen.col});
-      cursor={x:nx,y:ny};
-      draw(); return ok(moveOnly?"moved":"line drawn");
-    }
-
-    const dir={r:0,u:90,l:180,d:270};
-    if(dir[p[0]]!==undefined){
-      save();
-      const n=parseFloat(p[1]);
-      const a=dir[p[0]];
-      const nx=cursor.x+Math.cos(rad(a))*n;
-      const ny=cursor.y+Math.sin(rad(a))*n;
-      if(!moveOnly)
-        lines.push({x1:cursor.x,y1:cursor.y,x2:nx,y2:ny,thk:pen.thk,col:pen.col});
-      cursor={x:nx,y:ny};
-      draw(); return ok(moveOnly?"moved":"line drawn");
-    }
-
-    err("unknown command");
-  }catch{
-    err("syntax error");
+  cmd = cmd.trim();
+  if(!cmd){
+    console.log("DBG-05 empty command");
+    return;
   }
+
+  const p = cmd.split(/\s+/);
+
+  // QUERY
+  if(cmd === "?"){
+    console.log("DBG-06 query cursor");
+    return ok(`X=${cursor.x} Y=${cursor.y}`);
+  }
+
+  // DRAW RIGHT
+  if(p[0] === "r"){
+    console.log("DBG-07 draw right", p[1]);
+    const n = Number(p[1]);
+    if(isNaN(n)) return err("invalid number");
+    lines.push({
+      x1:cursor.x, y1:cursor.y,
+      x2:cursor.x+n, y2:cursor.y
+    });
+    cursor.x += n;
+    draw();
+    return ok("line drawn");
+  }
+
+  err("unknown command");
 }
 
-/* ===== INPUT ===== */
-const form=document.getElementById("bar");
-const input=document.getElementById("cmd");
-const btn=document.getElementById("btn");
+/* =========================
+   INPUT HANDLING (CRITICAL)
+========================= */
+const form = document.getElementById("bar");
+const input = document.getElementById("cmd");
+const btn = document.getElementById("btn");
 
-form.onsubmit=e=>{
+function handleExecute(e){
+  console.log("DBG-08 handleExecute()");
   e.preventDefault();
-  exec(input.value);
-  input.value=""; input.focus();
-};
-btn.onclick=e=>{
-  e.preventDefault();
-  exec(input.value);
-  input.value=""; input.focus();
-};
 
+  const value = input.value;   // IMPORTANT: capture first
+  console.log("DBG-09 captured value:", value);
+
+  input.value="";
+  input.focus();
+
+  exec(value);
+}
+
+form.addEventListener("submit", handleExecute);
+btn.addEventListener("click", handleExecute);
+
+console.log("DBG-10 handlers attached");
 input.focus();
 </script>
 
