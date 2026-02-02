@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Canvas CMD – Minimal</title>
+<title>Canvas CMD – Full</title>
 
 <style>
 html,body{
@@ -14,13 +14,11 @@ html,body{
   font-family:monospace;
 }
 
-/* canvas */
 #canvas{
   display:block;
   background:#000;
 }
 
-/* command bar */
 #bar{
   position:fixed;
   bottom:0; left:0; right:0;
@@ -92,14 +90,14 @@ function draw(){
   ctx.translate(canvas.width/2, canvas.height/2);
   ctx.scale(1,-1);
 
-  /* axes */
+  // axes
   ctx.strokeStyle = "#333";
   ctx.beginPath();
   ctx.moveTo(-10000,0); ctx.lineTo(10000,0);
   ctx.moveTo(0,-10000); ctx.lineTo(0,10000);
   ctx.stroke();
 
-  /* lines */
+  // lines
   ctx.strokeStyle = "#fff";
   lines.forEach(l=>{
     ctx.beginPath();
@@ -108,7 +106,7 @@ function draw(){
     ctx.stroke();
   });
 
-  /* cursor */
+  // cursor
   ctx.fillStyle = "#0f0";
   ctx.beginPath();
   ctx.arc(cursor.x,cursor.y,3,0,Math.PI*2);
@@ -118,20 +116,23 @@ function draw(){
 }
 
 /* =========================
-   COMMANDS
+   COMMAND FUNCTIONS
 ========================= */
-function cmd_query(){
-  alert(`X=${cursor.x} Y=${cursor.y}`);
-}
-
-function cmd_right(n){
+function drawLineTo(x,y){
   lines.push({
     x1: cursor.x,
     y1: cursor.y,
-    x2: cursor.x + n,
-    y2: cursor.y
+    x2: x,
+    y2: y
   });
-  cursor.x += n;
+  cursor.x = x;
+  cursor.y = y;
+  draw();
+}
+
+function moveTo(x,y){
+  cursor.x = x;
+  cursor.y = y;
   draw();
 }
 
@@ -144,22 +145,46 @@ function execCommand(text){
 
   const p = text.split(/\s+/);
 
-  if(text === "?"){
-    cmd_query();
-    return;
-  }
+  switch(p[0]){
+    case "?":
+      alert(`X=${cursor.x} Y=${cursor.y}`);
+      break;
 
-  if(p[0] === "r"){
-    const n = Number(p[1]);
-    if(isNaN(n)){
-      alert("Invalid number");
-      return;
-    }
-    cmd_right(n);
-    return;
-  }
+    case "r":
+      drawLineTo(cursor.x + Number(p[1]), cursor.y);
+      break;
 
-  alert("Unknown command");
+    case "l":
+      drawLineTo(cursor.x - Number(p[1]), cursor.y);
+      break;
+
+    case "u":
+      drawLineTo(cursor.x, cursor.y + Number(p[1]));
+      break;
+
+    case "d":
+      drawLineTo(cursor.x, cursor.y - Number(p[1]));
+      break;
+
+    case "m":
+      if(p.length < 3) return alert("Usage: m x y");
+      moveTo(Number(p[1]), Number(p[2]));
+      break;
+
+    case "undo":
+      lines.pop();
+      draw();
+      break;
+
+    case "cls":
+      lines = [];
+      cursor = {x:0,y:0};
+      draw();
+      break;
+
+    default:
+      alert("Unknown command");
+  }
 }
 
 /* =========================
@@ -170,7 +195,7 @@ const run = document.getElementById("run");
 
 run.addEventListener("click", ()=>{
   execCommand(input.value);
-  input.value = "";
+  input.value="";
   input.focus();
 });
 
