@@ -116,6 +116,24 @@ function draw(){
 }
 
 /* =========================
+   COMMAND HELP
+========================= */
+function showHelp(){
+  alert(
+`Available commands:
+
+?            show cursor position
+r n          draw right
+l n          draw left
+u n          draw up
+d n          draw down
+m x y        move cursor (no draw)
+undo         remove last line
+cls          clear drawing`
+  );
+}
+
+/* =========================
    COMMAND FUNCTIONS
 ========================= */
 function drawLineTo(x,y){
@@ -184,6 +202,7 @@ function execCommand(text){
 
     default:
       alert("Unknown command");
+      showHelp();
   }
 }
 
@@ -195,7 +214,7 @@ const run = document.getElementById("run");
 
 run.addEventListener("click", ()=>{
   execCommand(input.value);
-  input.value="";
+  input.value = "";
   input.focus();
 });
 
