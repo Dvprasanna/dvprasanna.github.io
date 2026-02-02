@@ -22,18 +22,9 @@ body{
   padding:6px 12px;
   font-size:14px;
 }
-#mode{
-  font-weight:bold;
-  color:#0ff;
-}
-#info{
-  margin-left:auto;
-  font-family:monospace;
-}
-canvas{
-  display:block;
-  background:#fff;
-}
+#mode{ color:#0ff; font-weight:bold; }
+#info{ margin-left:auto; font-family:monospace; }
+canvas{ display:block; background:#fff; }
 #hud{
   position:absolute;
   top:60px;
@@ -59,16 +50,12 @@ canvas{
 <canvas id="c"></canvas>
 
 <script>
-/* =============================
-   CONFIG
-============================= */
+/* ================= CONFIG ================= */
 const SNAP_UNIT = 10;
-const DOUBLE_TAP_TIME = 300; // ms
-const DOUBLE_TAP_DIST = 20;  // px
+const DOUBLE_TAP_TIME = 300;
+const LONG_PRESS_TIME = 500;
 
-/* =============================
-   SETUP
-============================= */
+/* ================= SETUP ================= */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const hud = document.getElementById("hud");
@@ -80,53 +67,45 @@ function resize(){
   canvas.height = innerHeight - 48;
   info.textContent = `DOC: ${canvas.width} × ${canvas.height} px`;
 }
-resize();
-window.onresize = resize;
+resize(); onresize = resize;
 
-/* =============================
-   MODE
-============================= */
-let MODE = "draw"; // draw | move
+/* ================= MODE ================= */
+let MODE = "draw";
 function toggleMode(){
   MODE = MODE === "draw" ? "move" : "draw";
   modeLabel.textContent = MODE.toUpperCase();
 }
 
-/* =============================
-   DOUBLE TAP STATE
-============================= */
-let lastTapTime = 0;
-let lastTapPos = null;
-
-/* =============================
-   L-SCALE STATE
-============================= */
+/* ================= L-SCALE ================= */
+const ANGLES = [0,30,45,60,90].map(a=>a*Math.PI/180);
 const L = {
-  x: 260,
+  x: 240,
   y: 300,
-  angle: 0,
+  angleIndex: 0,
   arm: 380
 };
 
-/* =============================
-   STATE
-============================= */
-let action = null;
-let start = null;
-let preview = null;
-let dragStart = null;
-let basePos = null;
-let drawDir = null;
-const lines = [];
+/* ================= STATE ================= */
+let action=null;
+let preview=null;
+let dragStart=null;
+let basePos=null;
+let drawDir=null;
 
-/* =============================
-   MATH
-============================= */
+let lastTapTime=0;
+let lastTapPos=null;
+
+let pressTimer=null;
+let longPressTriggered=false;
+
+const lines=[];
+
+/* ================= MATH ================= */
 function snap(v){
   return Math.round(v / SNAP_UNIT) * SNAP_UNIT;
 }
 
-function project(px,py,dir){
+function projectFromOrigin(px,py,dir){
   const dx = px - L.x;
   const dy = py - L.y;
   let t = dx*Math.cos(dir) + dy*Math.sin(dir);
@@ -134,17 +113,12 @@ function project(px,py,dir){
   t = Math.max(0, Math.min(L.arm, t));
   return {
     x: L.x + Math.cos(dir)*t,
-    y: L.y + Math.sin(dir)*t
+    y: L.y + Math.sin(dir)*t,
+    len: t
   };
 }
 
-function dist(a,b){
-  return Math.hypot(b.x-a.x,b.y-a.y);
-}
-
-/* =============================
-   DRAW
-============================= */
+/* ================= DRAW ================= */
 function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -168,23 +142,27 @@ function redraw(){
     ctx.setLineDash([]);
   }
 
-  // drafter
+  // true L-scale (+X and +Y)
   ctx.save();
   ctx.globalAlpha=0.35;
   ctx.strokeStyle="#0077ff";
   ctx.lineWidth=4;
 
+  const a = ANGLES[L.angleIndex];
   const ox=L.x, oy=L.y;
-  const hx=ox+Math.cos(L.angle)*L.arm;
-  const hy=oy+Math.sin(L.angle)*L.arm;
-  const vx=ox+Math.cos(L.angle+Math.PI/2)*L.arm;
-  const vy=oy+Math.sin(L.angle+Math.PI/2)*L.arm;
+
+  const hx=ox + Math.cos(a)*L.arm;
+  const hy=oy + Math.sin(a)*L.arm;
+
+  const vx=ox + Math.cos(a+Math.PI/2)*L.arm;
+  const vy=oy + Math.sin(a+Math.PI/2)*L.arm;
 
   ctx.beginPath();
   ctx.moveTo(ox,oy); ctx.lineTo(hx,hy);
   ctx.moveTo(ox,oy); ctx.lineTo(vx,vy);
   ctx.stroke();
 
+  // pivot
   ctx.beginPath();
   ctx.arc(ox,oy,12,0,Math.PI*2);
   ctx.stroke();
@@ -192,48 +170,49 @@ function redraw(){
   ctx.restore();
 }
 
-/* =============================
-   POINTER
-============================= */
+/* ================= POINTER ================= */
 canvas.addEventListener("pointerdown",e=>{
   const x=e.offsetX, y=e.offsetY;
-  const now = Date.now();
+  const now=Date.now();
 
-  /* ---- DOUBLE TAP DETECTION ---- */
+  // double tap → mode switch
   if(
     lastTapPos &&
-    now - lastTapTime < DOUBLE_TAP_TIME &&
-    Math.hypot(x-lastTapPos.x, y-lastTapPos.y) < DOUBLE_TAP_DIST
+    now-lastTapTime<DOUBLE_TAP_TIME &&
+    Math.hypot(x-lastTapPos.x,y-lastTapPos.y)<20
   ){
     toggleMode();
-    lastTapTime = 0;
-    lastTapPos = null;
-    action = null;
-    preview = null;
-    hud.style.display="none";
+    lastTapTime=0;
+    lastTapPos=null;
     redraw();
     return;
   }
+  lastTapTime=now;
+  lastTapPos={x,y};
 
-  lastTapTime = now;
-  lastTapPos = {x,y};
+  // long press on pivot → angle
+  const d=Math.hypot(x-L.x,y-L.y);
+  longPressTriggered=false;
+  if(d<15){
+    pressTimer=setTimeout(()=>{
+      longPressTriggered=true;
+      L.angleIndex=(L.angleIndex+1)%ANGLES.length;
+      redraw();
+    },LONG_PRESS_TIME);
+  }
 
-  /* ---- MOVE MODE ---- */
   if(MODE==="move"){
-    action = Math.abs(x-L.x) > Math.abs(y-L.y) ? "moveX" : "moveY";
+    action = Math.abs(x-L.x)>Math.abs(y-L.y)?"moveX":"moveY";
     dragStart={x,y};
     basePos={x:L.x,y:L.y};
     return;
   }
 
-  /* ---- DRAW MODE ---- */
-  const ph = project(x,y,L.angle);
-  const pv = project(x,y,L.angle+Math.PI/2);
-  const dh = Math.hypot(ph.x-x,ph.y-y);
-  const dv = Math.hypot(pv.x-x,pv.y-y);
-
-  drawDir = dh < dv ? L.angle : L.angle+Math.PI/2;
-  start = project(x,y,drawDir);
+  // DRAW MODE — always from origin
+  const a=ANGLES[L.angleIndex];
+  const p1=projectFromOrigin(x,y,a);
+  const p2=projectFromOrigin(x,y,a+Math.PI/2);
+  drawDir = Math.abs(p1.len) > Math.abs(p2.len) ? a : a+Math.PI/2;
   action="draw";
   hud.style.display="block";
 });
@@ -246,18 +225,17 @@ canvas.addEventListener("pointermove",e=>{
   if(action==="moveY") L.y = basePos.y + (y-dragStart.y);
 
   if(action==="draw"){
-    const p = project(x,y,drawDir);
-    preview={x1:start.x,y1:start.y,x2:p.x,y2:p.y};
-    hud.innerHTML =
-      `Length: ${dist(start,p).toFixed(0)} px<br>`+
-      `Angle: ${(drawDir*180/Math.PI).toFixed(0)}°`;
+    const p=projectFromOrigin(x,y,drawDir);
+    preview={x1:L.x,y1:L.y,x2:p.x,y2:p.y};
+    hud.innerHTML=`Length: ${p.len}px<br>Angle: ${(drawDir*180/Math.PI)|0}°`;
   }
 
   redraw();
 });
 
 canvas.addEventListener("pointerup",()=>{
-  if(preview){
+  clearTimeout(pressTimer);
+  if(preview && !longPressTriggered){
     lines.push(preview);
     preview=null;
     hud.style.display="none";
@@ -266,12 +244,10 @@ canvas.addEventListener("pointerup",()=>{
   redraw();
 });
 
-/* =============================
-   INIT
-============================= */
+/* ================= INIT ================= */
 redraw();
 
-/* version: 9.1.0 */
+/* version: 10.0.0 */
 </script>
 
 </body>
