@@ -8,17 +8,19 @@
 <style>
 body{
   margin:0;
-  background:#cfcfcf;
+  background:#d0d0d0;
   font-family:system-ui;
   touch-action:none;
 }
 #toolbar{
-  height:44px;
+  height:48px;
   background:#222;
   color:#fff;
   display:flex;
-  gap:8px;
-  padding:6px;
+  align-items:center;
+  gap:14px;
+  padding:6px 12px;
+  font-size:14px;
 }
 button{
   background:#444;
@@ -28,14 +30,19 @@ button{
   border-radius:4px;
 }
 button.active{ background:#0aa; }
+#info{
+  margin-left:auto;
+  font-family:monospace;
+  opacity:0.9;
+}
 canvas{
   display:block;
   background:#fff;
 }
 #hud{
   position:absolute;
-  top:54px;
-  right:10px;
+  top:60px;
+  right:12px;
   background:rgba(0,0,0,0.75);
   color:#fff;
   padding:8px 10px;
@@ -49,9 +56,10 @@ canvas{
 <body>
 
 <div id="toolbar">
-  <button id="drawBtn" class="active">DRAW MODE</button>
-  <button id="moveBtn">MOVE SCALE</button>
+  <button id="drawBtn" class="active">DRAW</button>
+  <button id="moveBtn">MOVE DRAFTER</button>
   <button id="clearBtn">CLEAR</button>
+  <div id="info"></div>
 </div>
 
 <div id="hud"></div>
@@ -59,15 +67,22 @@ canvas{
 
 <script>
 /* =============================
+   CONFIG
+============================= */
+const SNAP_UNIT = 10; // px snapping
+
+/* =============================
    SETUP
 ============================= */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const hud = document.getElementById("hud");
+const info = document.getElementById("info");
 
 function resize(){
   canvas.width = innerWidth;
-  canvas.height = innerHeight - 44;
+  canvas.height = innerHeight - 48;
+  info.textContent = `DOC: ${canvas.width} × ${canvas.height} px`;
 }
 resize();
 window.onresize = resize;
@@ -82,39 +97,42 @@ let MODE = "draw"; // draw | move
 ============================= */
 const L = {
   x: 260,
-  y: 340,
+  y: 300,
   angle: 0,
-  arm: 360,
+  arm: 380,
   snapAngles: [0,30,45,60,90].map(a=>a*Math.PI/180)
 };
 
 /* =============================
    STATE
 ============================= */
-let action = null;      // drawH | drawV | moveX | moveY
+let action = null;
 let start = null;
 let preview = null;
 let dragStart = null;
 let basePos = null;
+let drawDir = null; // angle used for drawing
 
 const lines = [];
 
 /* =============================
-   MATH HELPERS
+   MATH
 ============================= */
 function rot(x,y){
   const c=Math.cos(L.angle), s=Math.sin(L.angle);
   return { x:L.x+x*c-y*s, y:L.y+x*s+y*c };
 }
 
+function snapLen(v){
+  return Math.round(v / SNAP_UNIT) * SNAP_UNIT;
+}
+
 function project(px,py,dir){
   const dx = px - L.x;
   const dy = py - L.y;
   let t = dx*Math.cos(dir) + dy*Math.sin(dir);
-
-  // CLAMP TO ARM LENGTH
+  t = snapLen(t);
   t = Math.max(0, Math.min(L.arm, t));
-
   return {
     x: L.x + Math.cos(dir)*t,
     y: L.y + Math.sin(dir)*t,
@@ -132,7 +150,8 @@ function dist(a,b){
 function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  /* Final lines */
+  /* Draw final lines */
+  ctx.strokeStyle = "#000";
   ctx.lineWidth = 2;
   for(const l of lines){
     ctx.beginPath();
@@ -151,10 +170,11 @@ function redraw(){
     ctx.setLineDash([]);
   }
 
-  /* Semi-transparent drafter */
+  /* Drafter */
   ctx.save();
   ctx.globalAlpha = 0.35;
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#0077ff";
+  ctx.lineWidth = 4;
 
   const o = rot(0,0);
   const h = rot(L.arm,0);
@@ -173,57 +193,46 @@ function redraw(){
 }
 
 /* =============================
-   POINTER EVENTS
+   POINTER
 ============================= */
 canvas.addEventListener("pointerdown",e=>{
   const x=e.offsetX, y=e.offsetY;
   const o=rot(0,0);
 
-  /* MOVE MODE */
   if(MODE==="move"){
-    action = Math.abs(x-o.x) > Math.abs(y-o.y) ? "moveX" : "moveY";
+    action = Math.abs(x-o.x)>Math.abs(y-o.y) ? "moveX" : "moveY";
     dragStart = {x,y};
-    basePos = {x:L.x, y:L.y};
+    basePos = {x:L.x,y:L.y};
     return;
   }
 
-  /* DRAW MODE */
+  // DRAW MODE — choose nearest arm automatically
   const ph = project(x,y,L.angle);
-  if(Math.hypot(ph.x-x,ph.y-y)<10){
-    action="drawH";
-    start=ph;
-    hud.style.display="block";
-    return;
-  }
-
   const pv = project(x,y,L.angle+Math.PI/2);
-  if(Math.hypot(pv.x-x,pv.y-y)<10){
-    action="drawV";
-    start=pv;
-    hud.style.display="block";
-    return;
-  }
+
+  const dh = Math.hypot(ph.x-x,ph.y-y);
+  const dv = Math.hypot(pv.x-x,pv.y-y);
+
+  drawDir = dh < dv ? L.angle : L.angle+Math.PI/2;
+  start = project(x,y,drawDir);
+
+  hud.style.display="block";
+  action="draw";
 });
 
 canvas.addEventListener("pointermove",e=>{
   if(!action) return;
   const x=e.offsetX, y=e.offsetY;
 
-  /* Smooth scale movement */
   if(action==="moveX") L.x = basePos.x + (x - dragStart.x);
   if(action==="moveY") L.y = basePos.y + (y - dragStart.y);
 
-  /* Drawing */
-  if(action==="drawH"){
-    const p=project(x,y,L.angle);
-    preview={x1:start.x,y1:start.y,x2:p.x,y2:p.y};
-    hud.innerHTML=`Length: ${dist(start,p).toFixed(1)} px<br>Angle: ${(L.angle*180/Math.PI).toFixed(0)}°`;
-  }
-
-  if(action==="drawV"){
-    const p=project(x,y,L.angle+Math.PI/2);
-    preview={x1:start.x,y1:start.y,x2:p.x,y2:p.y};
-    hud.innerHTML=`Length: ${dist(start,p).toFixed(1)} px<br>Angle: ${((L.angle+Math.PI/2)*180/Math.PI).toFixed(0)}°`;
+  if(action==="draw"){
+    const p = project(x,y,drawDir);
+    preview = {x1:start.x,y1:start.y,x2:p.x,y2:p.y};
+    hud.innerHTML =
+      `Length: ${dist(start,p).toFixed(0)} px<br>`+
+      `Angle: ${(drawDir*180/Math.PI).toFixed(0)}°`;
   }
 
   redraw();
@@ -240,7 +249,7 @@ canvas.addEventListener("pointerup",()=>{
 });
 
 /* =============================
-   ROTATE SCALE (double click)
+   ROTATE (dbl click pivot)
 ============================= */
 canvas.addEventListener("dblclick",e=>{
   if(MODE!=="move") return;
@@ -260,13 +269,11 @@ drawBtn.onclick=()=>{
   drawBtn.classList.add("active");
   moveBtn.classList.remove("active");
 };
-
 moveBtn.onclick=()=>{
   MODE="move";
   moveBtn.classList.add("active");
   drawBtn.classList.remove("active");
 };
-
 clearBtn.onclick=()=>{
   lines.length=0;
   redraw();
@@ -274,7 +281,7 @@ clearBtn.onclick=()=>{
 
 redraw();
 
-/* version: 7.1.0 */
+/* version: 8.0.0 */
 </script>
 
 </body>
