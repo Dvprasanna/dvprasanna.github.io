@@ -22,18 +22,13 @@ body{
   padding:6px 12px;
   font-size:14px;
 }
-button{
-  background:#444;
-  color:#fff;
-  border:none;
-  padding:6px 14px;
-  border-radius:4px;
+#mode{
+  font-weight:bold;
+  color:#0ff;
 }
-button.active{ background:#0aa; }
 #info{
   margin-left:auto;
   font-family:monospace;
-  opacity:0.9;
 }
 canvas{
   display:block;
@@ -56,9 +51,7 @@ canvas{
 <body>
 
 <div id="toolbar">
-  <button id="drawBtn" class="active">DRAW</button>
-  <button id="moveBtn">MOVE DRAFTER</button>
-  <button id="clearBtn">CLEAR</button>
+  MODE: <span id="mode">DRAW</span>
   <div id="info"></div>
 </div>
 
@@ -69,7 +62,7 @@ canvas{
 /* =============================
    CONFIG
 ============================= */
-const SNAP_UNIT = 10; // px snapping
+const SNAP_UNIT = 10; // px
 
 /* =============================
    SETUP
@@ -78,6 +71,7 @@ const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const hud = document.getElementById("hud");
 const info = document.getElementById("info");
+const modeLabel = document.getElementById("mode");
 
 function resize(){
   canvas.width = innerWidth;
@@ -91,6 +85,10 @@ window.onresize = resize;
    MODE
 ============================= */
 let MODE = "draw"; // draw | move
+function toggleMode(){
+  MODE = MODE === "draw" ? "move" : "draw";
+  modeLabel.textContent = MODE.toUpperCase();
+}
 
 /* =============================
    L-SCALE STATE
@@ -111,19 +109,13 @@ let start = null;
 let preview = null;
 let dragStart = null;
 let basePos = null;
-let drawDir = null; // angle used for drawing
-
+let drawDir = null;
 const lines = [];
 
 /* =============================
    MATH
 ============================= */
-function rot(x,y){
-  const c=Math.cos(L.angle), s=Math.sin(L.angle);
-  return { x:L.x+x*c-y*s, y:L.y+x*s+y*c };
-}
-
-function snapLen(v){
+function snap(v){
   return Math.round(v / SNAP_UNIT) * SNAP_UNIT;
 }
 
@@ -131,7 +123,7 @@ function project(px,py,dir){
   const dx = px - L.x;
   const dy = py - L.y;
   let t = dx*Math.cos(dir) + dy*Math.sin(dir);
-  t = snapLen(t);
+  t = snap(t);
   t = Math.max(0, Math.min(L.arm, t));
   return {
     x: L.x + Math.cos(dir)*t,
@@ -150,9 +142,9 @@ function dist(a,b){
 function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  /* Draw final lines */
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
+  // Final lines
+  ctx.strokeStyle="#000";
+  ctx.lineWidth=2;
   for(const l of lines){
     ctx.beginPath();
     ctx.moveTo(l.x1,l.y1);
@@ -160,7 +152,7 @@ function redraw(){
     ctx.stroke();
   }
 
-  /* Preview */
+  // Preview
   if(preview){
     ctx.setLineDash([6,4]);
     ctx.beginPath();
@@ -170,23 +162,25 @@ function redraw(){
     ctx.setLineDash([]);
   }
 
-  /* Drafter */
+  // Drafter (both arms positive)
   ctx.save();
-  ctx.globalAlpha = 0.35;
-  ctx.strokeStyle = "#0077ff";
-  ctx.lineWidth = 4;
+  ctx.globalAlpha=0.35;
+  ctx.strokeStyle="#0077ff";
+  ctx.lineWidth=4;
 
-  const o = rot(0,0);
-  const h = rot(L.arm,0);
-  const v = rot(0,-L.arm);
+  const ox=L.x, oy=L.y;
+  const hx=ox+Math.cos(L.angle)*L.arm;
+  const hy=oy+Math.sin(L.angle)*L.arm;
+  const vx=ox+Math.cos(L.angle+Math.PI/2)*L.arm;
+  const vy=oy+Math.sin(L.angle+Math.PI/2)*L.arm;
 
   ctx.beginPath();
-  ctx.moveTo(o.x,o.y); ctx.lineTo(h.x,h.y);
-  ctx.moveTo(o.x,o.y); ctx.lineTo(v.x,v.y);
+  ctx.moveTo(ox,oy); ctx.lineTo(hx,hy);
+  ctx.moveTo(ox,oy); ctx.lineTo(vx,vy);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.arc(o.x,o.y,12,0,Math.PI*2);
+  ctx.arc(ox,oy,12,0,Math.PI*2);
   ctx.stroke();
 
   ctx.restore();
@@ -197,40 +191,37 @@ function redraw(){
 ============================= */
 canvas.addEventListener("pointerdown",e=>{
   const x=e.offsetX, y=e.offsetY;
-  const o=rot(0,0);
 
   if(MODE==="move"){
-    action = Math.abs(x-o.x)>Math.abs(y-o.y) ? "moveX" : "moveY";
-    dragStart = {x,y};
-    basePos = {x:L.x,y:L.y};
+    action = Math.abs(x-L.x) > Math.abs(y-L.y) ? "moveX" : "moveY";
+    dragStart={x,y};
+    basePos={x:L.x,y:L.y};
     return;
   }
 
-  // DRAW MODE — choose nearest arm automatically
+  // DRAW MODE — auto choose nearest arm
   const ph = project(x,y,L.angle);
   const pv = project(x,y,L.angle+Math.PI/2);
-
   const dh = Math.hypot(ph.x-x,ph.y-y);
   const dv = Math.hypot(pv.x-x,pv.y-y);
 
   drawDir = dh < dv ? L.angle : L.angle+Math.PI/2;
   start = project(x,y,drawDir);
-
-  hud.style.display="block";
   action="draw";
+  hud.style.display="block";
 });
 
 canvas.addEventListener("pointermove",e=>{
   if(!action) return;
   const x=e.offsetX, y=e.offsetY;
 
-  if(action==="moveX") L.x = basePos.x + (x - dragStart.x);
-  if(action==="moveY") L.y = basePos.y + (y - dragStart.y);
+  if(action==="moveX") L.x = basePos.x + (x-dragStart.x);
+  if(action==="moveY") L.y = basePos.y + (y-dragStart.y);
 
   if(action==="draw"){
     const p = project(x,y,drawDir);
-    preview = {x1:start.x,y1:start.y,x2:p.x,y2:p.y};
-    hud.innerHTML =
+    preview={x1:start.x,y1:start.y,x2:p.x,y2:p.y};
+    hud.innerHTML=
       `Length: ${dist(start,p).toFixed(0)} px<br>`+
       `Angle: ${(drawDir*180/Math.PI).toFixed(0)}°`;
   }
@@ -249,39 +240,18 @@ canvas.addEventListener("pointerup",()=>{
 });
 
 /* =============================
-   ROTATE (dbl click pivot)
+   DOUBLE CLICK = MODE SWITCH
 ============================= */
-canvas.addEventListener("dblclick",e=>{
-  if(MODE!=="move") return;
-  const o=rot(0,0);
-  if(Math.hypot(e.offsetX-o.x,e.offsetY-o.y)<15){
-    const i=L.snapAngles.indexOf(L.angle);
-    L.angle=L.snapAngles[(i+1)%L.snapAngles.length];
-    redraw();
-  }
+canvas.addEventListener("dblclick",()=>{
+  toggleMode();
 });
 
 /* =============================
-   BUTTONS
+   INIT
 ============================= */
-drawBtn.onclick=()=>{
-  MODE="draw";
-  drawBtn.classList.add("active");
-  moveBtn.classList.remove("active");
-};
-moveBtn.onclick=()=>{
-  MODE="move";
-  moveBtn.classList.add("active");
-  drawBtn.classList.remove("active");
-};
-clearBtn.onclick=()=>{
-  lines.length=0;
-  redraw();
-};
-
 redraw();
 
-/* version: 8.0.0 */
+/* version: 9.0.0 */
 </script>
 
 </body>
