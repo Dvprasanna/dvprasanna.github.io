@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>DOS CAD – DEBUG</title>
+<title>DOS CAD – LOG MODE</title>
 
 <style>
 html,body{
@@ -15,26 +15,41 @@ html,body{
   overflow:hidden;
 }
 #canvas{ background:#000; display:block; }
+
 #console{
-  position:fixed; bottom:0; left:0; right:0;
+  position:fixed;
+  bottom:0; left:0; right:0;
   background:#111;
+  border-top:1px solid #222;
 }
-#out{
-  padding:4px 8px;
+
+#log{
+  height:120px;
+  overflow:auto;
+  font-size:12px;
+  padding:4px 6px;
   border-bottom:1px solid #222;
 }
+
 #bar{
-  display:flex; align-items:center;
-  height:44px; padding:0 8px;
+  display:flex;
+  align-items:center;
+  height:44px;
+  padding:0 8px;
 }
+
 #cmd{
   flex:1;
-  background:#000; color:#0f0;
-  border:none; outline:none;
+  background:#000;
+  color:#0f0;
+  border:none;
+  outline:none;
 }
+
 #btn{
   margin-left:6px;
-  background:#000; color:#0f0;
+  background:#000;
+  color:#0f0;
   border:1px solid #0f0;
 }
 </style>
@@ -45,7 +60,7 @@ html,body{
 <canvas id="canvas"></canvas>
 
 <div id="console">
-  <div id="out">READY</div>
+  <div id="log"></div>
   <form id="bar">
     <span>&gt;</span>
     <input id="cmd" autocomplete="off">
@@ -55,9 +70,26 @@ html,body{
 
 <script>
 /* =========================
-   DBG-01 : SCRIPT LOADED
+   LOG SYSTEM (TEXT FILE)
 ========================= */
-console.log("DBG-01 script loaded");
+const logBox = document.getElementById("log");
+let logCount = 0;
+
+function LOG(type, msg){
+  logCount++;
+  const t = new Date().toLocaleTimeString();
+  logBox.innerHTML += `[${logCount}] ${t} ${type}: ${msg}<br>`;
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+const DBG = msg => LOG("DBG", msg);
+const OK  = msg => LOG("OK ", msg);
+const ERR = msg => LOG("ERR", msg);
+
+/* =========================
+   SCRIPT START
+========================= */
+DBG("script loaded");
 
 /* =========================
    CANVAS SETUP
@@ -66,9 +98,9 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 function resize(){
-  console.log("DBG-02 resize()");
+  DBG("resize()");
   canvas.width = innerWidth;
-  canvas.height = innerHeight - 88;
+  canvas.height = innerHeight - 164;
   draw();
 }
 addEventListener("resize", resize);
@@ -84,7 +116,7 @@ let lines = [];
    DRAW
 ========================= */
 function draw(){
-  console.log("DBG-03 draw()");
+  DBG("draw()");
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.save();
   ctx.translate(canvas.width/2, canvas.height/2);
@@ -116,73 +148,60 @@ function draw(){
 }
 
 /* =========================
-   OUTPUT
-========================= */
-const out = document.getElementById("out");
-function ok(t){ out.textContent="OK: "+t; }
-function err(t){ out.textContent="ERR: "+t; }
-
-/* =========================
    COMMAND EXECUTION
 ========================= */
 function exec(cmd){
-  console.log("DBG-04 exec() called with:", cmd);
+  DBG(`exec("${cmd}")`);
 
   cmd = cmd.trim();
   if(!cmd){
-    console.log("DBG-05 empty command");
+    DBG("empty command");
     return;
   }
 
   const p = cmd.split(/\s+/);
 
-  // QUERY
   if(cmd === "?"){
-    console.log("DBG-06 query cursor");
-    return ok(`X=${cursor.x} Y=${cursor.y}`);
+    OK(`X=${cursor.x} Y=${cursor.y}`);
+    return;
   }
 
-  // DRAW RIGHT
   if(p[0] === "r"){
-    console.log("DBG-07 draw right", p[1]);
     const n = Number(p[1]);
-    if(isNaN(n)) return err("invalid number");
+    if(isNaN(n)) return ERR("invalid number");
+
     lines.push({
       x1:cursor.x, y1:cursor.y,
       x2:cursor.x+n, y2:cursor.y
     });
+
     cursor.x += n;
     draw();
-    return ok("line drawn");
+    OK(`line drawn (${n})`);
+    return;
   }
 
-  err("unknown command");
+  ERR("unknown command");
 }
 
 /* =========================
-   INPUT HANDLING (CRITICAL)
+   INPUT HANDLING
 ========================= */
 const form = document.getElementById("bar");
 const input = document.getElementById("cmd");
-const btn = document.getElementById("btn");
 
 function handleExecute(e){
-  console.log("DBG-08 handleExecute()");
   e.preventDefault();
-
-  const value = input.value;   // IMPORTANT: capture first
-  console.log("DBG-09 captured value:", value);
-
+  DBG("handleExecute()");
+  const v = input.value;
+  DBG(`input="${v}"`);
   input.value="";
   input.focus();
-
-  exec(value);
+  exec(v);
 }
 
 form.addEventListener("submit", handleExecute);
-btn.addEventListener("click", handleExecute);
-
-console.log("DBG-10 handlers attached");
+DBG("input handler attached");
 input.focus();
 </script>
 
