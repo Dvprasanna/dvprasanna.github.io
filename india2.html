@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Rangoli Designer (7×7)</title>
+<style>
+  body { font-family: sans-serif; text-align: center; margin: 20px; }
+  #grid { display: inline-grid; grid-template-columns: repeat(7, 40px); gap: 2px; }
+  .cell { width: 40px; height: 40px; background: white; border: 1px solid #ccc; cursor: pointer; }
+  .cell.filled { background: #000; }
+  button { margin: 5px; padding: 8px 12px; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<h2>Rangoli Designer (7×7)</h2>
+
+<div id="controls">
+  <button onclick="undo()">Undo</button>
+  <button onclick="clearGrid()">Clear</button>
+  <button onclick="exportPNG()">Export PNG</button>
+</div>
+
+<div id="grid"></div>
+
+<script>
+  const gridEl = document.getElementById("grid");
+  const history = [];
+
+  // Build 7×7 grid
+  for (let r = 0; r < 7; r++) {
+    for (let c = 0; c < 7; c++) {
+      const cell = document.createElement("div");
+      cell.classList.add("cell");
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      cell.addEventListener("click", () => {
+        cell.classList.toggle("filled");
+        history.push({ cell, prev: !cell.classList.contains("filled") });
+      });
+      gridEl.appendChild(cell);
+    }
+  }
+
+  // Undo last action
+  function undo() {
+    const last = history.pop();
+    if (last) {
+      if (last.prev) last.cell.classList.add("filled");
+      else last.cell.classList.remove("filled");
+    }
+  }
+
+  // Clear grid
+  function clearGrid() {
+    document.querySelectorAll(".cell.filled").forEach(cell => {
+      cell.classList.remove("filled");
+    });
+    history.length = 0;
+  }
+
+  // Export as PNG
+  function exportPNG() {
+    const scale = 20;
+    const canvas = document.createElement("canvas");
+    canvas.width = 7 * scale;
+    canvas.height = 7 * scale;
+    const ctx = canvas.getContext("2d");
+
+    document.querySelectorAll(".cell").forEach((cell, idx) => {
+      const x = (idx % 7) * scale;
+      const y = Math.floor(idx / 7) * scale;
+      ctx.fillStyle = cell.classList.contains("filled") ? "#000" : "#fff";
+      ctx.fillRect(x, y, scale, scale);
+    });
+
+    const link = document.createElement("a");
+    link.download = "rangoli-7x7.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  }
+</script>
+
+<p>by prasan support me $</p>
+
+</body>
+</html>
