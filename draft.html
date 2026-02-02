@@ -24,6 +24,13 @@ body{
 }
 #mode{ color:#0ff; font-weight:bold; }
 #info{ margin-left:auto; font-family:monospace; }
+button{
+  background:#444;
+  color:#fff;
+  border:none;
+  padding:6px 14px;
+  border-radius:4px;
+}
 canvas{ display:block; background:#fff; }
 #hud{
   position:absolute;
@@ -42,7 +49,8 @@ canvas{ display:block; background:#fff; }
 <body>
 
 <div id="toolbar">
-  MODE: <span id="mode">DRAW</span>
+  MODE: <span id="mode">MOVE</span>
+  <button id="clearBtn">CLEAR</button>
   <div id="info"></div>
 </div>
 
@@ -54,7 +62,7 @@ canvas{ display:block; background:#fff; }
 const SNAP_UNIT = 10;
 const DOUBLE_TAP_TIME = 300;
 const LONG_PRESS_TIME = 500;
-const ARM_WIDTH = 18;   // visual thickness of L-scale
+const ARM_WIDTH = 18;
 
 /* ================= SETUP ================= */
 const canvas = document.getElementById("c");
@@ -62,6 +70,7 @@ const ctx = canvas.getContext("2d");
 const hud = document.getElementById("hud");
 const info = document.getElementById("info");
 const modeLabel = document.getElementById("mode");
+const clearBtn = document.getElementById("clearBtn");
 
 function resize(){
   canvas.width = innerWidth;
@@ -71,7 +80,10 @@ function resize(){
 resize(); onresize = resize;
 
 /* ================= MODE ================= */
-let MODE = "draw";
+// START IN MOVE MODE
+let MODE = "move"; // move | draw
+modeLabel.textContent = "MOVE";
+
 function toggleMode(){
   MODE = MODE === "draw" ? "move" : "draw";
   modeLabel.textContent = MODE.toUpperCase();
@@ -80,8 +92,8 @@ function toggleMode(){
 /* ================= L-SCALE ================= */
 const ANGLES = [0,30,45,60,90].map(a=>a*Math.PI/180);
 const L = {
-  x: 240,
-  y: 300,
+  x: canvas.width / 2,
+  y: canvas.height / 2,
   angleIndex: 0,
   arm: 380
 };
@@ -116,7 +128,7 @@ function projectFromOrigin(px,py,dir){
   };
 }
 
-/* ================= DRAW L-SCALE (REAL SHAPE) ================= */
+/* ================= DRAW ================= */
 function drawArm(x,y,dir){
   ctx.save();
   ctx.translate(x,y);
@@ -131,7 +143,13 @@ function drawArm(x,y,dir){
 function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // drawn lines
+  /* ---- center reference dot ---- */
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.arc(canvas.width/2, canvas.height/2, 3, 0, Math.PI*2);
+  ctx.fill();
+
+  /* ---- drawn lines ---- */
   ctx.strokeStyle="#000";
   ctx.lineWidth=2;
   for(const l of lines){
@@ -141,7 +159,7 @@ function redraw(){
     ctx.stroke();
   }
 
-  // preview
+  /* ---- preview ---- */
   if(preview){
     ctx.setLineDash([6,4]);
     ctx.beginPath();
@@ -151,7 +169,7 @@ function redraw(){
     ctx.setLineDash([]);
   }
 
-  // L-scale (solid shape)
+  /* ---- L-scale ---- */
   ctx.save();
   ctx.globalAlpha=0.35;
   ctx.fillStyle="#4da3ff";
@@ -162,10 +180,10 @@ function redraw(){
   drawArm(L.x,L.y,a);
   drawArm(L.x,L.y,a+Math.PI/2);
 
-  // pivot
   ctx.beginPath();
   ctx.arc(L.x,L.y,12,0,Math.PI*2);
   ctx.stroke();
+
   ctx.restore();
 }
 
@@ -174,7 +192,7 @@ canvas.addEventListener("pointerdown",e=>{
   const x=e.offsetX, y=e.offsetY;
   const now=Date.now();
 
-  // double tap → mode switch
+  /* double tap → mode switch */
   if(
     lastTapPos &&
     now-lastTapTime<DOUBLE_TAP_TIME &&
@@ -189,7 +207,7 @@ canvas.addEventListener("pointerdown",e=>{
   lastTapTime=now;
   lastTapPos={x,y};
 
-  // long press on pivot → angle
+  /* long press on pivot → rotate */
   longPress=false;
   if(Math.hypot(x-L.x,y-L.y)<15){
     pressTimer=setTimeout(()=>{
@@ -207,7 +225,7 @@ canvas.addEventListener("pointerdown",e=>{
     return;
   }
 
-  // DRAW MODE (origin only)
+  /* draw mode */
   const a=ANGLES[L.angleIndex];
   const p1=projectFromOrigin(x,y,a);
   const p2=projectFromOrigin(x,y,a+Math.PI/2);
@@ -249,10 +267,18 @@ canvas.addEventListener("pointerup",()=>{
   redraw();
 });
 
+/* ================= CLEAR ================= */
+clearBtn.onclick=()=>{
+  lines.length = 0;
+  preview = null;
+  hud.style.display="none";
+  redraw();
+};
+
 /* ================= INIT ================= */
 redraw();
 
-/* version: 11.0.0 */
+/* version: 11.2.0 */
 </script>
 
 </body>
