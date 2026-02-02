@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Canvas CMD – g & d</title>
+<title>Canvas CMD – Stable</title>
 
 <style>
 html,body{
@@ -57,35 +57,65 @@ html,body{
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-/* global origin g = (0,0) fixed at document left-bottom */
-
-/* document size */
 let docW = 0;
 let docH = 0;
+let lastDocH = 0;
 
+/* g = fixed at (0,0) left-bottom */
 /* local origin (relative to g) */
 let local = { x:0, y:0 };
-
 /* cursor (relative to local) */
 let cursor = { x:0, y:0 };
 
 let lines = [];
 
 /* =========================
-   RESIZE / INIT
+   HELP TEXT (SINGLE SOURCE)
+========================= */
+function helpText(){
+  return `
+Available commands:
+
+?              show cursor position
+d              show document width & height
+
+g m x y        move LOCAL origin relative to global (0,0)
+
+r n            draw right
+l n            draw left
+u n            draw up
+d n            draw down
+a n deg        draw at angle
+
+m x y          move cursor (relative to local)
+
+undo           remove last line
+cls            clear drawing
+`.trim();
+}
+
+/* =========================
+   RESIZE (KEYBOARD SAFE)
 ========================= */
 function resize(){
-  docW = window.innerWidth;
-  docH = window.innerHeight - 44;
+  const vh = window.innerHeight;
+  const vw = window.innerWidth;
+
+  if (Math.abs(vh - lastDocH) < 100) return;
+  lastDocH = vh;
+
+  docW = vw;
+  docH = vh - 44;
 
   canvas.width = docW;
   canvas.height = docH;
 
-  /* initial local origin = center of canvas */
-  local.x = docW / 2;
-  local.y = docH / 2;
+  // initial local origin only once
+  if (local.x === 0 && local.y === 0){
+    local.x = docW / 2;
+    local.y = docH / 2;
+  }
 
-  cursor = {x:0,y:0};
   draw();
 }
 window.addEventListener("resize", resize);
@@ -98,25 +128,23 @@ function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   ctx.save();
-
-  /* document coordinate system: left-bottom */
   ctx.translate(0, canvas.height);
   ctx.scale(1,-1);
 
-  /* document axes */
+  // document axes
   ctx.strokeStyle="#333";
   ctx.beginPath();
   ctx.moveTo(0,0); ctx.lineTo(docW,0);
   ctx.moveTo(0,0); ctx.lineTo(0,docH);
   ctx.stroke();
 
-  /* local origin marker */
+  // local origin
   ctx.fillStyle="#ff0";
   ctx.beginPath();
   ctx.arc(local.x, local.y, 4, 0, Math.PI*2);
   ctx.fill();
 
-  /* lines */
+  // lines
   ctx.strokeStyle="#fff";
   lines.forEach(l=>{
     ctx.beginPath();
@@ -125,10 +153,9 @@ function draw(){
     ctx.stroke();
   });
 
-  /* cursor */
+  // cursor
   const cx = local.x + cursor.x;
   const cy = local.y + cursor.y;
-
   ctx.fillStyle="#0f0";
   ctx.beginPath();
   ctx.arc(cx, cy, 3, 0, Math.PI*2);
@@ -163,20 +190,20 @@ function execCommand(text){
 
   const p = text.split(/\s+/);
 
-  /* cursor position */
+  // ?
   if(p[0] === "?"){
     alert(`X=${cursor.x} Y=${cursor.y}`);
     return;
   }
 
-  /* document size */
-  if(p[0] === "d"){
+  // d (document size)
+  if(p[0] === "d" && p.length === 1){
     alert(`WIDTH=${docW} HEIGHT=${docH}`);
     return;
   }
 
-  /* g m x y  → move LOCAL origin relative to g */
-  if(p[0] === "g" && p[1] === "m"){
+  // g m x y
+  if(p[0] === "g" && p[1] === "m" && p.length === 4){
     local.x = Number(p[2]);
     local.y = Number(p[3]);
     cursor = {x:0,y:0};
@@ -184,42 +211,41 @@ function execCommand(text){
     return;
   }
 
-  /* drawing & movement */
   switch(p[0]){
-    case "r": drawLine(Number(p[1]),0); break;
-    case "l": drawLine(-Number(p[1]),0); break;
-    case "u": drawLine(0,Number(p[1])); break;
-    case "d": drawLine(0,-Number(p[1])); break;
+    case "r": return drawLine(Number(p[1]),0);
+    case "l": return drawLine(-Number(p[1]),0);
+    case "u": return drawLine(0,Number(p[1]));
+    case "d": return drawLine(0,-Number(p[1]));
 
     case "a":{
       const len = Number(p[1]);
       const deg = Number(p[2]);
-      const rad = deg * Math.PI / 180;
-      drawLine(len*Math.cos(rad), len*Math.sin(rad));
-      break;
+      if(isNaN(len)||isNaN(deg)) break;
+      const rad = deg*Math.PI/180;
+      return drawLine(len*Math.cos(rad), len*Math.sin(rad));
     }
 
     case "m":
+      if(p.length !== 3) break;
       cursor.x = Number(p[1]);
       cursor.y = Number(p[2]);
       draw();
-      break;
+      return;
 
     case "undo":
       lines.pop();
       draw();
-      break;
+      return;
 
     case "cls":
       lines=[];
-      local = {x:docW/2, y:docH/2};
       cursor={x:0,y:0};
       draw();
-      break;
-
-    default:
-      alert("Unknown command");
+      return;
   }
+
+  // ❗ SINGLE FALLBACK — ALWAYS SHOW HELP
+  alert("Unknown or invalid command\n\n" + helpText());
 }
 
 /* =========================
