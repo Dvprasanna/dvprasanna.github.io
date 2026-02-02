@@ -3,17 +3,48 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>L Scale – Parallel Only Drafter</title>
+<title>L-Scale Mini Drafter (Modes)</title>
 
 <style>
-body{margin:0;background:#ccc;touch-action:none;font-family:system-ui}
-#bar{height:40px;background:#222;color:#fff;padding:6px}
-canvas{display:block;background:#fff}
+body{
+  margin:0;
+  background:#ccc;
+  font-family:system-ui;
+  touch-action:none;
+}
+#toolbar{
+  height:44px;
+  background:#222;
+  color:#fff;
+  display:flex;
+  gap:8px;
+  padding:6px;
+}
+button{
+  background:#444;
+  color:#fff;
+  border:none;
+  padding:6px 14px;
+  border-radius:4px;
+}
+button.active{
+  background:#0aa;
+}
+canvas{
+  display:block;
+  background:#fff;
+}
 </style>
 </head>
 
 <body>
-<div id="bar">Double-tap circle → set angle snap</div>
+
+<div id="toolbar">
+  <button id="drawBtn" class="active">DRAW MODE</button>
+  <button id="moveBtn">MOVE SCALE</button>
+  <button id="clearBtn">CLEAR</button>
+</div>
+
 <canvas id="c"></canvas>
 
 <script>
@@ -25,27 +56,33 @@ const ctx = c.getContext("2d");
 
 function resize(){
   c.width = innerWidth;
-  c.height = innerHeight - 40;
+  c.height = innerHeight - 44;
 }
-resize(); onresize = resize;
+resize();
+onresize = resize;
+
+/* =========================
+   MODE STATE
+========================= */
+let MODE = "draw"; // "draw" | "move"
 
 /* =========================
    L-SCALE STATE
 ========================= */
 const L = {
-  x: 200,
+  x: 220,
   y: 300,
   angle: 0,
-  arm: 350,
+  arm: 360,
   snapAngles: [0,30,45,60,90].map(a=>a*Math.PI/180)
 };
 
-let mode = null; // "moveX" | "moveY" | "drawH" | "drawV"
+let action = null; // drawH | drawV | moveX | moveY
 let start = null;
 const lines = [];
 
 /* =========================
-   MATH HELPERS
+   MATH
 ========================= */
 function rot(x,y){
   const cA=Math.cos(L.angle), sA=Math.sin(L.angle);
@@ -55,7 +92,7 @@ function rot(x,y){
   };
 }
 
-function proj(px,py,dir){
+function project(px,py,dir){
   const dx = px - L.x;
   const dy = py - L.y;
   const t = dx*Math.cos(dir) + dy*Math.sin(dir);
@@ -90,70 +127,73 @@ function redraw(preview){
     ctx.setLineDash([]);
   }
 
-  // L arms
+  // scale arms
   ctx.lineWidth = 3;
-  ctx.beginPath();
   const o = rot(0,0);
   const h = rot(L.arm,0);
   const v = rot(0,-L.arm);
+
+  ctx.beginPath();
   ctx.moveTo(o.x,o.y); ctx.lineTo(h.x,h.y);
   ctx.moveTo(o.x,o.y); ctx.lineTo(v.x,v.y);
   ctx.stroke();
 
-  // pivot circle
+  // pivot
   ctx.beginPath();
   ctx.arc(o.x,o.y,12,0,Math.PI*2);
   ctx.stroke();
 }
 
 /* =========================
-   POINTER
+   POINTER HANDLING
 ========================= */
 c.addEventListener("pointerdown",e=>{
   const x=e.offsetX, y=e.offsetY;
   const o=rot(0,0);
 
-  // pivot hit
-  if(Math.hypot(x-o.x,y-o.y)<15){
-    mode="pivot";
+  /* -------- MOVE MODE -------- */
+  if(MODE==="move"){
+    if(Math.hypot(x-o.x,y-o.y)<15){
+      action="pivot";
+      return;
+    }
+    action = Math.abs(x-o.x) > Math.abs(y-o.y) ? "moveX" : "moveY";
     return;
   }
 
-  // near horizontal arm → draw parallel
-  const ph = proj(x,y,L.angle);
-  if(Math.hypot(ph.x-x,ph.y-y)<10){
-    mode="drawH";
-    start=ph;
-    return;
-  }
+  /* -------- DRAW MODE -------- */
+  if(MODE==="draw"){
+    const ph = project(x,y,L.angle);
+    if(Math.hypot(ph.x-x,ph.y-y)<10){
+      action="drawH";
+      start=ph;
+      return;
+    }
 
-  // near vertical arm → draw parallel
-  const pv = proj(x,y,L.angle+Math.PI/2);
-  if(Math.hypot(pv.x-x,pv.y-y)<10){
-    mode="drawV";
-    start=pv;
-    return;
+    const pv = project(x,y,L.angle+Math.PI/2);
+    if(Math.hypot(pv.x-x,pv.y-y)<10){
+      action="drawV";
+      start=pv;
+      return;
+    }
   }
-
-  // move scale (orthogonal only)
-  mode = Math.abs(x-o.x) > Math.abs(y-o.y) ? "moveX" : "moveY";
 });
 
 c.addEventListener("pointermove",e=>{
-  if(!mode) return;
+  if(!action) return;
   const x=e.offsetX, y=e.offsetY;
 
-  if(mode==="moveX") L.x = x;
-  if(mode==="moveY") L.y = y;
+  if(action==="moveX") L.x = x;
+  if(action==="moveY") L.y = y;
 
-  if(mode==="drawH"){
-    const p = proj(x,y,L.angle);
+  if(action==="drawH"){
+    const p = project(x,y,L.angle);
     redraw({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
     return;
   }
 
-  if(mode==="drawV"){
-    const p = proj(x,y,L.angle+Math.PI/2);
+  if(action==="drawV"){
+    const p = project(x,y,L.angle+Math.PI/2);
     redraw({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
     return;
   }
@@ -162,22 +202,23 @@ c.addEventListener("pointermove",e=>{
 });
 
 c.addEventListener("pointerup",e=>{
-  if(mode==="drawH"){
-    const p=proj(e.offsetX,e.offsetY,L.angle);
+  if(action==="drawH"){
+    const p = project(e.offsetX,e.offsetY,L.angle);
     lines.push({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
   }
-  if(mode==="drawV"){
-    const p=proj(e.offsetX,e.offsetY,L.angle+Math.PI/2);
+  if(action==="drawV"){
+    const p = project(e.offsetX,e.offsetY,L.angle+Math.PI/2);
     lines.push({x1:start.x,y1:start.y,x2:p.x,y2:p.y});
   }
-  mode=null;
+  action=null;
   redraw();
 });
 
 /* =========================
-   DOUBLE CLICK = ANGLE SNAP
+   DOUBLE CLICK = ROTATE
 ========================= */
 c.addEventListener("dblclick",e=>{
+  if(MODE!=="move") return;
   const o=rot(0,0);
   if(Math.hypot(e.offsetX-o.x,e.offsetY-o.y)<15){
     const i=L.snapAngles.indexOf(L.angle);
@@ -186,9 +227,29 @@ c.addEventListener("dblclick",e=>{
   }
 });
 
+/* =========================
+   BUTTONS
+========================= */
+drawBtn.onclick=()=>{
+  MODE="draw";
+  drawBtn.classList.add("active");
+  moveBtn.classList.remove("active");
+};
+
+moveBtn.onclick=()=>{
+  MODE="move";
+  moveBtn.classList.add("active");
+  drawBtn.classList.remove("active");
+};
+
+clearBtn.onclick=()=>{
+  lines.length=0;
+  redraw();
+};
+
 redraw();
 
-/* version: 4.0.0 */
+/* version: 5.0.0 */
 </script>
 </body>
 </html>
