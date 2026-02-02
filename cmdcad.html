@@ -1,79 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>DOS CAD</title>
+
 <style>
-  html,body{
-    margin:0; padding:0; height:100%;
-    background:#000; color:#0f0;
-    font-family: monospace;
-    overflow:hidden;
-  }
-  #canvas{
-    display:block;
-    background:#000;
-  }
-  #bar{
-    position:fixed;
-    bottom:0; left:0; right:0;
-    height:44px;
-    background:#111;
-    display:flex;
-    align-items:center;
-    padding:0 8px;
-  }
-  #prompt{ color:#0f0; margin-right:6px; }
-  #cmd{
-    flex:1;
-    background:#000;
-    color:#0f0;
-    border:none;
-    outline:none;
-    font-size:16px;
-  }
+html,body{
+  margin:0;
+  padding:0;
+  height:100%;
+  background:#000;
+  color:#0f0;
+  font-family: monospace;
+  overflow:hidden;
+}
+
+/* CANVAS */
+#canvas{
+  display:block;
+  background:#000;
+}
+
+/* COMMAND BAR */
+#bar{
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  height:48px;
+  background:#111;
+  display:flex;
+  align-items:center;
+  padding:0 8px;
+  box-sizing:border-box;
+}
+
+#prompt{
+  margin-right:6px;
+  color:#0f0;
+}
+
+#cmd{
+  flex:1;
+  background:#000;
+  color:#0f0;
+  border:none;
+  outline:none;
+  font-size:16px;
+  font-family: monospace;
+}
+
+#enterBtn{
+  margin-left:6px;
+  background:#000;
+  color:#0f0;
+  border:1px solid #0f0;
+  padding:6px 10px;
+  font-size:16px;
+  font-family: monospace;
+}
+
+#enterBtn:active{
+  background:#0f0;
+  color:#000;
+}
 </style>
 </head>
+
 <body>
 
 <canvas id="canvas"></canvas>
 
-<div id="bar">
+<form id="bar">
   <span id="prompt">&gt;</span>
   <input id="cmd" autocomplete="off" />
-</div>
+  <button id="enterBtn" type="submit">⏎</button>
+</form>
 
 <script>
-/* ================== CANVAS ================== */
+/* =========================
+   CANVAS SETUP
+========================= */
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 function resize(){
   canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight - 44;
+  canvas.height = window.innerHeight - 48;
   render();
 }
 window.addEventListener("resize", resize);
 resize();
 
-/* ================== STATE ================== */
-let origin = {x:0,y:0};
-let cursor = {x:0,y:0};
+/* =========================
+   STATE
+========================= */
+let origin = {x:0, y:0};
+let cursor = {x:0, y:0};
 
 let view = { zoom:1, panX:0, panY:0 };
 
 let pen = { thk:1, col:"#ffffff" };
 
 let geometry = [];
+
 let undoStack = [];
 let redoStack = [];
 
-/* ================== UTILS ================== */
-function rad(a){ return a * Math.PI / 180; }
+/* =========================
+   UTILITIES
+========================= */
+const rad = a => a * Math.PI / 180;
 
-function pushUndo(){
-  undoStack.push(JSON.stringify({origin,cursor,geometry,pen}));
+function snapshot(){
+  undoStack.push(JSON.stringify({
+    origin, cursor, geometry, pen
+  }));
   redoStack.length = 0;
 }
 
@@ -93,7 +136,9 @@ function drawLine(x1,y1,x2,y2){
   });
 }
 
-/* ================== RENDER ================== */
+/* =========================
+   RENDER
+========================= */
 function render(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -101,7 +146,7 @@ function render(){
   ctx.translate(canvas.width/2 + view.panX, canvas.height/2 + view.panY);
   ctx.scale(view.zoom, -view.zoom);
 
-  // axes
+  /* axes */
   ctx.strokeStyle="#333";
   ctx.lineWidth=1/view.zoom;
   ctx.beginPath();
@@ -109,17 +154,17 @@ function render(){
   ctx.moveTo(0,-10000); ctx.lineTo(0,10000);
   ctx.stroke();
 
-  // geometry
+  /* geometry */
   geometry.forEach(l=>{
-    ctx.strokeStyle=l.col;
-    ctx.lineWidth=l.thk/view.zoom;
+    ctx.strokeStyle = l.col;
+    ctx.lineWidth = l.thk / view.zoom;
     ctx.beginPath();
     ctx.moveTo(origin.x+l.x1, origin.y+l.y1);
     ctx.lineTo(origin.x+l.x2, origin.y+l.y2);
     ctx.stroke();
   });
 
-  // cursor
+  /* cursor */
   ctx.fillStyle="#0f0";
   ctx.beginPath();
   ctx.arc(origin.x+cursor.x, origin.y+cursor.y, 3/view.zoom, 0, Math.PI*2);
@@ -128,38 +173,40 @@ function render(){
   ctx.restore();
 }
 
-/* ================== COMMANDS ================== */
+/* =========================
+   COMMAND EXECUTION
+========================= */
 function exec(cmd){
   cmd = cmd.trim();
   if(!cmd) return;
 
   const t = cmd.split(/\s+/);
 
-  // HELP
+  /* HELP */
   if(cmd==="help"){
     alert(
-`origin x,y  set origin
-r l u d n   draw in direction
-or a,n      draw by angle,length
-m <cmd>     move without draw
-?           show cursor
-thk n       line thickness
-col c       line color
-zoom n      zoom view
-pan home    center view
-un / re     undo / redo
-cls         clear`
+`origin x,y   set origin
+r l u d n    draw in direction
+or a,n       draw by angle,length
+m <cmd>      move without drawing
+thk n        line thickness
+col c        line color
+zoom n       view zoom
+pan home     center view
+?            show cursor
+un / re      undo / redo
+cls          clear`
     );
     return;
   }
 
-  // QUERY
+  /* QUERY */
   if(cmd==="?"){
-    alert(`X=${cursor.x} Y=${cursor.y}`);
+    alert("X="+cursor.x+" Y="+cursor.y);
     return;
   }
 
-  // UNDO / REDO
+  /* UNDO / REDO */
   if(cmd==="un"){
     if(undoStack.length){
       redoStack.push(JSON.stringify({origin,cursor,geometry,pen}));
@@ -168,6 +215,7 @@ cls         clear`
     }
     return;
   }
+
   if(cmd==="re"){
     if(redoStack.length){
       undoStack.push(JSON.stringify({origin,cursor,geometry,pen}));
@@ -177,7 +225,7 @@ cls         clear`
     return;
   }
 
-  // CLS
+  /* CLEAR */
   if(cmd==="cls"){
     origin={x:0,y:0};
     cursor={x:0,y:0};
@@ -187,80 +235,92 @@ cls         clear`
     return;
   }
 
-  // VIEW
+  /* VIEW */
   if(t[0]==="zoom"){
     view.zoom = parseFloat(t[1]) || 1;
-    render(); return;
-  }
-  if(cmd==="pan home"){
-    view.panX=0; view.panY=0;
-    render(); return;
-  }
-
-  // STYLE
-  if(t[0]==="thk"){
-    pushUndo();
-    pen.thk = parseFloat(t[1])||1;
+    render();
     return;
   }
+
+  if(cmd==="pan home"){
+    view.panX=0; view.panY=0;
+    render();
+    return;
+  }
+
+  /* STYLE */
+  if(t[0]==="thk"){
+    snapshot();
+    pen.thk = parseFloat(t[1]) || 1;
+    return;
+  }
+
   if(t[0]==="col"){
-    pushUndo();
+    snapshot();
     pen.col = t[1] || "#fff";
     return;
   }
 
-  // ORIGIN
+  /* ORIGIN */
   if(t[0]==="origin"){
-    pushUndo();
-    const [x,y]=t[1].split(",").map(Number);
-    origin={x,y};
-    render(); return;
+    snapshot();
+    const [x,y] = t[1].split(",").map(Number);
+    origin = {x,y};
+    render();
+    return;
   }
 
-  // MOVE MODIFIER
-  let moveOnly=false;
+  /* MOVE MODIFIER */
+  let moveOnly = false;
   if(t[0]==="m"){
-    moveOnly=true;
+    moveOnly = true;
     t.shift();
   }
 
-  // OR (ANGLE)
+  /* ANGLE DRAW */
   if(t[0]==="or"){
-    pushUndo();
-    const [a,n]=t[1].split(",").map(Number);
+    snapshot();
+    const [a,n] = t[1].split(",").map(Number);
     const nx = cursor.x + Math.cos(rad(a))*n;
     const ny = cursor.y + Math.sin(rad(a))*n;
     if(!moveOnly) drawLine(cursor.x,cursor.y,nx,ny);
-    cursor={x:nx,y:ny};
-    render(); return;
+    cursor = {x:nx,y:ny};
+    render();
+    return;
   }
 
-  // DIRECTIONS
-  const dir = t[0];
-  const n = parseFloat(t[1]);
+  /* DIRECTION DRAW */
   const map = {r:0,u:90,l:180,d:270};
-  if(map[dir]!==undefined){
-    pushUndo();
-    const a = map[dir];
+  if(map[t[0]]!==undefined){
+    snapshot();
+    const n = parseFloat(t[1]);
+    const a = map[t[0]];
     const nx = cursor.x + Math.cos(rad(a))*n;
     const ny = cursor.y + Math.sin(rad(a))*n;
     if(!moveOnly) drawLine(cursor.x,cursor.y,nx,ny);
-    cursor={x:nx,y:ny};
-    render(); return;
+    cursor = {x:nx,y:ny};
+    render();
+    return;
   }
 
   alert("ERR");
 }
 
-/* ================== INPUT ================== */
+/* =========================
+   INPUT HANDLING
+========================= */
+const form = document.getElementById("bar");
 const input = document.getElementById("cmd");
-input.focus();
-input.addEventListener("keydown",e=>{
-  if(e.key==="Enter"){
-    exec(input.value);
-    input.value="";
-  }
+
+form.addEventListener("submit", e=>{
+  e.preventDefault();
+  exec(input.value);
+  input.value="";
+  input.focus();
 });
+
+input.focus();
 </script>
+
 </body>
 </html>
