@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Canvas CMD – g Prefix Final</title>
+<title>Canvas CMD – Final</title>
 
 <style>
 html,body{
@@ -59,8 +59,9 @@ const ctx = canvas.getContext("2d");
 
 let docW = 0;
 let docH = 0;
+let lastDocH = 0;
 
-/* local origin (relative to document/global 0,0) */
+/* local origin (relative to document 0,0) */
 let local = { x:0, y:0 };
 
 /* cursor (relative to local) */
@@ -69,16 +70,56 @@ let cursor = { x:0, y:0 };
 let lines = [];
 
 /* =========================
-   RESIZE / INIT
+   HELP TEXT
+========================= */
+function helpText(){
+  return `
+Available commands:
+
+Cursor based (chained):
+r n            draw right
+l n            draw left
+u n            draw up
+d n            draw down
+a n deg        draw at angle
+m x y          move cursor
+
+Local-origin based (one-shot):
+g r n
+g l n
+g u n
+g d n
+g a n deg
+
+Move local origin:
+g m x y        set local origin from global (0,0)
+
+Info:
+?              cursor position
+d              document width & height
+
+Edit:
+undo           remove last line
+cls            clear drawing
+`.trim();
+}
+
+/* =========================
+   RESIZE (KEYBOARD SAFE)
 ========================= */
 function resize(){
-  docW = window.innerWidth;
-  docH = window.innerHeight - 44;
+  const vh = window.innerHeight;
+  const vw = window.innerWidth;
+
+  if (Math.abs(vh - lastDocH) < 100) return;
+  lastDocH = vh;
+
+  docW = vw;
+  docH = vh - 44;
 
   canvas.width = docW;
   canvas.height = docH;
 
-  /* initial local origin = center (only once) */
   if (local.x === 0 && local.y === 0){
     local.x = docW / 2;
     local.y = docH / 2;
@@ -96,7 +137,6 @@ function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   ctx.save();
-  /* document coordinates: left-bottom */
   ctx.translate(0, canvas.height);
   ctx.scale(1,-1);
 
@@ -107,7 +147,7 @@ function draw(){
   ctx.moveTo(0,0); ctx.lineTo(0,docH);
   ctx.stroke();
 
-  /* local origin marker */
+  /* local origin */
   ctx.fillStyle="#ff0";
   ctx.beginPath();
   ctx.arc(local.x, local.y, 4, 0, Math.PI*2);
@@ -134,10 +174,8 @@ function draw(){
 }
 
 /* =========================
-   GEOMETRY HELPERS
+   GEOMETRY
 ========================= */
-
-/* cursor-based drawing (chained) */
 function drawFromCursor(dx,dy){
   const x1 = local.x + cursor.x;
   const y1 = local.y + cursor.y;
@@ -152,7 +190,6 @@ function drawFromCursor(dx,dy){
   draw();
 }
 
-/* origin-based drawing (g prefix, one-shot) */
 function drawFromLocal(dx,dy){
   const x1 = local.x;
   const y1 = local.y;
@@ -172,27 +209,23 @@ function execCommand(text){
 
   const p = text.split(/\s+/);
 
-  /* detect g prefix */
-  let useLocalOrigin = false;
+  let useLocal = false;
   if(p[0] === "g"){
-    useLocalOrigin = true;
+    useLocal = true;
     p.shift();
   }
 
-  /* ? → cursor position */
   if(p[0] === "?"){
     alert(`X=${cursor.x} Y=${cursor.y}`);
     return;
   }
 
-  /* d → document size */
   if(p[0] === "d" && p.length === 1){
     alert(`WIDTH=${docW} HEIGHT=${docH}`);
     return;
   }
 
-  /* drawing commands */
-  const drawFn = useLocalOrigin ? drawFromLocal : drawFromCursor;
+  const drawFn = useLocal ? drawFromLocal : drawFromCursor;
 
   switch(p[0]){
     case "r": return drawFn(Number(p[1]),0);
@@ -203,28 +236,39 @@ function execCommand(text){
     case "a":{
       const len = Number(p[1]);
       const deg = Number(p[2]);
-      const rad = deg * Math.PI / 180;
+      if(isNaN(len)||isNaN(deg)) break;
+      const rad = deg*Math.PI/180;
       return drawFn(len*Math.cos(rad), len*Math.sin(rad));
     }
 
     case "m":
-      if(useLocalOrigin){
-        /* g m x y → move local origin */
+      if(useLocal){
         local.x = Number(p[1]);
         local.y = Number(p[2]);
         cursor = {x:0,y:0};
         draw();
         return;
       }else{
-        /* m x y → move cursor */
         cursor.x = Number(p[1]);
         cursor.y = Number(p[2]);
         draw();
         return;
       }
+
+    case "undo":
+      lines.pop();
+      draw();
+      return;
+
+    case "cls":
+      lines=[];
+      cursor={x:0,y:0};
+      draw();
+      return;
   }
 
-  alert("Unknown command");
+  /* ❗ single fallback */
+  alert("Unknown or invalid command\n\n" + helpText());
 }
 
 /* =========================
