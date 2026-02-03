@@ -1,269 +1,156 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CMD CAD v1</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Keyboard CAD Canvas v1.0</title>
 
 <style>
-html,body{
-  margin:0;
-  height:100%;
-  background:#0b0b0b;
-  font-family:-apple-system,BlinkMacSystemFont,monospace;
-  color:#9aff9a;
-}
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #111;
+    overflow: hidden;
+    font-family: monospace;
+  }
 
-/* ===== LAYOUT ===== */
-#app{
-  height:100%;
-  display:flex;
-  flex-direction:column;
-}
+  canvas {
+    display: block;
+    border: 2px solid white;
+    background: #000;
+  }
 
-/* ===== CANVAS AREA ===== */
-#viewport{
-  flex:0 0 55%;
-  overflow:auto;
-  background:#000;
-  border-bottom:1px solid #222;
-}
-
-#canvas{
-  width:800px;
-  height:800px;
-  margin:auto;
-  display:block;
-  background:#000;
-}
-
-/* ===== PANEL ===== */
-#panel{
-  flex:1;
-  padding:10px;
-  background:#0f0f0f;
-}
-
-/* DISPLAY */
-#display{
-  height:34px;
-  line-height:34px;
-  padding:0 12px;
-  margin-bottom:10px;
-  background:#000;
-  border-radius:8px;
-  white-space:nowrap;
-  overflow:hidden;
-}
-
-/* KEYBOARD */
-#keys{
-  display:grid;
-  grid-template-columns:repeat(6,1fr);
-  gap:10px;
-}
-
-.key{
-  background:#151515;
-  border-radius:10px;
-  text-align:center;
-  padding:14px 0;
-  user-select:none;
-  font-size:15px;
-}
-.key:active{ background:#2a2a2a; }
-.key.action{ background:#1f3f1f; }
-.key.run{ background:#2a6f2a; }
+  #hud {
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    color: #0f0;
+    font-size: 14px;
+    background: rgba(0,0,0,0.6);
+    padding: 6px 10px;
+    border: 1px solid #0f0;
+  }
 </style>
 </head>
 
 <body>
 
-<div id="app">
-
-  <div id="viewport">
-    <canvas id="canvas" width="800" height="800"></canvas>
-  </div>
-
-  <div id="panel">
-    <div id="display">READY</div>
-
-    <div id="keys">
-      <div class="key">r</div>
-      <div class="key">l</div>
-      <div class="key">u</div>
-      <div class="key">d</div>
-      <div class="key">a</div>
-      <div class="key run">RUN</div>
-
-      <div class="key">100</div>
-      <div class="key">200</div>
-      <div class="key">300</div>
-      <div class="key">400</div>
-      <div class="key action">DEL</div>
-      <div class="key">↵</div>
-
-      <div class="key">m</div>
-      <div class="key">undo</div>
-      <div class="key">clr</div>
-      <div class="key">reset</div>
-      <div class="key">?</div>
-      <div></div>
-    </div>
-  </div>
-
-</div>
+<canvas id="cad"></canvas>
+<div id="hud">CMD: <span id="cmd"></span></div>
 
 <script>
-/* ===== CANVAS ===== */
-const canvas = document.getElementById("canvas");
+/* =======================
+   CANVAS SETUP
+======================= */
+const canvas = document.getElementById("cad");
 const ctx = canvas.getContext("2d");
 
-/* ===== STATE ===== */
-let cursor = {x:0,y:0};
-let lines = [];
-let undoStack = [];
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  drawCursor();
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* =======================
+   STATE
+======================= */
+let x = canvas.width / 2;
+let y = canvas.height / 2;
 let buffer = "";
+let shift = false;
+let grid = false;
 
-/* ===== DRAW ===== */
-function draw(){
-  ctx.clearRect(0,0,800,800);
+/* =======================
+   DRAWING
+======================= */
+ctx.strokeStyle = "#fff";
+ctx.lineWidth = 1;
 
-  ctx.save();
-  ctx.translate(0,800);
-  ctx.scale(1,-1);
-
-  ctx.strokeStyle="#333";
-  ctx.strokeRect(0,0,800,800);
-
-  ctx.strokeStyle="#fff";
-  ctx.lineWidth=2;
-  lines.forEach(l=>{
-    ctx.beginPath();
-    ctx.moveTo(l.x1,l.y1);
-    ctx.lineTo(l.x2,l.y2);
-    ctx.stroke();
-  });
-
-  ctx.fillStyle="#0f0";
+function drawLine(dx, dy) {
   ctx.beginPath();
-  ctx.arc(cursor.x,cursor.y,4,0,Math.PI*2);
+  ctx.moveTo(x, y);
+  x += dx;
+  y += dy;
+  ctx.lineTo(x, y);
+  ctx.stroke();
+  drawCursor();
+}
+
+function drawCursor() {
+  ctx.fillStyle = "red";
+  ctx.beginPath();
+  ctx.arc(x, y, 3, 0, Math.PI * 2);
   ctx.fill();
-
-  ctx.restore();
-}
-draw();
-
-/* ===== EXEC COMMAND ===== */
-function exec(cmd){
-  cmd = cmd.trim();
-  if(!cmd) return;
-
-  const p = cmd.split(/\s+/);
-
-  /* INFO */
-  if(p[0]==="?"){
-    display.textContent = `X=${cursor.x} Y=${cursor.y}`;
-    return;
-  }
-
-  /* CLEAR / RESET */
-  if(p[0]==="clr"){
-    lines=[]; undoStack=[];
-    display.textContent="CLEARED";
-    draw(); return;
-  }
-  if(p[0]==="reset"){
-    lines=[]; undoStack=[];
-    cursor={x:0,y:0};
-    display.textContent="RESET";
-    draw(); return;
-  }
-
-  /* UNDO */
-  if(p[0]==="undo"){
-    if(lines.length){
-      lines.pop();
-      cursor = undoStack.pop() || cursor;
-      draw();
-    }
-    return;
-  }
-
-  /* MOVE */
-  if(p[0]==="m"){
-    if(p.length===3 && !isNaN(p[1]) && !isNaN(p[2])){
-      cursor.x=+p[1]; cursor.y=+p[2];
-      draw(); return;
-    }
-    if(p.length===3){
-      const n=+p[2];
-      if(p[1]==="r") cursor.x+=n;
-      if(p[1]==="l") cursor.x-=n;
-      if(p[1]==="u") cursor.y+=n;
-      if(p[1]==="d") cursor.y-=n;
-      draw(); return;
-    }
-  }
-
-  /* ANGLE */
-  if(p[0]==="a" && p.length===3){
-    const len=+p[1], deg=+p[2];
-    const rad=deg*Math.PI/180;
-    const nx=cursor.x+len*Math.cos(rad);
-    const ny=cursor.y+len*Math.sin(rad);
-    undoStack.push({...cursor});
-    lines.push({x1:cursor.x,y1:cursor.y,x2:nx,y2:ny});
-    cursor={x:nx,y:ny};
-    draw(); return;
-  }
-
-  /* BASIC DRAW */
-  if(p.length===2){
-    const n=+p[1];
-    if(isNaN(n)) return;
-
-    let nx=cursor.x, ny=cursor.y;
-    if(p[0]==="r") nx+=n;
-    if(p[0]==="l") nx-=n;
-    if(p[0]==="u") ny+=n;
-    if(p[0]==="d") ny-=n;
-
-    undoStack.push({...cursor});
-    lines.push({x1:cursor.x,y1:cursor.y,x2:nx,y2:ny});
-    cursor={x:nx,y:ny};
-    draw();
-  }
 }
 
-/* ===== DISPLAY ===== */
-function updateDisplay(){
-  const last = buffer.split("\n").filter(Boolean).slice(-1)[0];
-  display.textContent = last || "READY";
+/* =======================
+   GRID
+======================= */
+function drawGrid() {
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < canvas.width; i += 50) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, canvas.height);
+    ctx.stroke();
+  }
+  for (let i = 0; i < canvas.height; i += 50) {
+    ctx.beginPath();
+    ctx.moveTo(0, i);
+    ctx.lineTo(canvas.width, i);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = "#fff";
 }
 
-/* ===== KEYBOARD ===== */
-document.querySelectorAll(".key").forEach(k=>{
-  k.onclick=()=>{
-    const v=k.textContent;
+/* =======================
+   COMMAND EXECUTION
+======================= */
+function execute(cmd) {
+  const dir = cmd[0];
+  let val = parseInt(cmd.slice(1)) || 0;
 
-    if(v==="RUN"){
-      buffer.split("\n").forEach(exec);
-      buffer="";
-      updateDisplay();
-      return;
-    }
-    if(v==="DEL"){
-      buffer=buffer.slice(0,-1);
-      updateDisplay(); return;
-    }
-    if(v==="↵"){
-      buffer+="\n";
-      updateDisplay(); return;
-    }
-    buffer += (buffer.endsWith("\n")||buffer==="" ? v : " "+v);
-    updateDisplay();
-  };
+  if (shift) val *= 10;
+
+  if (dir === "r") drawLine(val, 0);
+  if (dir === "l") drawLine(-val, 0);
+  if (dir === "u") drawLine(0, -val);
+  if (dir === "d") drawLine(0, val);
+}
+
+/* =======================
+   KEYBOARD INPUT
+======================= */
+document.addEventListener("keydown", e => {
+  if (e.key === "Shift") shift = true;
+
+  if (e.key >= "0" && e.key <= "9") {
+    buffer += e.key;
+  }
+
+  if (["r","l","u","d"].includes(e.key)) {
+    buffer = e.key;
+  }
+
+  if (e.key === "Enter") {
+    execute(buffer);
+    buffer = "";
+  }
+
+  if (e.key === "g") {
+    grid = !grid;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if (grid) drawGrid();
+  }
+
+  document.getElementById("cmd").textContent = buffer;
+});
+
+document.addEventListener("keyup", e => {
+  if (e.key === "Shift") shift = false;
 });
 </script>
 
