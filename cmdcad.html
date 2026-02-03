@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CMD Canvas – Offset</title>
+<title>CMD Canvas – Offset Fixed</title>
 
 <style>
 html,body{
@@ -62,8 +62,8 @@ let local={x:0,y:0};
 let cursor={x:0,y:0};
 let lines=[];
 
-/* offset flag (one-shot) */
-let offsetOnce = false;
+/* one-shot flags */
+let offsetOnce=false;
 
 /* =========================
    HELP
@@ -84,7 +84,7 @@ g l   global → local
 g c   global → cursor
 l c   local → cursor
 
-Offset (one-shot mirror):
+Offset (mirror start):
 o r n | o u n | etc
 
 Move local origin:
@@ -104,7 +104,7 @@ cls
 }
 
 /* =========================
-   RESIZE (SAFE)
+   RESIZE (MOBILE SAFE)
 ========================= */
 function resize(){
   const vh=innerHeight, vw=innerWidth;
@@ -114,8 +114,9 @@ function resize(){
   docW=vw; docH=vh-44;
   canvas.width=docW; canvas.height=docH;
 
-  if(local.x===0&&local.y===0){
-    local.x=docW/2; local.y=docH/2;
+  if(local.x===0 && local.y===0){
+    local.x=docW/2;
+    local.y=docH/2;
   }
   draw();
 }
@@ -162,24 +163,19 @@ function draw(){
 /* =========================
    GEOMETRY
 ========================= */
-function drawSegment(startX,startY,dx,dy){
-  lines.push({
-    x1:startX,
-    y1:startY,
-    x2:startX+dx,
-    y2:startY+dy
-  });
+function drawSegment(x,y,dx,dy){
+  lines.push({x1:x,y1:y,x2:x+dx,y2:y+dy});
   draw();
 }
 
 /* =========================
-   COMMAND EXEC
+   COMMAND EXECUTION
 ========================= */
 function execCommand(t){
   t=t.trim(); if(!t) return;
 
-  /* math */
-  if(t.startsWith("math(")&&t.endsWith(")")){
+  /* math(expr) */
+  if(t.startsWith("math(") && t.endsWith(")")){
     try{
       const e=t.slice(5,-1);
       const v=new Function(
@@ -191,18 +187,22 @@ function execCommand(t){
     return;
   }
 
-  if(t==="o"){ offsetOnce=true; return; }
-
   let p=t.split(/\s+/);
 
+  /* OFFSET PREFIX */
+  if(p[0]==="o"){
+    offsetOnce=true;
+    p.shift();
+  }
+
   /* reference lines */
-  if(p[0]==="g"&&p[1]==="l"&&p.length===2){
+  if(p[0]==="g" && p[1]==="l" && p.length===2){
     lines.push({x1:0,y1:0,x2:local.x,y2:local.y}); draw(); return;
   }
-  if(p[0]==="g"&&p[1]==="c"&&p.length===2){
+  if(p[0]==="g" && p[1]==="c" && p.length===2){
     lines.push({x1:0,y1:0,x2:local.x+cursor.x,y2:local.y+cursor.y}); draw(); return;
   }
-  if(p[0]==="l"&&p[1]==="c"&&p.length===2){
+  if(p[0]==="l" && p[1]==="c" && p.length===2){
     lines.push({x1:local.x,y1:local.y,x2:local.x+cursor.x,y2:local.y+cursor.y}); draw(); return;
   }
 
@@ -210,10 +210,10 @@ function execCommand(t){
   if(p[0]==="g"){ useLocal=true; p.shift(); }
 
   if(p[0]==="?"){ alert(`X=${cursor.x} Y=${cursor.y}`); return; }
-  if(p[0]==="d"&&p.length===1){ alert(`W=${docW} H=${docH}`); return; }
+  if(p[0]==="d" && p.length===1){ alert(`W=${docW} H=${docH}`); return; }
 
-  const baseX = useLocal ? local.x : local.x + cursor.x;
-  const baseY = useLocal ? local.y : local.y + cursor.y;
+  const baseX = useLocal ? local.x : local.x+cursor.x;
+  const baseY = useLocal ? local.y : local.y+cursor.y;
 
   function doDraw(dx,dy){
     if(offsetOnce){
@@ -222,7 +222,8 @@ function execCommand(t){
     }else{
       drawSegment(baseX, baseY, dx, dy);
       if(!useLocal){
-        cursor.x+=dx; cursor.y+=dy;
+        cursor.x+=dx;
+        cursor.y+=dy;
       }
     }
   }
@@ -239,7 +240,8 @@ function execCommand(t){
     }
     case "m":
       if(useLocal){
-        local.x=+p[1]; local.y=+p[2]; cursor={x:0,y:0};
+        local.x=+p[1]; local.y=+p[2];
+        cursor={x:0,y:0};
       }else{
         cursor.x=+p[1]; cursor.y=+p[2];
       }
@@ -257,7 +259,8 @@ function execCommand(t){
 const input=document.getElementById("cmd");
 run.onclick=()=>{
   execCommand(input.value);
-  input.value=""; input.focus();
+  input.value="";
+  input.focus();
 };
 input.focus();
 </script>
