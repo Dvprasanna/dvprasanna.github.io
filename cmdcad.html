@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Canvas CMD – Final</title>
+<title>Canvas CMD – Math</title>
 
 <style>
 html,body{
@@ -61,12 +61,8 @@ let docW = 0;
 let docH = 0;
 let lastDocH = 0;
 
-/* local origin (relative to document 0,0) */
-let local = { x:0, y:0 };
-
-/* cursor (relative to local) */
-let cursor = { x:0, y:0 };
-
+let local = { x:0, y:0 };   // local origin
+let cursor = { x:0, y:0 };  // cursor relative to local
 let lines = [];
 
 /* =========================
@@ -94,6 +90,9 @@ g a n deg
 Move local origin:
 g m x y        set local origin from global (0,0)
 
+Math:
+math(expr)     evaluate expression (sqrt, sin, cos, pi)
+
 Info:
 ?              cursor position
 d              document width & height
@@ -110,13 +109,11 @@ cls            clear drawing
 function resize(){
   const vh = window.innerHeight;
   const vw = window.innerWidth;
-
   if (Math.abs(vh - lastDocH) < 100) return;
   lastDocH = vh;
 
   docW = vw;
   docH = vh - 44;
-
   canvas.width = docW;
   canvas.height = docH;
 
@@ -124,7 +121,6 @@ function resize(){
     local.x = docW / 2;
     local.y = docH / 2;
   }
-
   draw();
 }
 window.addEventListener("resize", resize);
@@ -135,25 +131,21 @@ resize();
 ========================= */
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-
   ctx.save();
   ctx.translate(0, canvas.height);
   ctx.scale(1,-1);
 
-  /* document axes */
   ctx.strokeStyle="#333";
   ctx.beginPath();
   ctx.moveTo(0,0); ctx.lineTo(docW,0);
   ctx.moveTo(0,0); ctx.lineTo(0,docH);
   ctx.stroke();
 
-  /* local origin */
   ctx.fillStyle="#ff0";
   ctx.beginPath();
   ctx.arc(local.x, local.y, 4, 0, Math.PI*2);
   ctx.fill();
 
-  /* lines */
   ctx.strokeStyle="#fff";
   lines.forEach(l=>{
     ctx.beginPath();
@@ -162,7 +154,6 @@ function draw(){
     ctx.stroke();
   });
 
-  /* cursor */
   const cx = local.x + cursor.x;
   const cy = local.y + cursor.y;
   ctx.fillStyle="#0f0";
@@ -179,25 +170,41 @@ function draw(){
 function drawFromCursor(dx,dy){
   const x1 = local.x + cursor.x;
   const y1 = local.y + cursor.y;
-
   cursor.x += dx;
   cursor.y += dy;
-
-  const x2 = local.x + cursor.x;
-  const y2 = local.y + cursor.y;
-
-  lines.push({x1,y1,x2,y2});
+  lines.push({x1,y1,x2:local.x+cursor.x,y2:local.y+cursor.y});
   draw();
 }
 
 function drawFromLocal(dx,dy){
-  const x1 = local.x;
-  const y1 = local.y;
-  const x2 = local.x + dx;
-  const y2 = local.y + dy;
-
-  lines.push({x1,y1,x2,y2});
+  lines.push({
+    x1:local.x,
+    y1:local.y,
+    x2:local.x+dx,
+    y2:local.y+dy
+  });
   draw();
+}
+
+/* =========================
+   SAFE MATH EVALUATION
+========================= */
+function evalMath(expr){
+  try{
+    const scope = {
+      sqrt: Math.sqrt,
+      sin: Math.sin,
+      cos: Math.cos,
+      tan: Math.tan,
+      pow: Math.pow,
+      pi: Math.PI,
+      e: Math.E
+    };
+    const fn = new Function(...Object.keys(scope), `return ${expr}`);
+    return fn(...Object.values(scope));
+  }catch(e){
+    return "ERROR: " + e.message;
+  }
 }
 
 /* =========================
@@ -207,8 +214,15 @@ function execCommand(text){
   text = text.trim();
   if(!text) return;
 
-  const p = text.split(/\s+/);
+  /* math(expr) */
+  if(text.startsWith("math(") && text.endsWith(")")){
+    const expr = text.slice(5,-1);
+    const result = evalMath(expr);
+    alert(`RESULT: ${result}`);
+    return;
+  }
 
+  const p = text.split(/\s+/);
   let useLocal = false;
   if(p[0] === "g"){
     useLocal = true;
@@ -232,20 +246,17 @@ function execCommand(text){
     case "l": return drawFn(-Number(p[1]),0);
     case "u": return drawFn(0,Number(p[1]));
     case "d": return drawFn(0,-Number(p[1]));
-
     case "a":{
       const len = Number(p[1]);
       const deg = Number(p[2]);
-      if(isNaN(len)||isNaN(deg)) break;
       const rad = deg*Math.PI/180;
       return drawFn(len*Math.cos(rad), len*Math.sin(rad));
     }
-
     case "m":
       if(useLocal){
         local.x = Number(p[1]);
         local.y = Number(p[2]);
-        cursor = {x:0,y:0};
+        cursor={x:0,y:0};
         draw();
         return;
       }else{
@@ -254,20 +265,12 @@ function execCommand(text){
         draw();
         return;
       }
-
     case "undo":
-      lines.pop();
-      draw();
-      return;
-
+      lines.pop(); draw(); return;
     case "cls":
-      lines=[];
-      cursor={x:0,y:0};
-      draw();
-      return;
+      lines=[]; cursor={x:0,y:0}; draw(); return;
   }
 
-  /* ❗ single fallback */
   alert("Unknown or invalid command\n\n" + helpText());
 }
 
@@ -275,14 +278,11 @@ function execCommand(text){
    EVENT HANDLER
 ========================= */
 const input = document.getElementById("cmd");
-const run = document.getElementById("run");
-
-run.addEventListener("click", ()=>{
+document.getElementById("run").onclick = ()=>{
   execCommand(input.value);
   input.value="";
   input.focus();
-});
-
+};
 input.focus();
 </script>
 
