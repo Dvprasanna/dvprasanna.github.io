@@ -134,32 +134,33 @@ function showHelp(){
  d n   draw down
  a n d draw at angle
 
-OFFSET
- o r n   centered offset draw
-
 MOVE
  m x y   move cursor absolute
- mr n    move right
- ml n    move left
- mu n    move up
- md n    move down
+ mr n    move cursor right
+ ml n    move cursor left
+ mu n    move cursor up
+ md n    move cursor down
+
+LOCAL MOVE
+ g m x y   move local absolute
+ g mr n    move local right
+ g ml n    move local left
+ g mu n    move local up
+ g md n    move local down
+
+OFFSET
+ o r n   centered offset draw
 
 REFERENCE
  g l     global -> local
  g c     global -> cursor
  l c     local  -> cursor
 
-QUERY
- ?       cursor position
-
 UTILITY
- cls     clear lines
- undo    undo last line
- reset   full reset
-
-PREFIX
- g       use local origin
- o       offset (one-shot)`
+ ?        cursor position
+ cls      clear lines
+ undo     undo last line
+ reset    full reset`
   );
 }
 
@@ -183,85 +184,90 @@ function execCommand(cmd){
     p.shift();
   }
 
-  // 5.2 queries / utility
+  // 5.2 utility
   if (p[0] === "?" && p.length === 1){
     alert(`X=${cursor.x} Y=${cursor.y}`);
     return;
   }
-  if (p[0] === "help" && p.length === 1){
-    showHelp();
-    return;
+  if (p[0] === "help"){
+    showHelp(); return;
   }
-  if (p[0] === "cls" && p.length === 1){
-    lines = [];
-    draw();
-    return;
+  if (p[0] === "cls"){
+    lines = []; draw(); return;
   }
-  if (p[0] === "undo" && p.length === 1){
-    lines.pop();
-    draw();
-    return;
+  if (p[0] === "undo"){
+    lines.pop(); draw(); return;
   }
-  if (p[0] === "reset" && p.length === 1){
+  if (p[0] === "reset"){
     lines = [];
     cursor = { x:0, y:0 };
-    local.x = docW / 2;
-    local.y = docH / 2;
-    draw();
-    return;
+    local.x = docW/2;
+    local.y = docH/2;
+    draw(); return;
   }
 
   // 5.3 reference
   if (useLocal && p[0] === "l" && p.length === 1){
-    lines.push({ x1:0, y1:0, x2:local.x, y2:local.y });
+    lines.push({ x1:0,y1:0,x2:local.x,y2:local.y });
     draw(); return;
   }
   if (useLocal && p[0] === "c" && p.length === 1){
     lines.push({
-      x1:0, y1:0,
-      x2:local.x + cursor.x,
-      y2:local.y + cursor.y
+      x1:0,y1:0,
+      x2:local.x+cursor.x,
+      y2:local.y+cursor.y
     });
     draw(); return;
   }
-  if (p[0] === "l" && p[1] === "c" && p.length === 2){
+  if (p[0] === "l" && p[1] === "c"){
     lines.push({
-      x1:local.x, y1:local.y,
-      x2:local.x + cursor.x,
-      y2:local.y + cursor.y
+      x1:local.x,y1:local.y,
+      x2:local.x+cursor.x,
+      y2:local.y+cursor.y
     });
     draw(); return;
   }
 
-  // 5.4 move
-  if (p[0] === "m" && p.length === 3){
+  // 5.4 move absolute
+  if (useLocal && p[0] === "m" && p.length === 3){
+    local.x = +p[1];
+    local.y = +p[2];
+    cursor = { x:0,y:0 };
+    draw(); return;
+  }
+  if (!useLocal && p[0] === "m" && p.length === 3){
     cursor.x = +p[1];
     cursor.y = +p[2];
     draw(); return;
   }
-  if (p[0] === "mr"){ cursor.x += +p[1]; draw(); return; }
-  if (p[0] === "ml"){ cursor.x -= +p[1]; draw(); return; }
-  if (p[0] === "mu"){ cursor.y += +p[1]; draw(); return; }
-  if (p[0] === "md"){ cursor.y -= +p[1]; draw(); return; }
 
-  // 5.5 draw
+  // 5.5 move relative
+  if (useLocal){
+    if (p[0] === "mr"){ local.x += +p[1]; cursor={x:0,y:0}; draw(); return; }
+    if (p[0] === "ml"){ local.x -= +p[1]; cursor={x:0,y:0}; draw(); return; }
+    if (p[0] === "mu"){ local.y += +p[1]; cursor={x:0,y:0}; draw(); return; }
+    if (p[0] === "md"){ local.y -= +p[1]; cursor={x:0,y:0}; draw(); return; }
+  } else {
+    if (p[0] === "mr"){ cursor.x += +p[1]; draw(); return; }
+    if (p[0] === "ml"){ cursor.x -= +p[1]; draw(); return; }
+    if (p[0] === "mu"){ cursor.y += +p[1]; draw(); return; }
+    if (p[0] === "md"){ cursor.y -= +p[1]; draw(); return; }
+  }
+
+  // 5.6 draw
   const baseX = useLocal ? local.x : local.x + cursor.x;
   const baseY = useLocal ? local.y : local.y + cursor.y;
 
   function drawLine(dx,dy){
     if (offset){
       lines.push({
-        x1: baseX - dx,
-        y1: baseY - dy,
-        x2: baseX + dx,
-        y2: baseY + dy
+        x1: baseX-dx, y1: baseY-dy,
+        x2: baseX+dx, y2: baseY+dy
       });
     } else {
       lines.push({
-        x1: baseX,
-        y1: baseY,
-        x2: baseX + dx,
-        y2: baseY + dy
+        x1: baseX, y1: baseY,
+        x2: baseX+dx, y2: baseY+dy
       });
       if (!useLocal){
         cursor.x += dx;
@@ -272,15 +278,14 @@ function execCommand(cmd){
   }
 
   switch(p[0]){
-    case "r": return drawLine(+p[1], 0);
-    case "l": return drawLine(-p[1], 0);
-    case "u": return drawLine(0, +p[1]);
-    case "d": return drawLine(0, -p[1]);
+    case "r": return drawLine(+p[1],0);
+    case "l": return drawLine(-p[1],0);
+    case "u": return drawLine(0,+p[1]);
+    case "d": return drawLine(0,-p[1]);
     case "a":{
-      const len = +p[1];
-      const deg = +p[2];
-      const rad = deg * Math.PI / 180;
-      return drawLine(len * Math.cos(rad), len * Math.sin(rad));
+      const len=+p[1], deg=+p[2];
+      const rad=deg*Math.PI/180;
+      return drawLine(len*Math.cos(rad), len*Math.sin(rad));
     }
   }
 
@@ -291,7 +296,7 @@ function execCommand(cmd){
 const input = document.getElementById("cmd");
 run.onclick = ()=>{
   execCommand(input.value);
-  input.value = "";
+  input.value="";
   input.focus();
 };
 input.focus();
