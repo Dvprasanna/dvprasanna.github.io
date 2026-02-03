@@ -14,11 +14,28 @@ html,body{
   font-family:monospace;
   overflow:hidden;
 }
+
+/* 🔴 RED = viewport / layout boundary */
+#canvas-wrap{
+  position:relative;
+  width:100%;
+  height:100%;
+  box-sizing:border-box;
+  border:2px solid red;
+}
+
+/* 🟢 GREEN = actual drawable canvas */
 #canvas{
   display:block;
   background:#000;
-  touch-action:none; /* REQUIRED for pinch */
+  width:100%;
+  height:100%;
+  box-sizing:border-box;
+  border:2px solid lime;
+  touch-action:none; /* required for pinch */
 }
+
+/* COMMAND BAR */
 #bar{
   position:fixed;
   bottom:0; left:0; right:0;
@@ -48,7 +65,9 @@ html,body{
 
 <body>
 
-<canvas id="canvas"></canvas>
+<div id="canvas-wrap">
+  <canvas id="canvas"></canvas>
+</div>
 
 <div id="bar">
   <input id="cmd" placeholder="r 600">
@@ -126,7 +145,7 @@ function draw(){
   ctx.translate(0, canvas.height);
   ctx.scale(1, -1);
 
-  /* axes */
+  /* axes (visual reference) */
   ctx.strokeStyle="#333";
   ctx.beginPath();
   ctx.moveTo(0,0); ctx.lineTo(canvas.width,0);
@@ -135,7 +154,7 @@ function draw(){
 
   /* lines */
   ctx.strokeStyle="#fff";
-  ctx.lineWidth=2/view.scale;
+  ctx.lineWidth = 2 / view.scale;
   for(const l of lines){
     ctx.beginPath();
     ctx.moveTo(l.x1, l.y1);
@@ -146,7 +165,7 @@ function draw(){
   /* cursor */
   ctx.fillStyle="#0f0";
   ctx.beginPath();
-  ctx.arc(cursor.x, cursor.y, 4/view.scale, 0, Math.PI*2);
+  ctx.arc(cursor.x, cursor.y, 4 / view.scale, 0, Math.PI*2);
   ctx.fill();
 
   ctx.restore();
