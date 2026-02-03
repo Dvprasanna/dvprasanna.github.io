@@ -17,25 +17,26 @@ html,body{
 #bar{
   position:fixed;
   bottom:0; left:0; right:0;
-  height:44px;
   background:#111;
+  padding:6px;
   display:flex;
-  align-items:center;
-  padding:0 8px;
+  gap:6px;
 }
 #cmd{
   flex:1;
+  height:80px;
   background:#000;
   color:#0f0;
   border:none;
   outline:none;
   font-size:16px;
+  resize:none;
 }
 #run{
-  margin-left:8px;
   background:#000;
   color:#0f0;
   border:1px solid #0f0;
+  padding:6px 10px;
 }
 </style>
 </head>
@@ -45,8 +46,7 @@ html,body{
 <canvas id="canvas"></canvas>
 
 <div id="bar">
-  <span>&gt;</span>
-  <input id="cmd" autocomplete="off">
+  <textarea id="cmd" placeholder="type or paste commands"></textarea>
   <button id="run">RUN</button>
 </div>
 
@@ -55,33 +55,29 @@ html,body{
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-let docW = 0;
-let docH = 0;
-let lastDocH = 0;
-
-let local  = { x:0, y:0 };
-let cursor = { x:0, y:0 };
-let lines  = [];
+let docW=0, docH=0, lastDocH=0;
+let local={x:0,y:0};
+let cursor={x:0,y:0};
+let lines=[];
 
 // 2 resize
 function resize(){
-  const vh = innerHeight;
-  const vw = innerWidth;
-  if (Math.abs(vh - lastDocH) < 100) return;
-  lastDocH = vh;
+  const vh=innerHeight, vw=innerWidth;
+  if (Math.abs(vh-lastDocH)<100) return;
+  lastDocH=vh;
 
-  docW = vw;
-  docH = vh - 44;
-  canvas.width  = docW;
-  canvas.height = docH;
+  docW=vw;
+  docH=vh-92;
+  canvas.width=docW;
+  canvas.height=docH;
 
-  if (local.x === 0 && local.y === 0){
-    local.x = docW / 2;
-    local.y = docH / 2;
+  if(local.x===0 && local.y===0){
+    local.x=docW/2;
+    local.y=docH/2;
   }
   draw();
 }
-addEventListener("resize", resize);
+addEventListener("resize",resize);
 resize();
 
 // 3 draw
@@ -106,16 +102,16 @@ function draw(){
 
   // lines
   ctx.strokeStyle="#fff";
-  lines.forEach(l=>{
+  for(const l of lines){
     ctx.beginPath();
     ctx.moveTo(l.x1,l.y1);
     ctx.lineTo(l.x2,l.y2);
     ctx.stroke();
-  });
+  }
 
   // cursor
-  const cx = local.x + cursor.x;
-  const cy = local.y + cursor.y;
+  const cx=local.x+cursor.x;
+  const cy=local.y+cursor.y;
   ctx.fillStyle="#0f0";
   ctx.beginPath();
   ctx.arc(cx,cy,3,0,Math.PI*2);
@@ -124,182 +120,104 @@ function draw(){
   ctx.restore();
 }
 
-// 4 help
-function showHelp(){
-  alert(
-`DRAW
- r n   draw right
- l n   draw left
- u n   draw up
- d n   draw down
- a n d draw at angle
-
-MOVE
- m x y   move cursor absolute
- mr n    move cursor right
- ml n    move cursor left
- mu n    move cursor up
- md n    move cursor down
-
-LOCAL MOVE
- g m x y   move local absolute
- g mr n    move local right
- g ml n    move local left
- g mu n    move local up
- g md n    move local down
-
-OFFSET
- o r n   centered offset draw
-
-REFERENCE
- g l     global -> local
- g c     global -> cursor
- l c     local  -> cursor
-
-UTILITY
- ?        cursor position
- cls      clear lines
- undo     undo last line
- reset    full reset`
-  );
-}
-
-// 5 command executor
+// 4 execute one command
 function execCommand(cmd){
-  cmd = cmd.trim();
-  if (!cmd) return;
+  cmd=cmd.trim();
+  if(!cmd) return;
 
-  let p = cmd.split(/\s+/);
+  let p=cmd.split(/\s+/);
+  let useLocal=false, offset=false;
 
-  // 5.1 prefixes
-  let useLocal = false;
-  let offset   = false;
+  if(p[0]==="o"){ offset=true; p.shift(); }
+  if(p[0]==="g"){ useLocal=true; p.shift(); }
 
-  if (p[0] === "o"){
-    offset = true;
-    p.shift();
+  // utility
+  if(p[0]==="?"){ alert(`X=${cursor.x} Y=${cursor.y}`); return; }
+  if(p[0]==="undo"){
+    if(lines.length) lines.pop();
+    draw(); return;
   }
-  if (p[0] === "g"){
-    useLocal = true;
-    p.shift();
-  }
-
-  // 5.2 utility
-  if (p[0] === "?" && p.length === 1){
-    alert(`X=${cursor.x} Y=${cursor.y}`);
-    return;
-  }
-  if (p[0] === "help"){
-    showHelp(); return;
-  }
-  if (p[0] === "cls"){
-    lines = []; draw(); return;
-  }
-  if (p[0] === "undo"){
-    lines.pop(); draw(); return;
-  }
-  if (p[0] === "reset"){
-    lines = [];
-    cursor = { x:0, y:0 };
-    local.x = docW/2;
-    local.y = docH/2;
+  if(p[0]==="cls"){ lines=[]; draw(); return; }
+  if(p[0]==="reset"){
+    lines=[];
+    cursor={x:0,y:0};
+    local.x=docW/2; local.y=docH/2;
     draw(); return;
   }
 
-  // 5.3 reference
-  if (useLocal && p[0] === "l" && p.length === 1){
-    lines.push({ x1:0,y1:0,x2:local.x,y2:local.y });
-    draw(); return;
-  }
-  if (useLocal && p[0] === "c" && p.length === 1){
-    lines.push({
-      x1:0,y1:0,
-      x2:local.x+cursor.x,
-      y2:local.y+cursor.y
-    });
-    draw(); return;
-  }
-  if (p[0] === "l" && p[1] === "c"){
-    lines.push({
-      x1:local.x,y1:local.y,
-      x2:local.x+cursor.x,
-      y2:local.y+cursor.y
-    });
+  // move absolute
+  if(p[0]==="m" && p.length===3){
+    if(useLocal){
+      local.x=+p[1]; local.y=+p[2];
+      cursor={x:0,y:0};
+    }else{
+      cursor.x=+p[1]; cursor.y=+p[2];
+    }
     draw(); return;
   }
 
-  // 5.4 move absolute
-  if (useLocal && p[0] === "m" && p.length === 3){
-    local.x = +p[1];
-    local.y = +p[2];
-    cursor = { x:0,y:0 };
-    draw(); return;
-  }
-  if (!useLocal && p[0] === "m" && p.length === 3){
-    cursor.x = +p[1];
-    cursor.y = +p[2];
+  // move relative
+  if(p[0].startsWith("m")){
+    const n=+p[1];
+    if(useLocal){
+      if(p[0]==="mr") local.x+=n;
+      if(p[0]==="ml") local.x-=n;
+      if(p[0]==="mu") local.y+=n;
+      if(p[0]==="md") local.y-=n;
+      cursor={x:0,y:0};
+    }else{
+      if(p[0]==="mr") cursor.x+=n;
+      if(p[0]==="ml") cursor.x-=n;
+      if(p[0]==="mu") cursor.y+=n;
+      if(p[0]==="md") cursor.y-=n;
+    }
     draw(); return;
   }
 
-  // 5.5 move relative
-  if (useLocal){
-    if (p[0] === "mr"){ local.x += +p[1]; cursor={x:0,y:0}; draw(); return; }
-    if (p[0] === "ml"){ local.x -= +p[1]; cursor={x:0,y:0}; draw(); return; }
-    if (p[0] === "mu"){ local.y += +p[1]; cursor={x:0,y:0}; draw(); return; }
-    if (p[0] === "md"){ local.y -= +p[1]; cursor={x:0,y:0}; draw(); return; }
-  } else {
-    if (p[0] === "mr"){ cursor.x += +p[1]; draw(); return; }
-    if (p[0] === "ml"){ cursor.x -= +p[1]; draw(); return; }
-    if (p[0] === "mu"){ cursor.y += +p[1]; draw(); return; }
-    if (p[0] === "md"){ cursor.y -= +p[1]; draw(); return; }
-  }
-
-  // 5.6 draw
-  const baseX = useLocal ? local.x : local.x + cursor.x;
-  const baseY = useLocal ? local.y : local.y + cursor.y;
+  // draw
+  const bx=useLocal?local.x:local.x+cursor.x;
+  const by=useLocal?local.y:local.y+cursor.y;
 
   function drawLine(dx,dy){
-    if (offset){
-      lines.push({
-        x1: baseX-dx, y1: baseY-dy,
-        x2: baseX+dx, y2: baseY+dy
-      });
-    } else {
-      lines.push({
-        x1: baseX, y1: baseY,
-        x2: baseX+dx, y2: baseY+dy
-      });
-      if (!useLocal){
-        cursor.x += dx;
-        cursor.y += dy;
-      }
+    if(offset){
+      lines.push({x1:bx-dx,y1:by-dy,x2:bx+dx,y2:by+dy});
+    }else{
+      lines.push({x1:bx,y1:by,x2:bx+dx,y2:by+dy});
+      if(!useLocal){ cursor.x+=dx; cursor.y+=dy; }
     }
     draw();
   }
 
-  switch(p[0]){
-    case "r": return drawLine(+p[1],0);
-    case "l": return drawLine(-p[1],0);
-    case "u": return drawLine(0,+p[1]);
-    case "d": return drawLine(0,-p[1]);
-    case "a":{
-      const len=+p[1], deg=+p[2];
-      const rad=deg*Math.PI/180;
-      return drawLine(len*Math.cos(rad), len*Math.sin(rad));
-    }
+  if(p[0]==="r") return drawLine(+p[1],0);
+  if(p[0]==="l") return drawLine(-p[1],0);
+  if(p[0]==="u") return drawLine(0,+p[1]);
+  if(p[0]==="d") return drawLine(0,-p[1]);
+  if(p[0]==="a"){
+    const len=+p[1], deg=+p[2];
+    const rad=deg*Math.PI/180;
+    return drawLine(len*Math.cos(rad),len*Math.sin(rad));
   }
 
-  alert("Unknown command");
+  alert("Unknown command: "+cmd);
+}
+
+// 5 batch execution
+function execBatch(text){
+  const list=text.split(/\n+/)
+    .map(l=>l.trim())
+    .filter(l=>l && !l.startsWith("//"));
+  for(const line of list) execCommand(line);
 }
 
 // 6 ui
-const input = document.getElementById("cmd");
-run.onclick = ()=>{
-  execCommand(input.value);
+const input=document.getElementById("cmd");
+run.onclick=()=>{
+  const text=input.value;
   input.value="";
   input.focus();
+  if(text.includes("\n")) execBatch(text);
+  else execCommand(text);
 };
-input.focus();
 </script>
 
 </body>
