@@ -56,9 +56,12 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 let docW=0, docH=0, lastDocH=0;
-let local={x:0,y:0};
-let cursor={x:0,y:0};
-let lines=[];
+
+let local  = {x:0,y:0};
+let cursor = {x:0,y:0};
+
+let lines = [];
+let cursorStack = [];   // for undo
 
 // 2 resize
 function resize(){
@@ -132,17 +135,33 @@ function execCommand(cmd){
   if(p[0]==="g"){ useLocal=true; p.shift(); }
 
   // utility
-  if(p[0]==="?"){ alert(`X=${cursor.x} Y=${cursor.y}`); return; }
-  if(p[0]==="undo"){
-    if(lines.length) lines.pop();
-    draw(); return;
+  if(p[0]==="?"){
+    alert(`X=${cursor.x} Y=${cursor.y}`);
+    return;
   }
-  if(p[0]==="cls"){ lines=[]; draw(); return; }
+  if(p[0]==="undo"){
+    if(lines.length){
+      lines.pop();
+      if(cursorStack.length){
+        cursor = cursorStack.pop();
+      }
+      draw();
+    }
+    return;
+  }
+  if(p[0]==="cls"){
+    lines=[];
+    cursorStack=[];
+    draw();
+    return;
+  }
   if(p[0]==="reset"){
     lines=[];
+    cursorStack=[];
     cursor={x:0,y:0};
     local.x=docW/2; local.y=docH/2;
-    draw(); return;
+    draw();
+    return;
   }
 
   // move absolute
@@ -153,7 +172,8 @@ function execCommand(cmd){
     }else{
       cursor.x=+p[1]; cursor.y=+p[2];
     }
-    draw(); return;
+    draw();
+    return;
   }
 
   // move relative
@@ -171,7 +191,8 @@ function execCommand(cmd){
       if(p[0]==="mu") cursor.y+=n;
       if(p[0]==="md") cursor.y-=n;
     }
-    draw(); return;
+    draw();
+    return;
   }
 
   // draw
@@ -179,11 +200,19 @@ function execCommand(cmd){
   const by=useLocal?local.y:local.y+cursor.y;
 
   function drawLine(dx,dy){
+    if(!useLocal){
+      // save cursor for undo
+      cursorStack.push({x:cursor.x,y:cursor.y});
+    }
+
     if(offset){
       lines.push({x1:bx-dx,y1:by-dy,x2:bx+dx,y2:by+dy});
     }else{
       lines.push({x1:bx,y1:by,x2:bx+dx,y2:by+dy});
-      if(!useLocal){ cursor.x+=dx; cursor.y+=dy; }
+      if(!useLocal){
+        cursor.x+=dx;
+        cursor.y+=dy;
+      }
     }
     draw();
   }
