@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Measure Tool</title>
+
+<style>
+/* ======================
+   BASIC UI
+====================== */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #111;
+  font-family: system-ui, sans-serif;
+}
+
+#topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: #1c1c1c;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  z-index: 10;
+}
+
+#distance {
+  width: 120px;
+  background: #000;
+  color: #0f0;
+  border: 1px solid #444;
+  padding: 4px;
+}
+
+canvas {
+  position: absolute;
+  top: 48px;
+  left: 0;
+}
+</style>
+</head>
+
+<body>
+
+<div id="topbar">
+  <input type="file" id="imageLoader" accept="image/*">
+  Distance:
+  <input type="text" id="distance" readonly> px
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+/* ======================
+   1. SETUP
+====================== */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight - 48;
+}
+resizeCanvas();
+
+let img = new Image();
+let imgLoaded = false;
+
+/* Image transform */
+let scale = 1;
+let offsetX = 0;
+let offsetY = 0;
+
+/* ======================
+   2. MEASURE POINTS
+====================== */
+let p1 = { x: 100, y: 100 };
+let p2 = { x: 200, y: 150 };
+let activePoint = null;
+
+/* ======================
+   3. PAN STATE
+====================== */
+let isPanning = false;
+let lastX = 0;
+let lastY = 0;
+
+/* ======================
+   4. IMAGE LOAD
+====================== */
+document.getElementById("imageLoader").addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = ev => {
+    img.src = ev.target.result;
+    img.onload = () => {
+      imgLoaded = true;
+      scale = 1;
+      offsetX = canvas.width / 2 - img.width / 2;
+      offsetY = canvas.height / 2 - img.height / 2;
+      draw();
+    };
+  };
+  reader.readAsDataURL(file);
+});
+
+/* ======================
+   5. DRAW
+====================== */
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!imgLoaded) return;
+
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, 0, 0);
+
+  // Measurement line
+  ctx.strokeStyle = "lime";
+  ctx.lineWidth = 1 / scale;
+  ctx.beginPath();
+  ctx.moveTo(p1.x, p1.y);
+  ctx.lineTo(p2.x, p2.y);
+  ctx.stroke();
+
+  drawPoint(p1);
+  drawPoint(p2);
+
+  ctx.restore();
+  updateDistance();
+}
+
+function drawPoint(p) {
+  ctx.fillStyle = "red";
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 4 / scale, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/* ======================
+   6. DISTANCE
+====================== */
+function updateDistance() {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  document.getElementById("distance").value = dist.toFixed(2);
+}
+
+/* ======================
+   7. HELPERS
+====================== */
+function screenToImage(x, y) {
+  return {
+    x: (x - offsetX) / scale,
+    y: (y - offsetY) / scale
+  };
+}
+
+function hitTest(p, x, y) {
+  const dx = p.x - x;
+  const dy = p.y - y;
+  return Math.sqrt(dx * dx + dy * dy) < 10 / scale;
+}
+
+/* ======================
+   8. MOUSE EVENTS
+====================== */
+canvas.addEventListener("mousedown", e => {
+  const pos = screenToImage(e.offsetX, e.offsetY);
+
+  if (hitTest(p1, pos.x, pos.y)) activePoint = p1;
+  else if (hitTest(p2, pos.x, pos.y)) activePoint = p2;
+  else isPanning = true;
+
+  lastX = e.clientX;
+  lastY = e.clientY;
+});
+
+canvas.addEventListener("mousemove", e => {
+  if (activePoint) {
+    const pos = screenToImage(e.offsetX, e.offsetY);
+    activePoint.x = pos.x;
+    activePoint.y = pos.y;
+    draw();
+  } else if (isPanning) {
+    offsetX += e.clientX - lastX;
+    offsetY += e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    draw();
+  }
+});
+
+canvas.addEventListener("mouseup", () => {
+  activePoint = null;
+  isPanning = false;
+});
+
+/* ======================
+   9. ZOOM
+====================== */
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  const zoom = e.deltaY < 0 ? 1.1 : 0.9;
+  const mx = e.offsetX;
+  const my = e.offsetY;
+
+  offsetX = mx - (mx - offsetX) * zoom;
+  offsetY = my - (my - offsetY) * zoom;
+  scale *= zoom;
+
+  draw();
+}, { passive: false });
+
+/* ======================
+   10. RESIZE
+====================== */
+window.addEventListener("resize", () => {
+  resizeCanvas();
+  draw();
+});
+</script>
+
+</body>
+</html>
