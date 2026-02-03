@@ -3,109 +3,117 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>JS Keyboard CAD</title>
+<title>CMD Draw</title>
 
 <style>
 html,body{
   margin:0;
   height:100%;
-  background:#111;
-  font-family:monospace;
-  color:#0f0;
+  background:#0b0b0b;
+  font-family:-apple-system, BlinkMacSystemFont, monospace;
+  color:#9aff9a;
 }
 
-/* DRAW VIEWPORT */
+/* ===== LAYOUT ===== */
+#app{
+  height:100%;
+  display:flex;
+  flex-direction:column;
+}
+
+/* ===== CANVAS AREA ===== */
 #viewport{
-  height:60vh;
+  flex:0 0 55%;
   overflow:auto;
-  border:2px solid red;
   background:#000;
 }
 
-/* FIXED CANVAS */
 #canvas{
   width:800px;
   height:800px;
-  background:#000;
-  border:2px solid lime;
   display:block;
+  margin:auto;
+  background:#000;
 }
 
-/* FLOATING COMMAND PANEL */
+/* ===== COMMAND AREA ===== */
 #panel{
-  position:fixed;
-  bottom:10px;
-  left:10px;
-  right:10px;
-  background:#000;
-  border:2px solid #0f0;
-  padding:6px;
-  z-index:10;
+  flex:1;
+  padding:10px;
+  background:#0f0f0f;
 }
 
-/* COMMAND DISPLAY (2 LINES) */
+/* DISPLAY */
 #display{
-  height:40px;
+  height:32px;
+  line-height:32px;
+  padding:0 10px;
+  margin-bottom:10px;
   background:#000;
-  color:#0f0;
-  border:1px solid #0f0;
-  margin-bottom:6px;
-  padding:4px;
-  box-sizing:border-box;
-  white-space:pre;
+  border-radius:8px;
   overflow:hidden;
+  white-space:nowrap;
 }
 
-/* JS KEYBOARD */
+/* KEYBOARD */
 #keys{
   display:grid;
   grid-template-columns:repeat(6,1fr);
-  gap:6px;
+  gap:10px;
 }
 
 .key{
-  background:#000;
-  color:#0f0;
-  border:1px solid #0f0;
-  padding:10px 0;
+  background:#151515;
+  border-radius:10px;
   text-align:center;
+  padding:14px 0;
+  font-size:16px;
   user-select:none;
 }
 .key:active{
-  background:#0f0;
-  color:#000;
+  background:#2a2a2a;
+}
+.key.action{
+  background:#1f3f1f;
+}
+.key.run{
+  background:#2a6f2a;
 }
 </style>
 </head>
 
 <body>
 
-<div id="viewport">
-  <canvas id="canvas" width="800" height="800"></canvas>
-</div>
+<div id="app">
 
-<div id="panel">
-  <div id="display"></div>
-  <div id="keys">
-    <div class="key">r</div>
-    <div class="key">l</div>
-    <div class="key">u</div>
-    <div class="key">d</div>
-    <div class="key">CLR</div>
-    <div class="key">RUN</div>
-
-    <div class="key">100</div>
-    <div class="key">200</div>
-    <div class="key">300</div>
-    <div class="key">400</div>
-    <div class="key">DEL</div>
-    <div class="key">↵</div>
+  <div id="viewport">
+    <canvas id="canvas" width="800" height="800"></canvas>
   </div>
+
+  <div id="panel">
+    <div id="display">READY</div>
+
+    <div id="keys">
+      <div class="key">r</div>
+      <div class="key">l</div>
+      <div class="key">u</div>
+      <div class="key">d</div>
+      <div class="key action">CLR</div>
+      <div class="key run">RUN</div>
+
+      <div class="key">100</div>
+      <div class="key">200</div>
+      <div class="key">300</div>
+      <div class="key">400</div>
+      <div class="key action">DEL</div>
+      <div class="key">↵</div>
+    </div>
+  </div>
+
 </div>
 
 <script>
 /* ===== CANVAS ===== */
-const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 /* ===== STATE ===== */
@@ -126,12 +134,12 @@ function draw(){
 
   ctx.strokeStyle="#fff";
   ctx.lineWidth=2;
-  for(const l of lines){
+  lines.forEach(l=>{
     ctx.beginPath();
     ctx.moveTo(l.x1,l.y1);
     ctx.lineTo(l.x2,l.y2);
     ctx.stroke();
-  }
+  });
 
   ctx.fillStyle="#0f0";
   ctx.beginPath();
@@ -142,57 +150,59 @@ function draw(){
 }
 draw();
 
-/* ===== COMMAND EXEC ===== */
+/* ===== EXEC ONE COMMAND ===== */
 function exec(cmd){
-  const p = cmd.trim().split(/\s+/);
-  if(p.length!==2) return;
+  cmd = cmd.trim();
+  if(!cmd) return;
 
-  const n = Number(p[1]);
-  if(isNaN(n)) return;
+  const [c,nStr] = cmd.split(/\s+/);
+  const n = Number(nStr);
+  if(!c || isNaN(n)) return;
 
   let nx = cursor.x;
   let ny = cursor.y;
 
-  if(p[0]==="r") nx+=n;
-  if(p[0]==="l") nx-=n;
-  if(p[0]==="u") ny+=n;
-  if(p[0]==="d") ny-=n;
+  if(c==="r") nx+=n;
+  if(c==="l") nx-=n;
+  if(c==="u") ny+=n;
+  if(c==="d") ny-=n;
 
   lines.push({x1:cursor.x,y1:cursor.y,x2:nx,y2:ny});
   cursor={x:nx,y:ny};
-  draw();
 }
 
 /* ===== DISPLAY ===== */
-const display = document.getElementById("display");
 function updateDisplay(){
-  const lines = buffer.split("\n");
-  display.textContent = lines.slice(-2).join("\n");
+  const last = buffer.split("\n").filter(Boolean).slice(-1)[0];
+  display.textContent = last || "READY";
 }
 
-/* ===== KEYBOARD ===== */
+/* ===== KEY HANDLER ===== */
 document.querySelectorAll(".key").forEach(k=>{
-  k.onclick=()=>{
-    const v=k.textContent;
+  k.onclick = ()=>{
+    const v = k.textContent;
 
     if(v==="RUN"){
       buffer.split("\n").forEach(exec);
       buffer="";
+      draw();
     }
     else if(v==="CLR"){
       buffer="";
+      updateDisplay();
     }
     else if(v==="DEL"){
-      buffer=buffer.slice(0,-1);
+      buffer = buffer.slice(0,-1);
+      updateDisplay();
     }
     else if(v==="↵"){
-      buffer+="\n";
+      buffer += "\n";
+      updateDisplay();
     }
     else{
-      buffer+= (buffer.endsWith("\n")||buffer==="" ? v : " "+v);
+      buffer += (buffer.endsWith("\n") || buffer==="" ? v : " "+v);
+      updateDisplay();
     }
-
-    updateDisplay();
   };
 });
 </script>
