@@ -3,235 +3,243 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Image Measure Tool</title>
+<title>Easy Image Measure Tool</title>
 
 <style>
-/* ======================
-   BASIC UI
-====================== */
-html, body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  overflow: hidden;
-  background: #111;
-  font-family: system-ui, sans-serif;
+html,body{
+  margin:0;
+  height:100%;
+  overflow:hidden;
+  background:#111;
+  font-family:system-ui,sans-serif;
 }
 
-#topbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 48px;
-  background: #1c1c1c;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 10px;
-  z-index: 10;
+#bar{
+  position:fixed;
+  top:0;left:0;right:0;
+  height:48px;
+  background:#1c1c1c;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:6px 10px;
+  z-index:10;
 }
 
-#distance {
-  width: 120px;
-  background: #000;
-  color: #0f0;
-  border: 1px solid #444;
-  padding: 4px;
+#dist{
+  width:120px;
+  background:#000;
+  color:#0f0;
+  border:1px solid #444;
+  padding:4px;
 }
 
-canvas {
-  position: absolute;
-  top: 48px;
-  left: 0;
+canvas{
+  position:absolute;
+  top:48px;
+  left:0;
 }
 </style>
 </head>
-
 <body>
 
-<div id="topbar">
-  <input type="file" id="imageLoader" accept="image/*">
+<div id="bar">
+  <input type="file" id="loader" accept="image/*">
   Distance:
-  <input type="text" id="distance" readonly> px
+  <input id="dist" readonly> px
 </div>
 
-<canvas id="canvas"></canvas>
+<canvas id="c"></canvas>
 
 <script>
-/* ======================
-   1. SETUP
-====================== */
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+/* =====================
+   SETUP
+===================== */
+const c = document.getElementById("c");
+const ctx = c.getContext("2d");
 
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight - 48;
+function resize(){
+  c.width = innerWidth;
+  c.height = innerHeight - 48;
 }
-resizeCanvas();
+resize();
+addEventListener("resize",resize);
 
 let img = new Image();
-let imgLoaded = false;
+let loaded = false;
 
-/* Image transform */
+/* transform */
 let scale = 1;
-let offsetX = 0;
-let offsetY = 0;
+let ox = 0, oy = 0;
 
-/* ======================
-   2. MEASURE POINTS
-====================== */
-let p1 = { x: 100, y: 100 };
-let p2 = { x: 200, y: 150 };
-let activePoint = null;
+/* measure points (image space) */
+let p1 = {x:100,y:100};
+let p2 = {x:200,y:150};
+let dragPoint = null;
 
-/* ======================
-   3. PAN STATE
-====================== */
-let isPanning = false;
-let lastX = 0;
-let lastY = 0;
+/* pan */
+let panning = false;
+let lx=0, ly=0;
 
-/* ======================
-   4. IMAGE LOAD
-====================== */
-document.getElementById("imageLoader").addEventListener("change", e => {
-  const file = e.target.files[0];
-  if (!file) return;
+/* touch */
+let lastDist = null;
 
-  const reader = new FileReader();
-  reader.onload = ev => {
+/* =====================
+   IMAGE LOAD
+===================== */
+loader.onchange = e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = ev=>{
     img.src = ev.target.result;
-    img.onload = () => {
-      imgLoaded = true;
+    img.onload = ()=>{
+      loaded = true;
       scale = 1;
-      offsetX = canvas.width / 2 - img.width / 2;
-      offsetY = canvas.height / 2 - img.height / 2;
+      ox = c.width/2 - img.width/2;
+      oy = c.height/2 - img.height/2;
       draw();
     };
   };
-  reader.readAsDataURL(file);
-});
+  r.readAsDataURL(f);
+};
 
-/* ======================
-   5. DRAW
-====================== */
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (!imgLoaded) return;
+/* =====================
+   DRAW
+===================== */
+function draw(){
+  ctx.clearRect(0,0,c.width,c.height);
+  if(!loaded) return;
 
   ctx.save();
-  ctx.translate(offsetX, offsetY);
-  ctx.scale(scale, scale);
-  ctx.drawImage(img, 0, 0);
+  ctx.translate(ox,oy);
+  ctx.scale(scale,scale);
+  ctx.drawImage(img,0,0);
 
-  // Measurement line
-  ctx.strokeStyle = "lime";
-  ctx.lineWidth = 1 / scale;
+  // line
+  ctx.strokeStyle="lime";
+  ctx.lineWidth=1/scale;
   ctx.beginPath();
-  ctx.moveTo(p1.x, p1.y);
-  ctx.lineTo(p2.x, p2.y);
+  ctx.moveTo(p1.x,p1.y);
+  ctx.lineTo(p2.x,p2.y);
   ctx.stroke();
 
-  drawPoint(p1);
-  drawPoint(p2);
+  drawPt(p1);
+  drawPt(p2);
 
   ctx.restore();
-  updateDistance();
+  updateDist();
 }
 
-function drawPoint(p) {
-  ctx.fillStyle = "red";
+function drawPt(p){
+  ctx.fillStyle="red";
   ctx.beginPath();
-  ctx.arc(p.x, p.y, 4 / scale, 0, Math.PI * 2);
+  ctx.arc(p.x,p.y,4/scale,0,Math.PI*2);
   ctx.fill();
 }
 
-/* ======================
-   6. DISTANCE
-====================== */
-function updateDistance() {
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  document.getElementById("distance").value = dist.toFixed(2);
+function updateDist(){
+  const dx=p2.x-p1.x, dy=p2.y-p1.y;
+  dist.value=Math.hypot(dx,dy).toFixed(2);
 }
 
-/* ======================
-   7. HELPERS
-====================== */
-function screenToImage(x, y) {
-  return {
-    x: (x - offsetX) / scale,
-    y: (y - offsetY) / scale
-  };
+/* =====================
+   HELPERS
+===================== */
+function scrToImg(x,y){
+  return {x:(x-ox)/scale,y:(y-oy)/scale};
 }
 
-function hitTest(p, x, y) {
-  const dx = p.x - x;
-  const dy = p.y - y;
-  return Math.sqrt(dx * dx + dy * dy) < 10 / scale;
+function hit(p,x,y){
+  return Math.hypot(p.x-x,p.y-y)<12/scale;
 }
 
-/* ======================
-   8. MOUSE EVENTS
-====================== */
-canvas.addEventListener("mousedown", e => {
-  const pos = screenToImage(e.offsetX, e.offsetY);
+/* =====================
+   MOUSE
+===================== */
+c.onmousedown=e=>{
+  const p=scrToImg(e.offsetX,e.offsetY);
+  if(hit(p1,p.x,p.y)) dragPoint=p1;
+  else if(hit(p2,p.x,p.y)) dragPoint=p2;
+  else panning=true;
+  lx=e.clientX; ly=e.clientY;
+};
 
-  if (hitTest(p1, pos.x, pos.y)) activePoint = p1;
-  else if (hitTest(p2, pos.x, pos.y)) activePoint = p2;
-  else isPanning = true;
-
-  lastX = e.clientX;
-  lastY = e.clientY;
-});
-
-canvas.addEventListener("mousemove", e => {
-  if (activePoint) {
-    const pos = screenToImage(e.offsetX, e.offsetY);
-    activePoint.x = pos.x;
-    activePoint.y = pos.y;
+c.onmousemove=e=>{
+  if(dragPoint){
+    const p=scrToImg(e.offsetX,e.offsetY);
+    dragPoint.x=p.x; dragPoint.y=p.y;
     draw();
-  } else if (isPanning) {
-    offsetX += e.clientX - lastX;
-    offsetY += e.clientY - lastY;
-    lastX = e.clientX;
-    lastY = e.clientY;
+  }else if(panning){
+    ox+=e.clientX-lx;
+    oy+=e.clientY-ly;
+    lx=e.clientX; ly=e.clientY;
     draw();
   }
-});
+};
 
-canvas.addEventListener("mouseup", () => {
-  activePoint = null;
-  isPanning = false;
-});
+c.onmouseup=()=>{dragPoint=null;panning=false;};
 
-/* ======================
-   9. ZOOM
-====================== */
-canvas.addEventListener("wheel", e => {
+/* =====================
+   WHEEL ZOOM (SMOOTH)
+===================== */
+c.onwheel=e=>{
   e.preventDefault();
-  const zoom = e.deltaY < 0 ? 1.1 : 0.9;
-  const mx = e.offsetX;
-  const my = e.offsetY;
-
-  offsetX = mx - (mx - offsetX) * zoom;
-  offsetY = my - (my - offsetY) * zoom;
-  scale *= zoom;
-
+  const z=e.deltaY<0?1.15:0.87;
+  const mx=e.offsetX,my=e.offsetY;
+  ox=mx-(mx-ox)*z;
+  oy=my-(my-oy)*z;
+  scale*=z;
   draw();
-}, { passive: false });
+};
 
-/* ======================
-   10. RESIZE
-====================== */
-window.addEventListener("resize", () => {
-  resizeCanvas();
-  draw();
-});
+/* =====================
+   TOUCH (PAN + PINCH)
+===================== */
+c.ontouchstart=e=>{
+  if(e.touches.length===1){
+    const t=e.touches[0];
+    const p=scrToImg(t.clientX,t.clientY-48);
+    if(hit(p1,p.x,p.y)) dragPoint=p1;
+    else if(hit(p2,p.x,p.y)) dragPoint=p2;
+    else panning=true;
+    lx=t.clientX; ly=t.clientY;
+  }
+  if(e.touches.length===2){
+    lastDist=Math.hypot(
+      e.touches[0].clientX-e.touches[1].clientX,
+      e.touches[0].clientY-e.touches[1].clientY
+    );
+  }
+};
+
+c.ontouchmove=e=>{
+  e.preventDefault();
+  if(e.touches.length===1){
+    const t=e.touches[0];
+    if(dragPoint){
+      const p=scrToImg(t.clientX,t.clientY-48);
+      dragPoint.x=p.x; dragPoint.y=p.y;
+    }else if(panning){
+      ox+=t.clientX-lx;
+      oy+=t.clientY-ly;
+      lx=t.clientX; ly=t.clientY;
+    }
+    draw();
+  }
+  if(e.touches.length===2){
+    const d=Math.hypot(
+      e.touches[0].clientX-e.touches[1].clientX,
+      e.touches[0].clientY-e.touches[1].clientY
+    );
+    const z=d/lastDist;
+    scale*=z;
+    lastDist=d;
+    draw();
+  }
+};
+
+c.ontouchend=()=>{dragPoint=null;panning=false;lastDist=null;};
 </script>
-
 </body>
 </html>
