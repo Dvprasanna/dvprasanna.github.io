@@ -17,6 +17,7 @@ html,body{
 #canvas{
   display:block;
   background:#000;
+  touch-action:none; /* REQUIRED for pinch */
 }
 #bar{
   position:fixed;
@@ -81,26 +82,60 @@ resize();
 let cursor = { x:0, y:0 };
 let lines  = [];
 
+/* VIEW (pinch / pan only) */
+let view = {
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0
+};
+
+/* ================= PERSISTENCE ================= */
+const STORAGE_KEY = "cmd-canvas-state-v1";
+
+function saveState(){
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ lines, cursor, view })
+  );
+}
+
+function loadState(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw) return;
+  try{
+    const s = JSON.parse(raw);
+    lines  = s.lines  || [];
+    cursor = s.cursor || {x:0,y:0};
+    view   = s.view   || {scale:1,offsetX:0,offsetY:0};
+  }catch{}
+}
+
+loadState();
+
 /* ================= DRAW ================= */
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   ctx.save();
 
-  // bottom-left Cartesian (YOUR MODEL)
+  /* VIEW TRANSFORM */
+  ctx.translate(view.offsetX, view.offsetY);
+  ctx.scale(view.scale, view.scale);
+
+  /* BOTTOM-LEFT CARTESIAN */
   ctx.translate(0, canvas.height);
   ctx.scale(1, -1);
 
-  // axes (visual only)
+  /* axes */
   ctx.strokeStyle="#333";
   ctx.beginPath();
   ctx.moveTo(0,0); ctx.lineTo(canvas.width,0);
   ctx.moveTo(0,0); ctx.lineTo(0,canvas.height);
   ctx.stroke();
 
-  // draw lines
+  /* lines */
   ctx.strokeStyle="#fff";
-  ctx.lineWidth=2;
+  ctx.lineWidth=2/view.scale;
   for(const l of lines){
     ctx.beginPath();
     ctx.moveTo(l.x1, l.y1);
@@ -108,14 +143,16 @@ function draw(){
     ctx.stroke();
   }
 
-  // cursor
+  /* cursor */
   ctx.fillStyle="#0f0";
   ctx.beginPath();
-  ctx.arc(cursor.x, cursor.y, 4, 0, Math.PI*2);
+  ctx.arc(cursor.x, cursor.y, 4/view.scale, 0, Math.PI*2);
   ctx.fill();
 
   ctx.restore();
 }
+
+draw();
 
 /* ================= COMMAND EXEC ================= */
 function exec(cmd){
@@ -146,6 +183,7 @@ function exec(cmd){
 
   cursor = { x:nx, y:ny };
   draw();
+  saveState();
 }
 
 /* ================= UI ================= */
@@ -164,6 +202,69 @@ input.addEventListener("keydown", e=>{
 });
 
 input.focus();
+
+/* ================= PINCH + PAN ================= */
+let lastPan = null;
+let lastDist = null;
+
+function dist(a,b){
+  return Math.hypot(b.clientX-a.clientX, b.clientY-a.clientY);
+}
+function mid(a,b){
+  return {
+    x:(a.clientX+b.clientX)/2,
+    y:(a.clientY+b.clientY)/2
+  };
+}
+
+canvas.addEventListener("touchstart", e=>{
+  if(e.touches.length===1){
+    lastPan = {
+      x:e.touches[0].clientX,
+      y:e.touches[0].clientY
+    };
+  }
+  if(e.touches.length===2){
+    lastDist = dist(e.touches[0], e.touches[1]);
+  }
+},{passive:false});
+
+canvas.addEventListener("touchmove", e=>{
+  e.preventDefault();
+
+  /* PAN */
+  if(e.touches.length===1 && lastPan){
+    const t = e.touches[0];
+    view.offsetX += t.clientX - lastPan.x;
+    view.offsetY += t.clientY - lastPan.y;
+    lastPan = {x:t.clientX,y:t.clientY};
+    draw();
+    saveState();
+  }
+
+  /* PINCH */
+  if(e.touches.length===2){
+    const d = dist(e.touches[0], e.touches[1]);
+    const m = mid(e.touches[0], e.touches[1]);
+    const factor = d / lastDist;
+
+    const newScale = Math.min(5, Math.max(0.2, view.scale * factor));
+
+    view.offsetX = m.x - (m.x - view.offsetX) * (newScale / view.scale);
+    view.offsetY = m.y - (m.y - view.offsetY) * (newScale / view.scale);
+
+    view.scale = newScale;
+    lastDist = d;
+
+    draw();
+    saveState();
+  }
+},{passive:false});
+
+canvas.addEventListener("touchend", ()=>{
+  lastPan = null;
+  lastDist = null;
+});
 </script>
 
 </body>
