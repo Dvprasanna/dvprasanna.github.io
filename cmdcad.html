@@ -91,20 +91,20 @@ function draw(){
   ctx.translate(0,canvas.height);
   ctx.scale(1,-1);
 
-  // 3.1 axes
+  // axes
   ctx.strokeStyle="#333";
   ctx.beginPath();
   ctx.moveTo(0,0); ctx.lineTo(docW,0);
   ctx.moveTo(0,0); ctx.lineTo(0,docH);
   ctx.stroke();
 
-  // 3.2 local origin
+  // local origin
   ctx.fillStyle="#ff0";
   ctx.beginPath();
   ctx.arc(local.x,local.y,4,0,Math.PI*2);
   ctx.fill();
 
-  // 3.3 lines
+  // lines
   ctx.strokeStyle="#fff";
   lines.forEach(l=>{
     ctx.beginPath();
@@ -113,7 +113,7 @@ function draw(){
     ctx.stroke();
   });
 
-  // 3.4 cursor
+  // cursor
   const cx = local.x + cursor.x;
   const cy = local.y + cursor.y;
   ctx.fillStyle="#0f0";
@@ -152,6 +152,11 @@ REFERENCE
 QUERY
  ?       cursor position
 
+UTILITY
+ cls     clear lines
+ undo    undo last line
+ reset   full reset
+
 PREFIX
  g       use local origin
  o       offset (one-shot)`
@@ -178,13 +183,31 @@ function execCommand(cmd){
     p.shift();
   }
 
-  // 5.2 queries
+  // 5.2 queries / utility
   if (p[0] === "?" && p.length === 1){
     alert(`X=${cursor.x} Y=${cursor.y}`);
     return;
   }
   if (p[0] === "help" && p.length === 1){
     showHelp();
+    return;
+  }
+  if (p[0] === "cls" && p.length === 1){
+    lines = [];
+    draw();
+    return;
+  }
+  if (p[0] === "undo" && p.length === 1){
+    lines.pop();
+    draw();
+    return;
+  }
+  if (p[0] === "reset" && p.length === 1){
+    lines = [];
+    cursor = { x:0, y:0 };
+    local.x = docW / 2;
+    local.y = docH / 2;
+    draw();
     return;
   }
 
