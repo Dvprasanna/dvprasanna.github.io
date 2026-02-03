@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Precision Snap Tracer</title>
+
+<style>
+body {
+  margin: 0;
+  background: #111;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+}
+
+#toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: #1b1b1b;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  z-index: 10;
+}
+
+button, input {
+  background: #333;
+  color: #fff;
+  border: none;
+  padding: 8px;
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+button.active {
+  background: #0a84ff;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="toolbar">
+  <input type="file" id="imageLoader" accept="image/*" />
+  <button id="orthoBtn" class="active">ORTHO</button>
+  <button id="angleBtn">ANGLE</button>
+  <button id="connectBtn">CONNECT ALL</button>
+  <button id="closeBtn">CLOSE</button>
+  <button id="exportBtn">EXPORT</button>
+</div>
+
+<script>
+/* =====================
+   CANVAS SETUP
+===================== */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight - 60;
+}
+window.addEventListener("resize", resize);
+resize();
+
+/* =====================
+   DATA
+===================== */
+let bgImage = null;
+let bgOpacity = 0.5;
+
+const points = [];
+const lines = [];
+
+let orthoSnap = true;
+let angleSnap = false;
+
+const SNAP_RADIUS = 12;
+const ANGLE_STEP = Math.PI / 12; // 15°
+
+/* =====================
+   IMAGE LOAD
+===================== */
+document.getElementById("imageLoader").onchange = e => {
+  const img = new Image();
+  img.onload = () => bgImage = img;
+  img.src = URL.createObjectURL(e.target.files[0]);
+};
+
+/* =====================
+   INPUT HANDLING
+===================== */
+canvas.addEventListener("pointerdown", e => {
+  const rect = canvas.getBoundingClientRect();
+  const raw = {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
+  };
+  const snapped = snapPoint(raw);
+  points.push(snapped);
+  redraw();
+});
+
+/* =====================
+   SNAP LOGIC
+===================== */
+function snapPoint(pos) {
+  // 1. Existing point snap
+  for (let p of points) {
+    if (dist(pos, p) < SNAP_RADIUS) return { ...p };
+  }
+
+  if (points.length === 0) return pos;
+
+  const last = points[points.length - 1];
+  let dx = pos.x - last.x;
+  let dy = pos.y - last.y;
+
+  // 2. Ortho snap
+  if (orthoSnap) {
+    if (Math.abs(dx) > Math.abs(dy)) {
+      return { x: pos.x, y: last.y };
+    } else {
+      return { x: last.x, y: pos.y };
+    }
+  }
+
+  // 3. Angle snap
+  if (angleSnap) {
+    const angle = Math.atan2(dy, dx);
+    const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
+    const len = Math.hypot(dx, dy);
+    return {
+      x: last.x + Math.cos(snappedAngle) * len,
+      y: last.y + Math.sin(snappedAngle) * len
+    };
+  }
+
+  return pos;
+}
+
+/* =====================
+   COMMANDS
+===================== */
+document.getElementById("connectBtn").onclick = () => {
+  lines.length = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    lines.push([points[i], points[i + 1]]);
+  }
+  redraw();
+};
+
+document.getElementById("closeBtn").onclick = () => {
+  if (points.length > 2) {
+    lines.push([points[points.length - 1], points[0]]);
+    redraw();
+  }
+};
+
+document.getElementById("exportBtn").onclick = () => {
+  const saved = bgImage;
+  bgImage = null;
+  redraw();
+  const url = canvas.toDataURL("image/png");
+  bgImage = saved;
+  redraw();
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "drawing.png";
+  a.click();
+};
+
+/* =====================
+   TOGGLES
+===================== */
+document.getElementById("orthoBtn").onclick = e => {
+  orthoSnap = !orthoSnap;
+  e.target.classList.toggle("active", orthoSnap);
+};
+
+document.getElementById("angleBtn").onclick = e => {
+  angleSnap = !angleSnap;
+  e.target.classList.toggle("active", angleSnap);
+};
+
+/* =====================
+   RENDER
+===================== */
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (bgImage) {
+    ctx.globalAlpha = bgOpacity;
+    ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = 1;
+  }
+
+  // Lines
+  ctx.strokeStyle = "#00ffcc";
+  ctx.lineWidth = 2;
+  for (let l of lines) {
+    ctx.beginPath();
+    ctx.moveTo(l[0].x, l[0].y);
+    ctx.lineTo(l[1].x, l[1].y);
+    ctx.stroke();
+  }
+
+  // Points
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    ctx.fillStyle = "#ffcc00";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#fff";
+    ctx.fillText(i + 1, p.x + 6, p.y - 6);
+  }
+}
+
+/* =====================
+   UTIL
+===================== */
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+</script>
+
+</body>
+</html>
