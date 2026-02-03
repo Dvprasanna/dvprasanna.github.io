@@ -1,45 +1,39 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Precision Snap Tracer</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Rect Drawer</title>
 
 <style>
-body {
-  margin: 0;
-  background: #111;
-  color: #fff;
-  font-family: system-ui, sans-serif;
+html,body{
+  margin:0;
+  height:100%;
+  background:#000;
+  font-family:monospace;
+  color:#0f0;
+  overflow:hidden;
 }
-
-#toolbar {
-  display: flex;
-  gap: 6px;
-  padding: 6px;
-  background: #1b1b1b;
-  position: fixed;
-  bottom: 0;
-  width: 100%;
-  z-index: 10;
+#canvas{
+  display:block;
+  background:#000;
 }
-
-button, input {
-  background: #333;
-  color: #fff;
-  border: none;
-  padding: 8px;
-  font-size: 14px;
-  border-radius: 4px;
+#bar{
+  position:fixed;
+  bottom:0; left:0; right:0;
+  height:44px;
+  background:#111;
+  display:flex;
+  align-items:center;
+  padding:0 8px;
 }
-
-button.active {
-  background: #0a84ff;
-}
-
-canvas {
-  display: block;
-  touch-action: none;
+#cmd{
+  flex:1;
+  background:#000;
+  color:#0f0;
+  border:none;
+  outline:none;
+  font-size:16px;
 }
 </style>
 </head>
@@ -48,191 +42,104 @@ canvas {
 
 <canvas id="canvas"></canvas>
 
-<div id="toolbar">
-  <input type="file" id="imageLoader" accept="image/*" />
-  <button id="orthoBtn" class="active">ORTHO</button>
-  <button id="angleBtn">ANGLE</button>
-  <button id="connectBtn">CONNECT ALL</button>
-  <button id="closeBtn">CLOSE</button>
-  <button id="exportBtn">EXPORT</button>
+<div id="bar">
+  <span>&gt;</span>
+  <input id="cmd" autocomplete="off">
 </div>
 
 <script>
-/* =====================
-   CANVAS SETUP
-===================== */
+/* ================= VIEWPORT (iPhone SAFE) ================= */
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight - 60;
+function viewportHeight(){
+  return window.visualViewport
+    ? window.visualViewport.height
+    : window.innerHeight;
 }
+
+function resize(){
+  canvas.width = window.innerWidth;
+  canvas.height = viewportHeight() - 44;
+  draw();
+}
+
 window.addEventListener("resize", resize);
+if(window.visualViewport){
+  window.visualViewport.addEventListener("resize", resize);
+}
 resize();
 
-/* =====================
-   DATA
-===================== */
-let bgImage = null;
-let bgOpacity = 0.5;
+/* ================= STATE ================= */
+let cursor = {x:0,y:0};
+let lines = [];
 
-const points = [];
-const lines = [];
+/* ================= DRAW ================= */
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.save();
 
-let orthoSnap = true;
-let angleSnap = false;
+  /* center + cartesian */
+  ctx.translate(canvas.width/2, canvas.height/2);
+  ctx.scale(1,-1);
 
-const SNAP_RADIUS = 12;
-const ANGLE_STEP = Math.PI / 12; // 15°
+  /* axes */
+  ctx.strokeStyle="#333";
+  ctx.beginPath();
+  ctx.moveTo(-2000,0); ctx.lineTo(2000,0);
+  ctx.moveTo(0,-2000); ctx.lineTo(0,2000);
+  ctx.stroke();
 
-/* =====================
-   IMAGE LOAD
-===================== */
-document.getElementById("imageLoader").onchange = e => {
-  const img = new Image();
-  img.onload = () => bgImage = img;
-  img.src = URL.createObjectURL(e.target.files[0]);
-};
+  /* lines */
+  ctx.strokeStyle="#fff";
+  ctx.lineWidth=2;
+  lines.forEach(l=>{
+    ctx.beginPath();
+    ctx.moveTo(l.x1,l.y1);
+    ctx.lineTo(l.x2,l.y2);
+    ctx.stroke();
+  });
 
-/* =====================
-   INPUT HANDLING
-===================== */
-canvas.addEventListener("pointerdown", e => {
-  const rect = canvas.getBoundingClientRect();
-  const raw = {
-    x: e.clientX - rect.left,
-    y: e.clientY - rect.top
-  };
-  const snapped = snapPoint(raw);
-  points.push(snapped);
-  redraw();
+  /* cursor */
+  ctx.fillStyle="#0f0";
+  ctx.beginPath();
+  ctx.arc(cursor.x,cursor.y,4,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* ================= COMMANDS ================= */
+function exec(cmd){
+  const p = cmd.trim().split(/\s+/);
+  if(p.length<2) return;
+
+  const n = Number(p[1]);
+  if(isNaN(n)) return;
+
+  let nx = cursor.x;
+  let ny = cursor.y;
+
+  if(p[0]==="r") nx += n;
+  if(p[0]==="l") nx -= n;
+  if(p[0]==="u") ny += n;
+  if(p[0]==="d") ny -= n;
+
+  lines.push({x1:cursor.x,y1:cursor.y,x2:nx,y2:ny});
+  cursor = {x:nx,y:ny};
+  draw();
+}
+
+/* ================= INPUT ================= */
+const input = document.getElementById("cmd");
+input.addEventListener("keydown", e=>{
+  if(e.key==="Enter"){
+    exec(input.value);
+    input.value="";
+  }
 });
 
-/* =====================
-   SNAP LOGIC
-===================== */
-function snapPoint(pos) {
-  // 1. Existing point snap
-  for (let p of points) {
-    if (dist(pos, p) < SNAP_RADIUS) return { ...p };
-  }
-
-  if (points.length === 0) return pos;
-
-  const last = points[points.length - 1];
-  let dx = pos.x - last.x;
-  let dy = pos.y - last.y;
-
-  // 2. Ortho snap
-  if (orthoSnap) {
-    if (Math.abs(dx) > Math.abs(dy)) {
-      return { x: pos.x, y: last.y };
-    } else {
-      return { x: last.x, y: pos.y };
-    }
-  }
-
-  // 3. Angle snap
-  if (angleSnap) {
-    const angle = Math.atan2(dy, dx);
-    const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
-    const len = Math.hypot(dx, dy);
-    return {
-      x: last.x + Math.cos(snappedAngle) * len,
-      y: last.y + Math.sin(snappedAngle) * len
-    };
-  }
-
-  return pos;
-}
-
-/* =====================
-   COMMANDS
-===================== */
-document.getElementById("connectBtn").onclick = () => {
-  lines.length = 0;
-  for (let i = 0; i < points.length - 1; i++) {
-    lines.push([points[i], points[i + 1]]);
-  }
-  redraw();
-};
-
-document.getElementById("closeBtn").onclick = () => {
-  if (points.length > 2) {
-    lines.push([points[points.length - 1], points[0]]);
-    redraw();
-  }
-};
-
-document.getElementById("exportBtn").onclick = () => {
-  const saved = bgImage;
-  bgImage = null;
-  redraw();
-  const url = canvas.toDataURL("image/png");
-  bgImage = saved;
-  redraw();
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "drawing.png";
-  a.click();
-};
-
-/* =====================
-   TOGGLES
-===================== */
-document.getElementById("orthoBtn").onclick = e => {
-  orthoSnap = !orthoSnap;
-  e.target.classList.toggle("active", orthoSnap);
-};
-
-document.getElementById("angleBtn").onclick = e => {
-  angleSnap = !angleSnap;
-  e.target.classList.toggle("active", angleSnap);
-};
-
-/* =====================
-   RENDER
-===================== */
-function redraw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  if (bgImage) {
-    ctx.globalAlpha = bgOpacity;
-    ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
-    ctx.globalAlpha = 1;
-  }
-
-  // Lines
-  ctx.strokeStyle = "#00ffcc";
-  ctx.lineWidth = 2;
-  for (let l of lines) {
-    ctx.beginPath();
-    ctx.moveTo(l[0].x, l[0].y);
-    ctx.lineTo(l[1].x, l[1].y);
-    ctx.stroke();
-  }
-
-  // Points
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    ctx.fillStyle = "#ffcc00";
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#fff";
-    ctx.fillText(i + 1, p.x + 6, p.y - 6);
-  }
-}
-
-/* =====================
-   UTIL
-===================== */
-function dist(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
+input.focus();
 </script>
 
 </body>
