@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CMD Canvas – g l clean</title>
+<title>CMD Canvas</title>
 
 <style>
 html,body{
@@ -51,62 +51,64 @@ html,body{
 </div>
 
 <script>
-/* =========================
-   STATE
-========================= */
+// 1 state
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-let docW=0, docH=0, lastDocH=0;
-let local={x:0,y:0};      // local origin
-let cursor={x:0,y:0};     // cursor relative to local
-let lines=[];
+let docW = 0;
+let docH = 0;
+let lastDocH = 0;
 
-/* =========================
-   RESIZE
-========================= */
+let local = { x:0, y:0 };
+let cursor = { x:0, y:0 };
+let lines = [];
+
+// 2 resize
 function resize(){
-  const vh=innerHeight, vw=innerWidth;
-  if(Math.abs(vh-lastDocH)<100) return;
-  lastDocH=vh;
+  // 2.1 viewport
+  const vh = innerHeight;
+  const vw = innerWidth;
+  if (Math.abs(vh - lastDocH) < 100) return;
+  lastDocH = vh;
 
-  docW=vw;
-  docH=vh-44;
-  canvas.width=docW;
-  canvas.height=docH;
+  // 2.2 canvas size
+  docW = vw;
+  docH = vh - 44;
+  canvas.width = docW;
+  canvas.height = docH;
 
-  if(local.x===0 && local.y===0){
-    local.x=docW/2;
-    local.y=docH/2;
+  // 2.3 init local origin
+  if (local.x === 0 && local.y === 0){
+    local.x = docW / 2;
+    local.y = docH / 2;
   }
   draw();
 }
-addEventListener("resize",resize);
+addEventListener("resize", resize);
 resize();
 
-/* =========================
-   DRAW
-========================= */
+// 3 draw
 function draw(){
+  // 3.1 clear
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.save();
   ctx.translate(0,canvas.height);
   ctx.scale(1,-1);
 
-  // global axes
+  // 3.2 axes
   ctx.strokeStyle="#333";
   ctx.beginPath();
   ctx.moveTo(0,0); ctx.lineTo(docW,0);
   ctx.moveTo(0,0); ctx.lineTo(0,docH);
   ctx.stroke();
 
-  // local origin
+  // 3.3 local origin
   ctx.fillStyle="#ff0";
   ctx.beginPath();
   ctx.arc(local.x,local.y,4,0,Math.PI*2);
   ctx.fill();
 
-  // lines
+  // 3.4 lines
   ctx.strokeStyle="#fff";
   lines.forEach(l=>{
     ctx.beginPath();
@@ -115,9 +117,9 @@ function draw(){
     ctx.stroke();
   });
 
-  // cursor
-  const cx=local.x+cursor.x;
-  const cy=local.y+cursor.y;
+  // 3.5 cursor
+  const cx = local.x + cursor.x;
+  const cy = local.y + cursor.y;
   ctx.fillStyle="#0f0";
   ctx.beginPath();
   ctx.arc(cx,cy,3,0,Math.PI*2);
@@ -126,52 +128,119 @@ function draw(){
   ctx.restore();
 }
 
-/* =========================
-   COMMAND EXECUTION
-========================= */
-function execCommand(t){
-  t=t.trim(); if(!t) return;
-  const p=t.split(/\s+/);
+// 4 command executor
+function execCommand(cmd){
+  // 4.1 sanitize
+  cmd = cmd.trim();
+  if (!cmd) return;
 
-  /* reference commands (EXACT) */
-  if(p[0]==="g" && p[1]==="l" && p.length===2){
-    lines.push({x1:0,y1:0,x2:local.x,y2:local.y});
+  // 4.2 tokenize
+  let p = cmd.split(/\s+/);
+
+  // 4.3 prefixes
+  let useLocal = false;
+  let offset = false;
+
+  if (p[0] === "o"){
+    offset = true;
+    p.shift();
+  }
+  if (p[0] === "g"){
+    useLocal = true;
+    p.shift();
+  }
+
+  // 4.4 reference commands
+  // 4.4.1 g l
+  if (useLocal && p[0] === "l" && p.length === 1){
+    lines.push({ x1:0, y1:0, x2:local.x, y2:local.y });
     draw(); return;
   }
-  if(p[0]==="g" && p[1]==="c" && p.length===2){
+
+  // 4.4.2 g c
+  if (useLocal && p[0] === "c" && p.length === 1){
     lines.push({
-      x1:0,y1:0,
-      x2:local.x+cursor.x,
-      y2:local.y+cursor.y
+      x1:0, y1:0,
+      x2:local.x + cursor.x,
+      y2:local.y + cursor.y
     });
     draw(); return;
   }
-  if(p[0]==="l" && p[1]==="c" && p.length===2){
+
+  // 4.4.3 l c
+  if (p[0] === "l" && p[1] === "c" && p.length === 2){
     lines.push({
-      x1:local.x,y1:local.y,
-      x2:local.x+cursor.x,
-      y2:local.y+cursor.y
+      x1:local.x, y1:local.y,
+      x2:local.x + cursor.x,
+      y2:local.y + cursor.y
     });
     draw(); return;
   }
 
-  /* movement */
-  if(p[0]==="m" && p.length===3){
-    cursor.x=+p[1];
-    cursor.y=+p[2];
+  // 4.5 move commands
+  // 4.5.1 absolute
+  if (p[0] === "m" && p.length === 3){
+    cursor.x = +p[1];
+    cursor.y = +p[2];
     draw(); return;
   }
 
+  // 4.5.2 relative
+  if (p[0] === "mr"){ cursor.x += +p[1]; draw(); return; }
+  if (p[0] === "ml"){ cursor.x -= +p[1]; draw(); return; }
+  if (p[0] === "mu"){ cursor.y += +p[1]; draw(); return; }
+  if (p[0] === "md"){ cursor.y -= +p[1]; draw(); return; }
+
+  // 4.6 draw commands
+  const baseX = useLocal ? local.x : local.x + cursor.x;
+  const baseY = useLocal ? local.y : local.y + cursor.y;
+
+  function drawLine(dx,dy){
+    if (offset){
+      lines.push({
+        x1: baseX - dx,
+        y1: baseY - dy,
+        x2: baseX + dx,
+        y2: baseY + dy
+      });
+    } else {
+      lines.push({
+        x1: baseX,
+        y1: baseY,
+        x2: baseX + dx,
+        y2: baseY + dy
+      });
+      if (!useLocal){
+        cursor.x += dx;
+        cursor.y += dy;
+      }
+    }
+    draw();
+  }
+
+  // 4.6.1 directions
+  switch(p[0]){
+    case "r": return drawLine(+p[1], 0);
+    case "l": return drawLine(-p[1], 0);
+    case "u": return drawLine(0, +p[1]);
+    case "d": return drawLine(0, -p[1]);
+    case "a":{
+      const len = +p[1];
+      const deg = +p[2];
+      const rad = deg * Math.PI / 180;
+      return drawLine(len * Math.cos(rad), len * Math.sin(rad));
+    }
+  }
+
+  // 4.9 fallback
   alert("Unknown command");
 }
 
-/* =========================
-   UI
-========================= */
-const input=document.getElementById("cmd");
-run.onclick=()=>{
+// 5 ui
+const input = document.getElementById("cmd");
+run.onclick = ()=>{
   execCommand(input.value);
-  input.value="";
+  input.value = "";
   input.focus();
 };
 input.focus();
