@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CMD Canvas – Centered Offset</title>
+<title>CMD Canvas – Move Extensions</title>
 
 <style>
 html,body{
@@ -61,51 +61,10 @@ let docW=0, docH=0, lastDocH=0;
 let local={x:0,y:0};
 let cursor={x:0,y:0};
 let lines=[];
-
-/* one-shot offset flag */
 let offsetOnce=false;
 
 /* =========================
-   HELP
-========================= */
-function helpText(){
-return `
-Draw (cursor chained):
-r n | l n | u n | d n
-a n deg
-m x y
-
-Local origin draw:
-g r n | g l n | g u n | g d n
-g a n deg
-
-Reference:
-g l   global → local
-g c   global → cursor
-l c   local → cursor
-
-Centered offset:
-o r n | o u n | etc
-(draws -n → +n)
-
-Move local origin:
-g m x y
-
-Math:
-math(expr)
-
-Info:
-?
-d
-
-Edit:
-undo
-cls
-`.trim();
-}
-
-/* =========================
-   RESIZE (MOBILE SAFE)
+   RESIZE
 ========================= */
 function resize(){
   const vh=innerHeight, vw=innerWidth;
@@ -135,20 +94,17 @@ function draw(){
   ctx.translate(0,canvas.height);
   ctx.scale(1,-1);
 
-  // axes
   ctx.strokeStyle="#333";
   ctx.beginPath();
   ctx.moveTo(0,0); ctx.lineTo(docW,0);
   ctx.moveTo(0,0); ctx.lineTo(0,docH);
   ctx.stroke();
 
-  // local origin
   ctx.fillStyle="#ff0";
   ctx.beginPath();
   ctx.arc(local.x,local.y,4,0,Math.PI*2);
   ctx.fill();
 
-  // lines
   ctx.strokeStyle="#fff";
   lines.forEach(l=>{
     ctx.beginPath();
@@ -157,7 +113,6 @@ function draw(){
     ctx.stroke();
   });
 
-  // cursor
   const cx=local.x+cursor.x;
   const cy=local.y+cursor.y;
   ctx.fillStyle="#0f0";
@@ -177,23 +132,10 @@ function drawSegment(x,y,dx,dy){
 }
 
 /* =========================
-   COMMAND EXECUTION
+   COMMAND EXEC
 ========================= */
 function execCommand(t){
   t=t.trim(); if(!t) return;
-
-  /* math(expr) */
-  if(t.startsWith("math(")&&t.endsWith(")")){
-    try{
-      const e=t.slice(5,-1);
-      const v=new Function(
-        "sqrt","sin","cos","tan","pow","pi","e",
-        `return ${e}`
-      )(Math.sqrt,Math.sin,Math.cos,Math.tan,Math.pow,Math.PI,Math.E);
-      alert("RESULT: "+v);
-    }catch{ alert("ERROR"); }
-    return;
-  }
 
   let p=t.split(/\s+/);
 
@@ -203,15 +145,22 @@ function execCommand(t){
     p.shift();
   }
 
-  /* reference lines */
-  if(p[0]==="g"&&p[1]==="l"&&p.length===2){
-    lines.push({x1:0,y1:0,x2:local.x,y2:local.y}); draw(); return;
-  }
-  if(p[0]==="g"&&p[1]==="c"&&p.length===2){
-    lines.push({x1:0,y1:0,x2:local.x+cursor.x,y2:local.y+cursor.y}); draw(); return;
-  }
-  if(p[0]==="l"&&p[1]==="c"&&p.length===2){
-    lines.push({x1:local.x,y1:local.y,x2:local.x+cursor.x,y2:local.y+cursor.y}); draw(); return;
+  /* RELATIVE MOVE (LOCAL) */
+  if(p[0]==="mr"){ cursor.x+=+p[1]; draw(); return; }
+  if(p[0]==="ml"){ cursor.x-=(+p[1]); draw(); return; }
+  if(p[0]==="mu"){ cursor.y+=+p[1]; draw(); return; }
+  if(p[0]==="md"){ cursor.y-=(+p[1]); draw(); return; }
+
+  /* GLOBAL RELATIVE MOVE */
+  if(p[0]==="mg"){
+    switch(p[1]){
+      case "r": cursor.x+=+p[2]; break;
+      case "l": cursor.x-=(+p[2]); break;
+      case "u": cursor.y+=+p[2]; break;
+      case "d": cursor.y-=(+p[2]); break;
+      default: alert("Invalid mg command"); return;
+    }
+    draw(); return;
   }
 
   let useLocal=false;
@@ -258,7 +207,7 @@ function execCommand(t){
     case "cls": lines=[]; cursor={x:0,y:0}; draw(); return;
   }
 
-  alert("Unknown command\n\n"+helpText());
+  alert("Unknown command");
 }
 
 /* =========================
