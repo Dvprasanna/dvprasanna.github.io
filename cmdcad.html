@@ -202,7 +202,11 @@ PREFIX
     });
     draw(); return;
   }
-
+// 4.3.6 help
+if (p[0] === "help" && p.length === 1){
+  showHelp();
+  return;
+}
   // 4.4.3 l c
   if (p[0] === "l" && p[1] === "c" && p.length === 2){
     lines.push({
