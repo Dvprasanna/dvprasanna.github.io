@@ -56,12 +56,11 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 let docW=0, docH=0, lastDocH=0;
+let local={x:0,y:0};
+let cursor={x:0,y:0};
 
-let local  = {x:0,y:0};
-let cursor = {x:0,y:0};
-
-let lines = [];
-let cursorStack = [];   // for undo
+let lines=[];
+let cursorStack=[]; // for undo
 
 // 2 resize
 function resize(){
@@ -123,7 +122,42 @@ function draw(){
   ctx.restore();
 }
 
-// 4 execute one command
+// 4 help
+function showHelp(){
+  alert(
+`DRAW
+ r n
+ l n
+ u n
+ d n
+ a n d
+
+MOVE (cursor)
+ m x y
+ mr ml mu md
+
+MOVE (local)
+ g m x y
+ g mr g ml g mu g md
+
+OFFSET
+ o r n
+
+REFERENCE
+ g l
+ g c
+ l c
+
+UTILITY
+ ?
+ help
+ undo
+ cls
+ reset`
+  );
+}
+
+// 5 execute one command
 function execCommand(cmd){
   cmd=cmd.trim();
   if(!cmd) return;
@@ -131,40 +165,52 @@ function execCommand(cmd){
   let p=cmd.split(/\s+/);
   let useLocal=false, offset=false;
 
+  // 5.1 prefixes
   if(p[0]==="o"){ offset=true; p.shift(); }
   if(p[0]==="g"){ useLocal=true; p.shift(); }
 
-  // utility
-  if(p[0]==="?"){
-    alert(`X=${cursor.x} Y=${cursor.y}`);
-    return;
-  }
+  // 5.2 utility
+  if(p[0]==="?"){ alert(`X=${cursor.x} Y=${cursor.y}`); return; }
+  if(p[0]==="help"){ showHelp(); return; }
   if(p[0]==="undo"){
     if(lines.length){
       lines.pop();
-      if(cursorStack.length){
-        cursor = cursorStack.pop();
-      }
+      if(cursorStack.length) cursor=cursorStack.pop();
       draw();
     }
     return;
   }
-  if(p[0]==="cls"){
-    lines=[];
-    cursorStack=[];
-    draw();
-    return;
-  }
+  if(p[0]==="cls"){ lines=[]; cursorStack=[]; draw(); return; }
   if(p[0]==="reset"){
-    lines=[];
-    cursorStack=[];
+    lines=[]; cursorStack=[];
     cursor={x:0,y:0};
     local.x=docW/2; local.y=docH/2;
-    draw();
-    return;
+    draw(); return;
   }
 
-  // move absolute
+  // 5.3 reference
+  if(useLocal && p[0]==="l"){
+    lines.push({x1:0,y1:0,x2:local.x,y2:local.y});
+    draw(); return;
+  }
+  if(useLocal && p[0]==="c"){
+    lines.push({
+      x1:0,y1:0,
+      x2:local.x+cursor.x,
+      y2:local.y+cursor.y
+    });
+    draw(); return;
+  }
+  if(p[0]==="l" && p[1]==="c"){
+    lines.push({
+      x1:local.x,y1:local.y,
+      x2:local.x+cursor.x,
+      y2:local.y+cursor.y
+    });
+    draw(); return;
+  }
+
+  // 5.4 move absolute
   if(p[0]==="m" && p.length===3){
     if(useLocal){
       local.x=+p[1]; local.y=+p[2];
@@ -172,11 +218,10 @@ function execCommand(cmd){
     }else{
       cursor.x=+p[1]; cursor.y=+p[2];
     }
-    draw();
-    return;
+    draw(); return;
   }
 
-  // move relative
+  // 5.5 move relative
   if(p[0].startsWith("m")){
     const n=+p[1];
     if(useLocal){
@@ -191,28 +236,20 @@ function execCommand(cmd){
       if(p[0]==="mu") cursor.y+=n;
       if(p[0]==="md") cursor.y-=n;
     }
-    draw();
-    return;
+    draw(); return;
   }
 
-  // draw
+  // 5.6 draw
   const bx=useLocal?local.x:local.x+cursor.x;
   const by=useLocal?local.y:local.y+cursor.y;
 
   function drawLine(dx,dy){
-    if(!useLocal){
-      // save cursor for undo
-      cursorStack.push({x:cursor.x,y:cursor.y});
-    }
-
+    if(!useLocal) cursorStack.push({x:cursor.x,y:cursor.y});
     if(offset){
       lines.push({x1:bx-dx,y1:by-dy,x2:bx+dx,y2:by+dy});
     }else{
       lines.push({x1:bx,y1:by,x2:bx+dx,y2:by+dy});
-      if(!useLocal){
-        cursor.x+=dx;
-        cursor.y+=dy;
-      }
+      if(!useLocal){ cursor.x+=dx; cursor.y+=dy; }
     }
     draw();
   }
@@ -227,10 +264,10 @@ function execCommand(cmd){
     return drawLine(len*Math.cos(rad),len*Math.sin(rad));
   }
 
-  alert("Unknown command: "+cmd);
+  alert("Unknown command:\n\n"+cmd+"\n\nType 'help'");
 }
 
-// 5 batch execution
+// 6 batch execution
 function execBatch(text){
   const list=text.split(/\n+/)
     .map(l=>l.trim())
@@ -238,7 +275,7 @@ function execBatch(text){
   for(const line of list) execCommand(line);
 }
 
-// 6 ui
+// 7 ui
 const input=document.getElementById("cmd");
 run.onclick=()=>{
   const text=input.value;
