@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mini CMD Draw</title>
+<title>JS Keyboard CAD</title>
 
 <style>
 html,body{
@@ -14,11 +14,11 @@ html,body{
   color:#0f0;
 }
 
-/* SCROLLABLE DRAW AREA */
+/* DRAW VIEWPORT */
 #viewport{
-  height:60vh;                 /* easy viewing area */
+  height:60vh;
   overflow:auto;
-  border:2px solid red;        /* debug */
+  border:2px solid red;
   background:#000;
 }
 
@@ -27,12 +27,12 @@ html,body{
   width:800px;
   height:800px;
   background:#000;
-  border:2px solid lime;       /* debug */
+  border:2px solid lime;
   display:block;
 }
 
-/* FLOATING COMMAND BAR (2 LINES) */
-#bar{
+/* FLOATING COMMAND PANEL */
+#panel{
   position:fixed;
   bottom:10px;
   left:10px;
@@ -43,15 +43,37 @@ html,body{
   z-index:10;
 }
 
-#cmd{
-  width:100%;
-  height:48px;                 /* two lines */
+/* COMMAND DISPLAY (2 LINES) */
+#display{
+  height:40px;
   background:#000;
   color:#0f0;
-  border:none;
-  outline:none;
-  resize:none;
-  font-size:16px;
+  border:1px solid #0f0;
+  margin-bottom:6px;
+  padding:4px;
+  box-sizing:border-box;
+  white-space:pre;
+  overflow:hidden;
+}
+
+/* JS KEYBOARD */
+#keys{
+  display:grid;
+  grid-template-columns:repeat(6,1fr);
+  gap:6px;
+}
+
+.key{
+  background:#000;
+  color:#0f0;
+  border:1px solid #0f0;
+  padding:10px 0;
+  text-align:center;
+  user-select:none;
+}
+.key:active{
+  background:#0f0;
+  color:#000;
 }
 </style>
 </head>
@@ -62,33 +84,46 @@ html,body{
   <canvas id="canvas" width="800" height="800"></canvas>
 </div>
 
-<div id="bar">
-  <textarea id="cmd" placeholder="r 200&#10;d 200"></textarea>
+<div id="panel">
+  <div id="display"></div>
+  <div id="keys">
+    <div class="key">r</div>
+    <div class="key">l</div>
+    <div class="key">u</div>
+    <div class="key">d</div>
+    <div class="key">CLR</div>
+    <div class="key">RUN</div>
+
+    <div class="key">100</div>
+    <div class="key">200</div>
+    <div class="key">300</div>
+    <div class="key">400</div>
+    <div class="key">DEL</div>
+    <div class="key">↵</div>
+  </div>
 </div>
 
 <script>
-/* ===== BASIC SETUP ===== */
+/* ===== CANVAS ===== */
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 /* ===== STATE ===== */
 let cursor = {x:0,y:0};
 let lines = [];
+let buffer = "";
 
 /* ===== DRAW ===== */
 function draw(){
   ctx.clearRect(0,0,800,800);
 
-  // cartesian bottom-left
   ctx.save();
   ctx.translate(0,800);
   ctx.scale(1,-1);
 
-  // border reference
   ctx.strokeStyle="#333";
   ctx.strokeRect(0,0,800,800);
 
-  // draw lines
   ctx.strokeStyle="#fff";
   ctx.lineWidth=2;
   for(const l of lines){
@@ -98,7 +133,6 @@ function draw(){
     ctx.stroke();
   }
 
-  // cursor
   ctx.fillStyle="#0f0";
   ctx.beginPath();
   ctx.arc(cursor.x,cursor.y,4,0,Math.PI*2);
@@ -106,12 +140,11 @@ function draw(){
 
   ctx.restore();
 }
-
 draw();
 
 /* ===== COMMAND EXEC ===== */
-function exec(line){
-  const p = line.trim().split(/\s+/);
+function exec(cmd){
+  const p = cmd.trim().split(/\s+/);
   if(p.length!==2) return;
 
   const n = Number(p[1]);
@@ -120,30 +153,47 @@ function exec(line){
   let nx = cursor.x;
   let ny = cursor.y;
 
-  if(p[0]==="r") nx += n;
-  if(p[0]==="l") nx -= n;
-  if(p[0]==="u") ny += n;
-  if(p[0]==="d") ny -= n;
+  if(p[0]==="r") nx+=n;
+  if(p[0]==="l") nx-=n;
+  if(p[0]==="u") ny+=n;
+  if(p[0]==="d") ny-=n;
 
   lines.push({x1:cursor.x,y1:cursor.y,x2:nx,y2:ny});
-  cursor = {x:nx,y:ny};
+  cursor={x:nx,y:ny};
+  draw();
 }
 
-/* ===== RUN ON ENTER ===== */
-const input = document.getElementById("cmd");
+/* ===== DISPLAY ===== */
+const display = document.getElementById("display");
+function updateDisplay(){
+  const lines = buffer.split("\n");
+  display.textContent = lines.slice(-2).join("\n");
+}
 
-input.addEventListener("keydown",e=>{
-  if(e.key==="Enter"){
-    e.preventDefault();
+/* ===== KEYBOARD ===== */
+document.querySelectorAll(".key").forEach(k=>{
+  k.onclick=()=>{
+    const v=k.textContent;
 
-    const linesInput = input.value.split("\n");
-    for(const line of linesInput){
-      exec(line);
+    if(v==="RUN"){
+      buffer.split("\n").forEach(exec);
+      buffer="";
+    }
+    else if(v==="CLR"){
+      buffer="";
+    }
+    else if(v==="DEL"){
+      buffer=buffer.slice(0,-1);
+    }
+    else if(v==="↵"){
+      buffer+="\n";
+    }
+    else{
+      buffer+= (buffer.endsWith("\n")||buffer==="" ? v : " "+v);
     }
 
-    input.value="";
-    draw();
-  }
+    updateDisplay();
+  };
 });
 </script>
 
