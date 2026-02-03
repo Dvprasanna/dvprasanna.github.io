@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Canvas CMD – Math</title>
+<title>CMD Canvas – Offset</title>
 
 <style>
 html,body{
@@ -46,7 +46,7 @@ html,body{
 
 <div id="bar">
   <span>&gt;</span>
-  <input id="cmd" type="text" autocomplete="off">
+  <input id="cmd" autocomplete="off">
   <button id="run">RUN</button>
 </div>
 
@@ -57,73 +57,69 @@ html,body{
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-let docW = 0;
-let docH = 0;
-let lastDocH = 0;
+let docW=0, docH=0, lastDocH=0;
+let local={x:0,y:0};
+let cursor={x:0,y:0};
+let lines=[];
 
-let local = { x:0, y:0 };   // local origin
-let cursor = { x:0, y:0 };  // cursor relative to local
-let lines = [];
+/* offset flag (one-shot) */
+let offsetOnce = false;
 
 /* =========================
-   HELP TEXT
+   HELP
 ========================= */
 function helpText(){
-  return `
-Available commands:
+return `
+Draw (cursor chained):
+r n | l n | u n | d n
+a n deg
+m x y
 
-Cursor based (chained):
-r n            draw right
-l n            draw left
-u n            draw up
-d n            draw down
-a n deg        draw at angle
-m x y          move cursor
-
-Local-origin based (one-shot):
-g r n
-g l n
-g u n
-g d n
+Local origin draw:
+g r n | g l n | g u n | g d n
 g a n deg
 
+Reference:
+g l   global → local
+g c   global → cursor
+l c   local → cursor
+
+Offset (one-shot mirror):
+o r n | o u n | etc
+
 Move local origin:
-g m x y        set local origin from global (0,0)
+g m x y
 
 Math:
-math(expr)     evaluate expression (sqrt, sin, cos, pi)
+math(expr)
 
 Info:
-?              cursor position
-d              document width & height
+?
+d
 
 Edit:
-undo           remove last line
-cls            clear drawing
+undo
+cls
 `.trim();
 }
 
 /* =========================
-   RESIZE (KEYBOARD SAFE)
+   RESIZE (SAFE)
 ========================= */
 function resize(){
-  const vh = window.innerHeight;
-  const vw = window.innerWidth;
-  if (Math.abs(vh - lastDocH) < 100) return;
-  lastDocH = vh;
+  const vh=innerHeight, vw=innerWidth;
+  if(Math.abs(vh-lastDocH)<100) return;
+  lastDocH=vh;
 
-  docW = vw;
-  docH = vh - 44;
-  canvas.width = docW;
-  canvas.height = docH;
+  docW=vw; docH=vh-44;
+  canvas.width=docW; canvas.height=docH;
 
-  if (local.x === 0 && local.y === 0){
-    local.x = docW / 2;
-    local.y = docH / 2;
+  if(local.x===0&&local.y===0){
+    local.x=docW/2; local.y=docH/2;
   }
   draw();
 }
-window.addEventListener("resize", resize);
+addEventListener("resize",resize);
 resize();
 
 /* =========================
@@ -132,7 +128,7 @@ resize();
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.save();
-  ctx.translate(0, canvas.height);
+  ctx.translate(0,canvas.height);
   ctx.scale(1,-1);
 
   ctx.strokeStyle="#333";
@@ -143,7 +139,7 @@ function draw(){
 
   ctx.fillStyle="#ff0";
   ctx.beginPath();
-  ctx.arc(local.x, local.y, 4, 0, Math.PI*2);
+  ctx.arc(local.x,local.y,4,0,Math.PI*2);
   ctx.fill();
 
   ctx.strokeStyle="#fff";
@@ -154,11 +150,10 @@ function draw(){
     ctx.stroke();
   });
 
-  const cx = local.x + cursor.x;
-  const cy = local.y + cursor.y;
+  const cx=local.x+cursor.x, cy=local.y+cursor.y;
   ctx.fillStyle="#0f0";
   ctx.beginPath();
-  ctx.arc(cx, cy, 3, 0, Math.PI*2);
+  ctx.arc(cx,cy,3,0,Math.PI*2);
   ctx.fill();
 
   ctx.restore();
@@ -167,121 +162,102 @@ function draw(){
 /* =========================
    GEOMETRY
 ========================= */
-function drawFromCursor(dx,dy){
-  const x1 = local.x + cursor.x;
-  const y1 = local.y + cursor.y;
-  cursor.x += dx;
-  cursor.y += dy;
-  lines.push({x1,y1,x2:local.x+cursor.x,y2:local.y+cursor.y});
-  draw();
-}
-
-function drawFromLocal(dx,dy){
+function drawSegment(startX,startY,dx,dy){
   lines.push({
-    x1:local.x,
-    y1:local.y,
-    x2:local.x+dx,
-    y2:local.y+dy
+    x1:startX,
+    y1:startY,
+    x2:startX+dx,
+    y2:startY+dy
   });
   draw();
 }
 
 /* =========================
-   SAFE MATH EVALUATION
+   COMMAND EXEC
 ========================= */
-function evalMath(expr){
-  try{
-    const scope = {
-      sqrt: Math.sqrt,
-      sin: Math.sin,
-      cos: Math.cos,
-      tan: Math.tan,
-      pow: Math.pow,
-      pi: Math.PI,
-      e: Math.E
-    };
-    const fn = new Function(...Object.keys(scope), `return ${expr}`);
-    return fn(...Object.values(scope));
-  }catch(e){
-    return "ERROR: " + e.message;
-  }
-}
+function execCommand(t){
+  t=t.trim(); if(!t) return;
 
-/* =========================
-   COMMAND EXECUTION
-========================= */
-function execCommand(text){
-  text = text.trim();
-  if(!text) return;
-
-  /* math(expr) */
-  if(text.startsWith("math(") && text.endsWith(")")){
-    const expr = text.slice(5,-1);
-    const result = evalMath(expr);
-    alert(`RESULT: ${result}`);
+  /* math */
+  if(t.startsWith("math(")&&t.endsWith(")")){
+    try{
+      const e=t.slice(5,-1);
+      const v=new Function(
+        "sqrt","sin","cos","tan","pow","pi","e",
+        `return ${e}`
+      )(Math.sqrt,Math.sin,Math.cos,Math.tan,Math.pow,Math.PI,Math.E);
+      alert("RESULT: "+v);
+    }catch{ alert("ERROR"); }
     return;
   }
 
-  const p = text.split(/\s+/);
-  let useLocal = false;
-  if(p[0] === "g"){
-    useLocal = true;
-    p.shift();
+  if(t==="o"){ offsetOnce=true; return; }
+
+  let p=t.split(/\s+/);
+
+  /* reference lines */
+  if(p[0]==="g"&&p[1]==="l"&&p.length===2){
+    lines.push({x1:0,y1:0,x2:local.x,y2:local.y}); draw(); return;
+  }
+  if(p[0]==="g"&&p[1]==="c"&&p.length===2){
+    lines.push({x1:0,y1:0,x2:local.x+cursor.x,y2:local.y+cursor.y}); draw(); return;
+  }
+  if(p[0]==="l"&&p[1]==="c"&&p.length===2){
+    lines.push({x1:local.x,y1:local.y,x2:local.x+cursor.x,y2:local.y+cursor.y}); draw(); return;
   }
 
-  if(p[0] === "?"){
-    alert(`X=${cursor.x} Y=${cursor.y}`);
-    return;
-  }
+  let useLocal=false;
+  if(p[0]==="g"){ useLocal=true; p.shift(); }
 
-  if(p[0] === "d" && p.length === 1){
-    alert(`WIDTH=${docW} HEIGHT=${docH}`);
-    return;
-  }
+  if(p[0]==="?"){ alert(`X=${cursor.x} Y=${cursor.y}`); return; }
+  if(p[0]==="d"&&p.length===1){ alert(`W=${docW} H=${docH}`); return; }
 
-  const drawFn = useLocal ? drawFromLocal : drawFromCursor;
+  const baseX = useLocal ? local.x : local.x + cursor.x;
+  const baseY = useLocal ? local.y : local.y + cursor.y;
+
+  function doDraw(dx,dy){
+    if(offsetOnce){
+      drawSegment(baseX-dx, baseY-dy, dx, dy);
+      offsetOnce=false;
+    }else{
+      drawSegment(baseX, baseY, dx, dy);
+      if(!useLocal){
+        cursor.x+=dx; cursor.y+=dy;
+      }
+    }
+  }
 
   switch(p[0]){
-    case "r": return drawFn(Number(p[1]),0);
-    case "l": return drawFn(-Number(p[1]),0);
-    case "u": return drawFn(0,Number(p[1]));
-    case "d": return drawFn(0,-Number(p[1]));
+    case "r": return doDraw(+p[1],0);
+    case "l": return doDraw(-p[1],0);
+    case "u": return doDraw(0,+p[1]);
+    case "d": return doDraw(0,-p[1]);
     case "a":{
-      const len = Number(p[1]);
-      const deg = Number(p[2]);
-      const rad = deg*Math.PI/180;
-      return drawFn(len*Math.cos(rad), len*Math.sin(rad));
+      const len=+p[1], deg=+p[2];
+      const rad=deg*Math.PI/180;
+      return doDraw(len*Math.cos(rad),len*Math.sin(rad));
     }
     case "m":
       if(useLocal){
-        local.x = Number(p[1]);
-        local.y = Number(p[2]);
-        cursor={x:0,y:0};
-        draw();
-        return;
+        local.x=+p[1]; local.y=+p[2]; cursor={x:0,y:0};
       }else{
-        cursor.x = Number(p[1]);
-        cursor.y = Number(p[2]);
-        draw();
-        return;
+        cursor.x=+p[1]; cursor.y=+p[2];
       }
-    case "undo":
-      lines.pop(); draw(); return;
-    case "cls":
-      lines=[]; cursor={x:0,y:0}; draw(); return;
+      draw(); return;
+    case "undo": lines.pop(); draw(); return;
+    case "cls": lines=[]; cursor={x:0,y:0}; draw(); return;
   }
 
-  alert("Unknown or invalid command\n\n" + helpText());
+  alert("Unknown command\n\n"+helpText());
 }
 
 /* =========================
-   EVENT HANDLER
+   UI
 ========================= */
-const input = document.getElementById("cmd");
-document.getElementById("run").onclick = ()=>{
+const input=document.getElementById("cmd");
+run.onclick=()=>{
   execCommand(input.value);
-  input.value="";
-  input.focus();
+  input.value=""; input.focus();
 };
 input.focus();
 </script>
