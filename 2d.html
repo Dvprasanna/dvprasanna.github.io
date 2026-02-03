@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CMD Draw</title>
+<title>CMD CAD v1</title>
 
 <style>
 html,body{
   margin:0;
   height:100%;
   background:#0b0b0b;
-  font-family:-apple-system, BlinkMacSystemFont, monospace;
+  font-family:-apple-system,BlinkMacSystemFont,monospace;
   color:#9aff9a;
 }
 
@@ -26,17 +26,18 @@ html,body{
   flex:0 0 55%;
   overflow:auto;
   background:#000;
+  border-bottom:1px solid #222;
 }
 
 #canvas{
   width:800px;
   height:800px;
-  display:block;
   margin:auto;
+  display:block;
   background:#000;
 }
 
-/* ===== COMMAND AREA ===== */
+/* ===== PANEL ===== */
 #panel{
   flex:1;
   padding:10px;
@@ -45,14 +46,14 @@ html,body{
 
 /* DISPLAY */
 #display{
-  height:32px;
-  line-height:32px;
-  padding:0 10px;
+  height:34px;
+  line-height:34px;
+  padding:0 12px;
   margin-bottom:10px;
   background:#000;
   border-radius:8px;
-  overflow:hidden;
   white-space:nowrap;
+  overflow:hidden;
 }
 
 /* KEYBOARD */
@@ -67,18 +68,12 @@ html,body{
   border-radius:10px;
   text-align:center;
   padding:14px 0;
-  font-size:16px;
   user-select:none;
+  font-size:15px;
 }
-.key:active{
-  background:#2a2a2a;
-}
-.key.action{
-  background:#1f3f1f;
-}
-.key.run{
-  background:#2a6f2a;
-}
+.key:active{ background:#2a2a2a; }
+.key.action{ background:#1f3f1f; }
+.key.run{ background:#2a6f2a; }
 </style>
 </head>
 
@@ -98,7 +93,7 @@ html,body{
       <div class="key">l</div>
       <div class="key">u</div>
       <div class="key">d</div>
-      <div class="key action">CLR</div>
+      <div class="key">a</div>
       <div class="key run">RUN</div>
 
       <div class="key">100</div>
@@ -107,6 +102,13 @@ html,body{
       <div class="key">400</div>
       <div class="key action">DEL</div>
       <div class="key">↵</div>
+
+      <div class="key">m</div>
+      <div class="key">undo</div>
+      <div class="key">clr</div>
+      <div class="key">reset</div>
+      <div class="key">?</div>
+      <div></div>
     </div>
   </div>
 
@@ -114,11 +116,13 @@ html,body{
 
 <script>
 /* ===== CANVAS ===== */
+const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 /* ===== STATE ===== */
 let cursor = {x:0,y:0};
 let lines = [];
+let undoStack = [];
 let buffer = "";
 
 /* ===== DRAW ===== */
@@ -150,25 +154,86 @@ function draw(){
 }
 draw();
 
-/* ===== EXEC ONE COMMAND ===== */
+/* ===== EXEC COMMAND ===== */
 function exec(cmd){
   cmd = cmd.trim();
   if(!cmd) return;
 
-  const [c,nStr] = cmd.split(/\s+/);
-  const n = Number(nStr);
-  if(!c || isNaN(n)) return;
+  const p = cmd.split(/\s+/);
 
-  let nx = cursor.x;
-  let ny = cursor.y;
+  /* INFO */
+  if(p[0]==="?"){
+    display.textContent = `X=${cursor.x} Y=${cursor.y}`;
+    return;
+  }
 
-  if(c==="r") nx+=n;
-  if(c==="l") nx-=n;
-  if(c==="u") ny+=n;
-  if(c==="d") ny-=n;
+  /* CLEAR / RESET */
+  if(p[0]==="clr"){
+    lines=[]; undoStack=[];
+    display.textContent="CLEARED";
+    draw(); return;
+  }
+  if(p[0]==="reset"){
+    lines=[]; undoStack=[];
+    cursor={x:0,y:0};
+    display.textContent="RESET";
+    draw(); return;
+  }
 
-  lines.push({x1:cursor.x,y1:cursor.y,x2:nx,y2:ny});
-  cursor={x:nx,y:ny};
+  /* UNDO */
+  if(p[0]==="undo"){
+    if(lines.length){
+      lines.pop();
+      cursor = undoStack.pop() || cursor;
+      draw();
+    }
+    return;
+  }
+
+  /* MOVE */
+  if(p[0]==="m"){
+    if(p.length===3 && !isNaN(p[1]) && !isNaN(p[2])){
+      cursor.x=+p[1]; cursor.y=+p[2];
+      draw(); return;
+    }
+    if(p.length===3){
+      const n=+p[2];
+      if(p[1]==="r") cursor.x+=n;
+      if(p[1]==="l") cursor.x-=n;
+      if(p[1]==="u") cursor.y+=n;
+      if(p[1]==="d") cursor.y-=n;
+      draw(); return;
+    }
+  }
+
+  /* ANGLE */
+  if(p[0]==="a" && p.length===3){
+    const len=+p[1], deg=+p[2];
+    const rad=deg*Math.PI/180;
+    const nx=cursor.x+len*Math.cos(rad);
+    const ny=cursor.y+len*Math.sin(rad);
+    undoStack.push({...cursor});
+    lines.push({x1:cursor.x,y1:cursor.y,x2:nx,y2:ny});
+    cursor={x:nx,y:ny};
+    draw(); return;
+  }
+
+  /* BASIC DRAW */
+  if(p.length===2){
+    const n=+p[1];
+    if(isNaN(n)) return;
+
+    let nx=cursor.x, ny=cursor.y;
+    if(p[0]==="r") nx+=n;
+    if(p[0]==="l") nx-=n;
+    if(p[0]==="u") ny+=n;
+    if(p[0]==="d") ny-=n;
+
+    undoStack.push({...cursor});
+    lines.push({x1:cursor.x,y1:cursor.y,x2:nx,y2:ny});
+    cursor={x:nx,y:ny};
+    draw();
+  }
 }
 
 /* ===== DISPLAY ===== */
@@ -177,32 +242,27 @@ function updateDisplay(){
   display.textContent = last || "READY";
 }
 
-/* ===== KEY HANDLER ===== */
+/* ===== KEYBOARD ===== */
 document.querySelectorAll(".key").forEach(k=>{
-  k.onclick = ()=>{
-    const v = k.textContent;
+  k.onclick=()=>{
+    const v=k.textContent;
 
     if(v==="RUN"){
       buffer.split("\n").forEach(exec);
       buffer="";
-      draw();
-    }
-    else if(v==="CLR"){
-      buffer="";
       updateDisplay();
+      return;
     }
-    else if(v==="DEL"){
-      buffer = buffer.slice(0,-1);
-      updateDisplay();
+    if(v==="DEL"){
+      buffer=buffer.slice(0,-1);
+      updateDisplay(); return;
     }
-    else if(v==="↵"){
-      buffer += "\n";
-      updateDisplay();
+    if(v==="↵"){
+      buffer+="\n";
+      updateDisplay(); return;
     }
-    else{
-      buffer += (buffer.endsWith("\n") || buffer==="" ? v : " "+v);
-      updateDisplay();
-    }
+    buffer += (buffer.endsWith("\n")||buffer==="" ? v : " "+v);
+    updateDisplay();
   };
 });
 </script>
