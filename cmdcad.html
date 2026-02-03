@@ -59,25 +59,22 @@ let docW = 0;
 let docH = 0;
 let lastDocH = 0;
 
-let local = { x:0, y:0 };
+let local  = { x:0, y:0 };
 let cursor = { x:0, y:0 };
-let lines = [];
+let lines  = [];
 
 // 2 resize
 function resize(){
-  // 2.1 viewport
   const vh = innerHeight;
   const vw = innerWidth;
   if (Math.abs(vh - lastDocH) < 100) return;
   lastDocH = vh;
 
-  // 2.2 canvas size
   docW = vw;
   docH = vh - 44;
-  canvas.width = docW;
+  canvas.width  = docW;
   canvas.height = docH;
 
-  // 2.3 init local origin
   if (local.x === 0 && local.y === 0){
     local.x = docW / 2;
     local.y = docH / 2;
@@ -89,26 +86,25 @@ resize();
 
 // 3 draw
 function draw(){
-  // 3.1 clear
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.save();
   ctx.translate(0,canvas.height);
   ctx.scale(1,-1);
 
-  // 3.2 axes
+  // 3.1 axes
   ctx.strokeStyle="#333";
   ctx.beginPath();
   ctx.moveTo(0,0); ctx.lineTo(docW,0);
   ctx.moveTo(0,0); ctx.lineTo(0,docH);
   ctx.stroke();
 
-  // 3.3 local origin
+  // 3.2 local origin
   ctx.fillStyle="#ff0";
   ctx.beginPath();
   ctx.arc(local.x,local.y,4,0,Math.PI*2);
   ctx.fill();
 
-  // 3.4 lines
+  // 3.3 lines
   ctx.strokeStyle="#fff";
   lines.forEach(l=>{
     ctx.beginPath();
@@ -117,7 +113,7 @@ function draw(){
     ctx.stroke();
   });
 
-  // 3.5 cursor
+  // 3.4 cursor
   const cx = local.x + cursor.x;
   const cy = local.y + cursor.y;
   ctx.fillStyle="#0f0";
@@ -128,33 +124,8 @@ function draw(){
   ctx.restore();
 }
 
-// 4 command executor
-function execCommand(cmd){
-  // 4.1 sanitize
-  cmd = cmd.trim();
-  if (!cmd) return;
-
-  // 4.2 tokenize
-  let p = cmd.split(/\s+/);
-
-  // 4.3 prefixes
-  let useLocal = false;
-  let offset = false;
-
-  if (p[0] === "o"){
-    offset = true;
-    p.shift();
-  }
-  if (p[0] === "g"){
-    useLocal = true;
-    p.shift();
-  }
-  // 4.3.5 cursor query
-  if (p[0] === "?" && p.length === 1){
-    alert(`X=${cursor.x} Y=${cursor.y}`);
-    return;
-  }
-  function showHelp(){
+// 4 help
+function showHelp(){
   alert(
 `DRAW
  r n   draw right
@@ -186,14 +157,42 @@ PREFIX
  o       offset (one-shot)`
   );
 }
-  // 4.4 reference commands
-  // 4.4.1 g l
+
+// 5 command executor
+function execCommand(cmd){
+  cmd = cmd.trim();
+  if (!cmd) return;
+
+  let p = cmd.split(/\s+/);
+
+  // 5.1 prefixes
+  let useLocal = false;
+  let offset   = false;
+
+  if (p[0] === "o"){
+    offset = true;
+    p.shift();
+  }
+  if (p[0] === "g"){
+    useLocal = true;
+    p.shift();
+  }
+
+  // 5.2 queries
+  if (p[0] === "?" && p.length === 1){
+    alert(`X=${cursor.x} Y=${cursor.y}`);
+    return;
+  }
+  if (p[0] === "help" && p.length === 1){
+    showHelp();
+    return;
+  }
+
+  // 5.3 reference
   if (useLocal && p[0] === "l" && p.length === 1){
     lines.push({ x1:0, y1:0, x2:local.x, y2:local.y });
     draw(); return;
   }
-
-  // 4.4.2 g c
   if (useLocal && p[0] === "c" && p.length === 1){
     lines.push({
       x1:0, y1:0,
@@ -202,12 +201,6 @@ PREFIX
     });
     draw(); return;
   }
-// 4.3.6 help
-if (p[0] === "help" && p.length === 1){
-  showHelp();
-  return;
-}
-  // 4.4.3 l c
   if (p[0] === "l" && p[1] === "c" && p.length === 2){
     lines.push({
       x1:local.x, y1:local.y,
@@ -217,21 +210,18 @@ if (p[0] === "help" && p.length === 1){
     draw(); return;
   }
 
-  // 4.5 move commands
-  // 4.5.1 absolute
+  // 5.4 move
   if (p[0] === "m" && p.length === 3){
     cursor.x = +p[1];
     cursor.y = +p[2];
     draw(); return;
   }
-
-  // 4.5.2 relative
   if (p[0] === "mr"){ cursor.x += +p[1]; draw(); return; }
   if (p[0] === "ml"){ cursor.x -= +p[1]; draw(); return; }
   if (p[0] === "mu"){ cursor.y += +p[1]; draw(); return; }
   if (p[0] === "md"){ cursor.y -= +p[1]; draw(); return; }
 
-  // 4.6 draw commands
+  // 5.5 draw
   const baseX = useLocal ? local.x : local.x + cursor.x;
   const baseY = useLocal ? local.y : local.y + cursor.y;
 
@@ -258,7 +248,6 @@ if (p[0] === "help" && p.length === 1){
     draw();
   }
 
-  // 4.6.1 directions
   switch(p[0]){
     case "r": return drawLine(+p[1], 0);
     case "l": return drawLine(-p[1], 0);
@@ -272,11 +261,10 @@ if (p[0] === "help" && p.length === 1){
     }
   }
 
-  // 4.9 fallback
   alert("Unknown command");
 }
 
-// 5 ui
+// 6 ui
 const input = document.getElementById("cmd");
 run.onclick = ()=>{
   execCommand(input.value);
