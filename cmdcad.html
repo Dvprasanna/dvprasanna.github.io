@@ -154,6 +154,38 @@ function execCommand(cmd){
     alert(`X=${cursor.x} Y=${cursor.y}`);
     return;
   }
+  function showHelp(){
+  alert(
+`DRAW
+ r n   draw right
+ l n   draw left
+ u n   draw up
+ d n   draw down
+ a n d draw at angle
+
+OFFSET
+ o r n   centered offset draw
+
+MOVE
+ m x y   move cursor absolute
+ mr n    move right
+ ml n    move left
+ mu n    move up
+ md n    move down
+
+REFERENCE
+ g l     global -> local
+ g c     global -> cursor
+ l c     local  -> cursor
+
+QUERY
+ ?       cursor position
+
+PREFIX
+ g       use local origin
+ o       offset (one-shot)`
+  );
+}
   // 4.4 reference commands
   // 4.4.1 g l
   if (useLocal && p[0] === "l" && p.length === 1){
