@@ -149,7 +149,11 @@ function execCommand(cmd){
     useLocal = true;
     p.shift();
   }
-
+  // 4.3.5 cursor query
+  if (p[0] === "?" && p.length === 1){
+    alert(`X=${cursor.x} Y=${cursor.y}`);
+    return;
+  }
   // 4.4 reference commands
   // 4.4.1 g l
   if (useLocal && p[0] === "l" && p.length === 1){
