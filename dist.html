@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Easy Image Measure Tool</title>
+<title>Image Measure Tool</title>
 
 <style>
 html,body{
@@ -24,14 +24,27 @@ html,body{
   gap:12px;
   padding:6px 10px;
   z-index:10;
+  color:#fff;
 }
 
-#dist{
-  width:120px;
+button{
+  background:#333;
+  color:#fff;
+  border:1px solid #555;
+  padding:4px 10px;
+}
+
+button.locked{
+  background:#500;
+}
+
+#dist,#scaleBox{
+  width:90px;
   background:#000;
   color:#0f0;
   border:1px solid #444;
   padding:4px;
+  text-align:center;
 }
 
 canvas{
@@ -45,8 +58,9 @@ canvas{
 
 <div id="bar">
   <input type="file" id="loader" accept="image/*">
-  Distance:
-  <input id="dist" readonly> px
+  <button id="lockBtn">🔓 UNLOCK</button>
+  Dist <input id="dist" readonly> px
+  Scale <input id="scaleBox" readonly>
 </div>
 
 <canvas id="c"></canvas>
@@ -65,39 +79,45 @@ function resize(){
 resize();
 addEventListener("resize",resize);
 
-let img = new Image();
-let loaded = false;
+let img=new Image(), loaded=false;
+let scale=1, ox=0, oy=0;
 
-/* transform */
-let scale = 1;
-let ox = 0, oy = 0;
+/* =====================
+   MEASURE
+===================== */
+let p1={x:100,y:100}, p2={x:200,y:150};
+let dragPoint=null;
+let locked=false;
 
-/* measure points (image space) */
-let p1 = {x:100,y:100};
-let p2 = {x:200,y:150};
-let dragPoint = null;
+/* =====================
+   PAN
+===================== */
+let panning=false, lx=0, ly=0;
+let lastPinch=null;
 
-/* pan */
-let panning = false;
-let lx=0, ly=0;
-
-/* touch */
-let lastDist = null;
+/* =====================
+   LOCK BUTTON
+===================== */
+lockBtn.onclick=()=>{
+  locked=!locked;
+  lockBtn.textContent=locked?"🔒 LOCKED":"🔓 UNLOCK";
+  lockBtn.classList.toggle("locked",locked);
+};
 
 /* =====================
    IMAGE LOAD
 ===================== */
-loader.onchange = e=>{
-  const f = e.target.files[0];
+loader.onchange=e=>{
+  const f=e.target.files[0];
   if(!f) return;
-  const r = new FileReader();
-  r.onload = ev=>{
-    img.src = ev.target.result;
-    img.onload = ()=>{
-      loaded = true;
-      scale = 1;
-      ox = c.width/2 - img.width/2;
-      oy = c.height/2 - img.height/2;
+  const r=new FileReader();
+  r.onload=ev=>{
+    img.src=ev.target.result;
+    img.onload=()=>{
+      loaded=true;
+      scale=1;
+      ox=c.width/2-img.width/2;
+      oy=c.height/2-img.height/2;
       draw();
     };
   };
@@ -116,7 +136,6 @@ function draw(){
   ctx.scale(scale,scale);
   ctx.drawImage(img,0,0);
 
-  // line
   ctx.strokeStyle="lime";
   ctx.lineWidth=1/scale;
   ctx.beginPath();
@@ -124,23 +143,23 @@ function draw(){
   ctx.lineTo(p2.x,p2.y);
   ctx.stroke();
 
-  drawPt(p1);
-  drawPt(p2);
+  drawHandle(p1);
+  drawHandle(p2);
 
   ctx.restore();
-  updateDist();
+  updateUI();
 }
 
-function drawPt(p){
+function drawHandle(p){
   ctx.fillStyle="red";
   ctx.beginPath();
-  ctx.arc(p.x,p.y,4/scale,0,Math.PI*2);
+  ctx.arc(p.x,p.y,6/scale,0,Math.PI*2);
   ctx.fill();
 }
 
-function updateDist(){
-  const dx=p2.x-p1.x, dy=p2.y-p1.y;
-  dist.value=Math.hypot(dx,dy).toFixed(2);
+function updateUI(){
+  dist.value=Math.hypot(p2.x-p1.x,p2.y-p1.y).toFixed(2);
+  scaleBox.value="× "+scale.toFixed(2);
 }
 
 /* =====================
@@ -151,7 +170,7 @@ function scrToImg(x,y){
 }
 
 function hit(p,x,y){
-  return Math.hypot(p.x-x,p.y-y)<12/scale;
+  return Math.hypot(p.x-x,p.y-y)<20/scale; // BIG hit area
 }
 
 /* =====================
@@ -159,9 +178,11 @@ function hit(p,x,y){
 ===================== */
 c.onmousedown=e=>{
   const p=scrToImg(e.offsetX,e.offsetY);
-  if(hit(p1,p.x,p.y)) dragPoint=p1;
-  else if(hit(p2,p.x,p.y)) dragPoint=p2;
-  else panning=true;
+  if(!locked){
+    if(hit(p1,p.x,p.y)) dragPoint=p1;
+    else if(hit(p2,p.x,p.y)) dragPoint=p2;
+  }
+  if(!dragPoint) panning=true;
   lx=e.clientX; ly=e.clientY;
 };
 
@@ -181,7 +202,7 @@ c.onmousemove=e=>{
 c.onmouseup=()=>{dragPoint=null;panning=false;};
 
 /* =====================
-   WHEEL ZOOM (SMOOTH)
+   WHEEL ZOOM
 ===================== */
 c.onwheel=e=>{
   e.preventDefault();
@@ -194,19 +215,21 @@ c.onwheel=e=>{
 };
 
 /* =====================
-   TOUCH (PAN + PINCH)
+   TOUCH
 ===================== */
 c.ontouchstart=e=>{
   if(e.touches.length===1){
     const t=e.touches[0];
     const p=scrToImg(t.clientX,t.clientY-48);
-    if(hit(p1,p.x,p.y)) dragPoint=p1;
-    else if(hit(p2,p.x,p.y)) dragPoint=p2;
-    else panning=true;
+    if(!locked){
+      if(hit(p1,p.x,p.y)) dragPoint=p1;
+      else if(hit(p2,p.x,p.y)) dragPoint=p2;
+    }
+    if(!dragPoint) panning=true;
     lx=t.clientX; ly=t.clientY;
   }
   if(e.touches.length===2){
-    lastDist=Math.hypot(
+    lastPinch=Math.hypot(
       e.touches[0].clientX-e.touches[1].clientX,
       e.touches[0].clientY-e.touches[1].clientY
     );
@@ -232,14 +255,13 @@ c.ontouchmove=e=>{
       e.touches[0].clientX-e.touches[1].clientX,
       e.touches[0].clientY-e.touches[1].clientY
     );
-    const z=d/lastDist;
-    scale*=z;
-    lastDist=d;
+    scale*=d/lastPinch;
+    lastPinch=d;
     draw();
   }
 };
 
-c.ontouchend=()=>{dragPoint=null;panning=false;lastDist=null;};
+c.ontouchend=()=>{dragPoint=null;panning=false;lastPinch=null;};
 </script>
 </body>
 </html>
