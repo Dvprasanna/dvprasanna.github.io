@@ -1,33 +1,56 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8" />
-<title>Parallel Line Merge Demo</title>
+<meta charset="UTF-8">
+<title>Photo → Trace → Merge</title>
 <style>
-  body { margin:0; background:#111; }
+  body { margin:0; background:#111; color:#fff; }
+  #ui { padding:8px; background:#222; }
   canvas { display:block; margin:auto; background:#fff; }
 </style>
 </head>
 <body>
 
-<canvas id="c" width="800" height="500"></canvas>
+<div id="ui">
+  <input type="file" id="imgInput">
+  <button id="hideImg">Hide Photo</button>
+  <span>Right-click to trace | Press M to merge</span>
+</div>
+
+<canvas id="c" width="900" height="600"></canvas>
 
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
+let img = null;
+let showImg = true;
 let lines = [];
 let selected = new Set();
-let dragging = false;
-let lastY = 0;
 
-// create MANY parallel lines (simulate blurry edge output)
-for (let i = 0; i < 8; i++) {
-  lines.push({ x1:200+i*3, y1:50, x2:200+i*3, y2:450 });
-}
+/* ---------- IMAGE LOAD ---------- */
+imgInput.onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  img = new Image();
+  img.onload = draw;
+  img.src = URL.createObjectURL(f);
+};
 
+hideImg.onclick = () => {
+  showImg = !showImg;
+  draw();
+};
+
+/* ---------- DRAW ---------- */
 function draw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if (img && showImg) {
+    const s = Math.min(canvas.width/img.width, canvas.height/img.height);
+    const w = img.width*s, h = img.height*s;
+    ctx.drawImage(img, (canvas.width-w)/2, (canvas.height-h)/2, w, h);
+  }
 
   for (let l of lines) {
     ctx.strokeStyle = selected.has(l) ? "red" : "black";
@@ -39,72 +62,48 @@ function draw() {
   }
 }
 
-draw();
+/* ---------- RIGHT CLICK TRACE ---------- */
+canvas.oncontextmenu = e => {
+  e.preventDefault();
 
-/* hit test */
-function nearLine(l,x,y) {
-  return Math.abs(x-l.x1) < 6;
-}
+  // simulate edge-trace output: MANY parallel lines
+  lines = [];
+  for (let i=0;i<10;i++) {
+    lines.push({
+      x1:300+i*3, y1:100,
+      x2:300+i*3, y2:500
+    });
+  }
+  draw();
+};
 
-/* mouse */
+/* ---------- SELECTION ---------- */
 canvas.onmousedown = e => {
+  selected.clear();
   const r = canvas.getBoundingClientRect();
   const x = e.clientX-r.left;
-  const y = e.clientY-r.top;
 
-  selected.clear();
   for (let l of lines) {
-    if (nearLine(l,x,y)) selected.add(l);
-  }
-
-  if (selected.size) {
-    dragging = true;
-    lastY = y;
+    if (Math.abs(l.x1-x)<6) selected.add(l);
   }
   draw();
 };
 
-canvas.onmousemove = e => {
-  if (!dragging) return;
-  const r = canvas.getBoundingClientRect();
-  const y = e.clientY-r.top;
-  const dy = y-lastY;
-  lastY = y;
-
-  for (let l of selected) {
-    l.y1 += dy;
-    l.y2 += dy;
-  }
-  draw();
-};
-
-canvas.onmouseup = () => dragging=false;
-
-/* MERGE */
+/* ---------- MERGE ---------- */
 window.onkeydown = e => {
-  if (e.key.toLowerCase() === "m" && selected.size > 1) {
-    // average X position
-    let sum = 0;
-    for (let l of selected) sum += l.x1;
-    let avgX = sum / selected.size;
+  if (e.key.toLowerCase()==="m" && selected.size>1) {
+    let sum=0;
+    for (let l of selected) sum+=l.x1;
+    const x=sum/selected.size;
+    const ref=[...selected][0];
 
-    // get height
-    let ref = [...selected][0];
-
-    // remove selected
-    lines = lines.filter(l => !selected.has(l));
-
-    // add merged line
-    lines.push({
-      x1:avgX, y1:ref.y1,
-      x2:avgX, y2:ref.y2
-    });
-
+    lines=lines.filter(l=>!selected.has(l));
+    lines.push({x1:x,y1:ref.y1,x2:x,y2:ref.y2});
     selected.clear();
     draw();
   }
 };
-</script>
 
+</script>
 </body>
 </html>
