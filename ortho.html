@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Minimal CAD</title>
+<title>Minimal CAD Polyline</title>
 
 <style>
 html, body {
@@ -12,13 +12,11 @@ html, body {
   overflow: hidden;
   touch-action: none;
 }
-
 canvas {
   display: block;
   background: #000;
   border: 3px solid #00ff00;
 }
-
 #menu {
   position: absolute;
   background: #111;
@@ -29,12 +27,10 @@ canvas {
   display: none;
   z-index: 10;
 }
-
 #menu div {
   padding: 6px 12px;
   cursor: pointer;
 }
-
 #menu div:hover {
   background: #0f0;
   color: #000;
@@ -60,13 +56,19 @@ ctx.lineCap = "round";
 
 let lines = [];
 let drawing = false;
-let startPoint = null;
+let origin = null;
+let previewEnd = null;
 
 let ORTHO = true;
-let ANGLE = 0;
 let LENGTH = null;
 
-function redraw() {
+/* utils */
+function getPos(e){
+  if(e.touches) return {x:e.touches[0].clientX,y:e.touches[0].clientY};
+  return {x:e.clientX,y:e.clientY};
+}
+
+function redraw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   lines.forEach(l=>{
     ctx.beginPath();
@@ -74,122 +76,104 @@ function redraw() {
     ctx.lineTo(l.x2,l.y2);
     ctx.stroke();
   });
+  if(origin && previewEnd){
+    ctx.beginPath();
+    ctx.moveTo(origin.x,origin.y);
+    ctx.lineTo(previewEnd.x,previewEnd.y);
+    ctx.stroke();
+  }
 }
 
-function getPos(e) {
-  if (e.touches) {
-    return {x:e.touches[0].clientX,y:e.touches[0].clientY};
-  }
-  return {x:e.clientX,y:e.clientY};
-}
+function computeEnd(p1, cursor){
+  let dx = cursor.x - p1.x;
+  let dy = cursor.y - p1.y;
 
-function snapLine(p1) {
-  let dx = Math.cos(ANGLE * Math.PI/180);
-  let dy = Math.sin(ANGLE * Math.PI/180);
-
-  if (ORTHO) {
-    dx = Math.abs(dx) > Math.abs(dy) ? Math.sign(dx) : 0;
-    dy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
+  if(ORTHO){
+    if(Math.abs(dx) > Math.abs(dy)) dy = 0;
+    else dx = 0;
   }
 
+  const ang = Math.atan2(dy, dx);
   return {
-    x2: p1.x + dx * LENGTH,
-    y2: p1.y + dy * LENGTH
+    x: p1.x + Math.cos(ang) * LENGTH,
+    y: p1.y + Math.sin(ang) * LENGTH
   };
 }
 
-/* Drawing */
+/* drawing */
 canvas.addEventListener("mousedown", e=>{
-  if (!LENGTH) return;
+  if(!LENGTH) return;
+  const p = getPos(e);
+  if(!origin) origin = p;
   drawing = true;
-  startPoint = getPos(e);
 });
 
 canvas.addEventListener("mousemove", e=>{
-  if (!drawing) return;
+  if(!drawing || !origin) return;
+  previewEnd = computeEnd(origin, getPos(e));
   redraw();
-  const end = snapLine(startPoint);
-  ctx.beginPath();
-  ctx.moveTo(startPoint.x,startPoint.y);
-  ctx.lineTo(end.x2,end.y2);
-  ctx.stroke();
 });
 
 canvas.addEventListener("mouseup", e=>{
-  if (!drawing) return;
+  if(!drawing || !origin) return;
   drawing = false;
-  const end = snapLine(startPoint);
-  lines.push({x1:startPoint.x,y1:startPoint.y,x2:end.x2,y2:end.y2});
+  const end = computeEnd(origin, getPos(e));
+  lines.push({x1:origin.x,y1:origin.y,x2:end.x,y2:end.y});
+  origin = end;        // CONTINUOUS
+  previewEnd = null;
   redraw();
 });
 
-/* Touch */
+/* touch */
 canvas.addEventListener("touchstart", e=>{
-  if (!LENGTH) return;
+  if(!LENGTH) return;
+  const p = getPos(e);
+  if(!origin) origin = p;
   drawing = true;
-  startPoint = getPos(e);
+});
+canvas.addEventListener("touchmove", e=>{
+  if(!drawing || !origin) return;
+  previewEnd = computeEnd(origin, getPos(e));
+  redraw();
 });
 canvas.addEventListener("touchend", ()=>{
-  if (!drawing) return;
+  if(!drawing || !origin) return;
   drawing = false;
-  const end = snapLine(startPoint);
-  lines.push({x1:startPoint.x,y1:startPoint.y,x2:end.x2,y2:end.y2});
+  lines.push({x1:origin.x,y1:origin.y,x2:previewEnd.x,y2:previewEnd.y});
+  origin = previewEnd;
+  previewEnd = null;
   redraw();
 });
 
-/* Right click menu */
+/* right click menu */
 canvas.addEventListener("contextmenu", e=>{
   e.preventDefault();
-  menu.style.left = e.clientX + "px";
-  menu.style.top = e.clientY + "px";
+  menu.style.left = e.clientX+"px";
+  menu.style.top = e.clientY+"px";
   menu.style.display = "block";
   menu.innerHTML = `
     <div onclick="toggleOrtho()">Ortho</div>
-    <div onclick="setAngle()">Angle</div>
     <div onclick="setLength()">Length</div>
     <div onclick="undo()">Undo</div>
     <div onclick="clearAll()">Clear</div>
     <div>Curve C</div>
     <div>Curve D</div>
-    <div onclick="closeMenu()">End</div>
+    <div onclick="endDraw()">End</div>
   `;
 });
 
-document.addEventListener("click", ()=>menu.style.display="none");
+document.addEventListener("click",()=>menu.style.display="none");
 
-/* Menu actions */
-function toggleOrtho() {
-  ORTHO = !ORTHO;
-  closeMenu();
+/* menu actions */
+function toggleOrtho(){ ORTHO=!ORTHO; menu.style.display="none"; }
+function setLength(){
+  const l = prompt("Length:", LENGTH||"");
+  if(l!==null) LENGTH=parseFloat(l);
+  menu.style.display="none";
 }
-
-function setAngle() {
-  const a = prompt("Angle (deg):", ANGLE);
-  if (a !== null) ANGLE = parseFloat(a);
-  closeMenu();
-}
-
-function setLength() {
-  const l = prompt("Length:", LENGTH || "");
-  if (l !== null) LENGTH = parseFloat(l);
-  closeMenu();
-}
-
-function undo() {
-  lines.pop();
-  redraw();
-  closeMenu();
-}
-
-function clearAll() {
-  lines = [];
-  redraw();
-  closeMenu();
-}
-
-function closeMenu() {
-  menu.style.display = "none";
-}
+function undo(){ lines.pop(); redraw(); menu.style.display="none"; }
+function clearAll(){ lines=[]; origin=null; redraw(); menu.style.display="none"; }
+function endDraw(){ origin=null; previewEnd=null; redraw(); menu.style.display="none"; }
 </script>
 </body>
 </html>
