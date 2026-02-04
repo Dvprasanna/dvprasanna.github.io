@@ -1,157 +1,109 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Keyboard CAD Canvas v1.0</title>
-
+<title>Parallel Line Merge Demo</title>
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    background: #111;
-    overflow: hidden;
-    font-family: monospace;
-  }
-
-  canvas {
-    display: block;
-    border: 2px solid white;
-    background: #000;
-  }
-
-  #hud {
-    position: fixed;
-    bottom: 10px;
-    left: 10px;
-    color: #0f0;
-    font-size: 14px;
-    background: rgba(0,0,0,0.6);
-    padding: 6px 10px;
-    border: 1px solid #0f0;
-  }
+  body { margin:0; background:#111; }
+  canvas { display:block; margin:auto; background:#fff; }
 </style>
 </head>
-
 <body>
 
-<canvas id="cad"></canvas>
-<div id="hud">CMD: <span id="cmd"></span></div>
+<canvas id="c" width="800" height="500"></canvas>
 
 <script>
-/* =======================
-   CANVAS SETUP
-======================= */
-const canvas = document.getElementById("cad");
+const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-  drawCursor();
-}
-window.addEventListener("resize", resize);
-resize();
+let lines = [];
+let selected = new Set();
+let dragging = false;
+let lastY = 0;
 
-/* =======================
-   STATE
-======================= */
-let x = canvas.width / 2;
-let y = canvas.height / 2;
-let buffer = "";
-let shift = false;
-let grid = false;
-
-/* =======================
-   DRAWING
-======================= */
-ctx.strokeStyle = "#fff";
-ctx.lineWidth = 1;
-
-function drawLine(dx, dy) {
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  x += dx;
-  y += dy;
-  ctx.lineTo(x, y);
-  ctx.stroke();
-  drawCursor();
+// create MANY parallel lines (simulate blurry edge output)
+for (let i = 0; i < 8; i++) {
+  lines.push({ x1:200+i*3, y1:50, x2:200+i*3, y2:450 });
 }
 
-function drawCursor() {
-  ctx.fillStyle = "red";
-  ctx.beginPath();
-  ctx.arc(x, y, 3, 0, Math.PI * 2);
-  ctx.fill();
-}
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-/* =======================
-   GRID
-======================= */
-function drawGrid() {
-  ctx.strokeStyle = "#222";
-  ctx.lineWidth = 1;
-  for (let i = 0; i < canvas.width; i += 50) {
+  for (let l of lines) {
+    ctx.strokeStyle = selected.has(l) ? "red" : "black";
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i, canvas.height);
+    ctx.moveTo(l.x1,l.y1);
+    ctx.lineTo(l.x2,l.y2);
     ctx.stroke();
   }
-  for (let i = 0; i < canvas.height; i += 50) {
-    ctx.beginPath();
-    ctx.moveTo(0, i);
-    ctx.lineTo(canvas.width, i);
-    ctx.stroke();
-  }
-  ctx.strokeStyle = "#fff";
 }
 
-/* =======================
-   COMMAND EXECUTION
-======================= */
-function execute(cmd) {
-  const dir = cmd[0];
-  let val = parseInt(cmd.slice(1)) || 0;
+draw();
 
-  if (shift) val *= 10;
-
-  if (dir === "r") drawLine(val, 0);
-  if (dir === "l") drawLine(-val, 0);
-  if (dir === "u") drawLine(0, -val);
-  if (dir === "d") drawLine(0, val);
+/* hit test */
+function nearLine(l,x,y) {
+  return Math.abs(x-l.x1) < 6;
 }
 
-/* =======================
-   KEYBOARD INPUT
-======================= */
-document.addEventListener("keydown", e => {
-  if (e.key === "Shift") shift = true;
+/* mouse */
+canvas.onmousedown = e => {
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX-r.left;
+  const y = e.clientY-r.top;
 
-  if (e.key >= "0" && e.key <= "9") {
-    buffer += e.key;
+  selected.clear();
+  for (let l of lines) {
+    if (nearLine(l,x,y)) selected.add(l);
   }
 
-  if (["r","l","u","d"].includes(e.key)) {
-    buffer = e.key;
+  if (selected.size) {
+    dragging = true;
+    lastY = y;
   }
+  draw();
+};
 
-  if (e.key === "Enter") {
-    execute(buffer);
-    buffer = "";
+canvas.onmousemove = e => {
+  if (!dragging) return;
+  const r = canvas.getBoundingClientRect();
+  const y = e.clientY-r.top;
+  const dy = y-lastY;
+  lastY = y;
+
+  for (let l of selected) {
+    l.y1 += dy;
+    l.y2 += dy;
   }
+  draw();
+};
 
-  if (e.key === "g") {
-    grid = !grid;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    if (grid) drawGrid();
+canvas.onmouseup = () => dragging=false;
+
+/* MERGE */
+window.onkeydown = e => {
+  if (e.key.toLowerCase() === "m" && selected.size > 1) {
+    // average X position
+    let sum = 0;
+    for (let l of selected) sum += l.x1;
+    let avgX = sum / selected.size;
+
+    // get height
+    let ref = [...selected][0];
+
+    // remove selected
+    lines = lines.filter(l => !selected.has(l));
+
+    // add merged line
+    lines.push({
+      x1:avgX, y1:ref.y1,
+      x2:avgX, y2:ref.y2
+    });
+
+    selected.clear();
+    draw();
   }
-
-  document.getElementById("cmd").textContent = buffer;
-});
-
-document.addEventListener("keyup", e => {
-  if (e.key === "Shift") shift = false;
-});
+};
 </script>
 
 </body>
