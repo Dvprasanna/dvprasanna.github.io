@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>L Shape Room CAD</title>
+<title>L Shape Room – Ask Side</title>
 
 <style>
 html, body {
@@ -16,8 +16,6 @@ canvas {
   background: #000;
   border: 3px solid #00ff00;
 }
-
-/* Right click menu */
 #menu {
   position: absolute;
   background: #111;
@@ -57,14 +55,14 @@ ctx.lineWidth = 2;
 ctx.lineCap = "round";
 
 /* ================= STATE ================= */
-let lines = [];        // all permanent lines (walls)
-let tempLine = null;   // current visible single line
+let lines = [];
 let drawing = false;
 
 let startPoint = null;
 let lastEndPoint = null;
+let tempLine = null;
 
-let OFFSET = 10;       // wall thickness
+let OFFSET = 10; // wall thickness
 
 /* ================= UTILS ================= */
 function redraw() {
@@ -85,19 +83,17 @@ function redraw() {
   }
 }
 
-function sideOfLine(p, l) {
-  // cross product sign
-  return (p.x - l.x1) * (l.y2 - l.y1) -
-         (p.y - l.y1) * (l.x2 - l.x1);
+function askSide() {
+  const s = prompt("Wall side? (L / R)", "L");
+  if (!s) return null;
+  return s.toUpperCase().startsWith("R") ? "R" : "L";
 }
 
-/* ================= DRAW SINGLE LINE ================= */
+/* ================= DRAW ================= */
 canvas.addEventListener("mousedown", e => {
-  if (e.button !== 0) return; // left mouse only
+  if (e.button !== 0) return;
 
   drawing = true;
-
-  // start from last endpoint if exists
   startPoint = lastEndPoint
     ? { ...lastEndPoint }
     : { x: e.clientX, y: e.clientY };
@@ -119,70 +115,51 @@ canvas.addEventListener("mouseup", e => {
   if (!drawing) return;
   drawing = false;
 
-  tempLine = {
+  const baseLine = {
     x1: startPoint.x,
     y1: startPoint.y,
     x2: e.clientX,
     y2: e.clientY
   };
 
-  lines.push(tempLine);          // visible reference line
-  lastEndPoint = {               // chain next wall
-    x: tempLine.x2,
-    y: tempLine.y2
-  };
+  lines.push(baseLine); // visible reference line
 
-  redraw();
-});
+  const side = askSide();
+  if (side) {
+    const dx = baseLine.x2 - baseLine.x1;
+    const dy = baseLine.y2 - baseLine.y1;
+    const len = Math.hypot(dx, dy);
+    if (len > 0) {
+      const nx = -dy / len;
+      const ny = dx / len;
+      const sign = side === "L" ? 1 : -1;
 
-/* ================= DOUBLE CLICK = PICK WALL SIDE ================= */
-canvas.addEventListener("dblclick", e => {
-  if (!tempLine) return;
+      lines.push({
+        x1: baseLine.x1 + nx * OFFSET * sign,
+        y1: baseLine.y1 + ny * OFFSET * sign,
+        x2: baseLine.x2 + nx * OFFSET * sign,
+        y2: baseLine.y2 + ny * OFFSET * sign
+      });
+    }
+  }
 
-  const dx = tempLine.x2 - tempLine.x1;
-  const dy = tempLine.y2 - tempLine.y1;
-  const len = Math.hypot(dx, dy);
-  if (len === 0) return;
-
-  const nx = -dy / len;
-  const ny = dx / len;
-
-  const side = sideOfLine(
-    { x: e.clientX, y: e.clientY },
-    tempLine
-  );
-
-  const sign = side > 0 ? 1 : -1;
-
-  const offsetLine = {
-    x1: tempLine.x1 + nx * OFFSET * sign,
-    y1: tempLine.y1 + ny * OFFSET * sign,
-    x2: tempLine.x2 + nx * OFFSET * sign,
-    y2: tempLine.y2 + ny * OFFSET * sign
-  };
-
-  lines.push(offsetLine);
+  lastEndPoint = { x: baseLine.x2, y: baseLine.y2 };
   tempLine = null;
-
   redraw();
 });
 
 /* ================= RIGHT CLICK MENU ================= */
 canvas.addEventListener("contextmenu", e => {
   e.preventDefault();
-  showMenu(e.clientX, e.clientY);
-});
-
-function showMenu(x, y) {
-  menu.style.left = x + "px";
-  menu.style.top = y + "px";
+  menu.style.left = e.clientX + "px";
+  menu.style.top = e.clientY + "px";
   menu.style.display = "block";
   menu.innerHTML = `
     <div onclick="setOffset()">Set Wall Thickness</div>
     <div onclick="undo()">Undo</div>
     <div onclick="clearAll()">Clear</div>
   `;
-}
+});
 
 document.addEventListener("click", () => {
   menu.style.display = "none";
@@ -203,8 +180,8 @@ function undo() {
 
 function clearAll() {
   lines = [];
-  tempLine = null;
   lastEndPoint = null;
+  tempLine = null;
   redraw();
   menu.style.display = "none";
 }
