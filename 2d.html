@@ -1,277 +1,185 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Black Line Floorplan Tracer</title>
+<meta charset="UTF-8" />
+<title>Mouse Drawing App v1.0</title>
+
 <style>
-  body { margin:0; background:#111; color:#fff; font-family:system-ui; }
-  #ui {
-    background:#222;
-    padding:8px;
-    display:flex;
-    gap:8px;
-    align-items:center;
-  }
-  canvas {
-    display:block;
-    margin:auto;
-    background:#fff;
-    cursor:crosshair;
-  }
-  button { padding:6px 10px; }
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #1c1c1c;
+  color: #fff;
+}
+#topbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: #2a2a2a;
+  align-items: center;
+}
+input, button {
+  background: #111;
+  color: #fff;
+  border: 1px solid #444;
+  padding: 4px 6px;
+}
+canvas {
+  display: block;
+  background: #111;
+  cursor: crosshair;
+}
 </style>
 </head>
+
 <body>
 
-<div id="ui">
-  <input type="file" id="imgInput">
-  <button id="toggleImg">Hide Photo</button>
-  <button id="mergeBtn">Merge Lines</button>
-  <span>Right-click = Trace | Drag = Move | Box = Select</span>
+<div id="topbar">
+  <input type="file" id="bgLoader" />
+  Grid(px): <input id="gridSize" type="number" value="20" style="width:60px">
+  <button id="gridToggle">Grid ON</button>
+  Offset(px): <input id="offsetVal" type="number" value="10" style="width:60px">
+  <button id="offsetBtn">Apply Offset</button>
 </div>
 
-<canvas id="c" width="1000" height="650"></canvas>
+<canvas id="canvas" width="1200" height="700"></canvas>
 
 <script>
-const canvas = document.getElementById("c");
+/* ====== STATE ====== */
+const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-let img = null;
-let imgRect = null; // exact image draw position
-let showImg = true;
+let bgImage = null;
+let gridOn = true;
+let gridSize = 20;
 
 let lines = [];
-let selected = new Set();
+let currentLine = null;
+let selectedLine = null;
 
-let dragging = false;
-let boxSelect = false;
-let start = {x:0,y:0};
-let mouse = {x:0,y:0};
+/* ====== HELPERS ====== */
+function snap(v) {
+  return gridOn ? Math.round(v / gridSize) * gridSize : v;
+}
 
-/* ================= IMAGE LOAD ================= */
-imgInput.onchange = e => {
-  img = new Image();
-  img.onload = draw;
-  img.src = URL.createObjectURL(e.target.files[0]);
-};
+function distToLine(px, py, l) {
+  const A = px - l.x1;
+  const B = py - l.y1;
+  const C = l.x2 - l.x1;
+  const D = l.y2 - l.y1;
+  const dot = A * C + B * D;
+  const len = C * C + D * D;
+  const t = Math.max(0, Math.min(1, dot / len));
+  const dx = l.x1 + t * C - px;
+  const dy = l.y1 + t * D - py;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
-toggleImg.onclick = () => {
-  showImg = !showImg;
-  draw();
-};
-
-mergeBtn.onclick = mergeSelected;
-
-/* ================= DRAW ================= */
-function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  if(img && showImg){
-    const s = Math.min(canvas.width/img.width, canvas.height/img.height);
-    const w = img.width * s;
-    const h = img.height * s;
-    const x = (canvas.width - w) / 2;
-    const y = (canvas.height - h) / 2;
-
-    imgRect = { x, y, w, h };
-    ctx.drawImage(img, x, y, w, h);
-  }
-
-  for(const l of lines){
-    ctx.strokeStyle = selected.has(l) ? "red" : "black";
-    ctx.lineWidth = 2;
+/* ====== DRAW ====== */
+function drawGrid() {
+  if (!gridOn) return;
+  ctx.strokeStyle = "#222";
+  for (let x = 0; x < canvas.width; x += gridSize) {
     ctx.beginPath();
-    ctx.moveTo(l.x1,l.y1);
-    ctx.lineTo(l.x2,l.y2);
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
     ctx.stroke();
   }
-
-  if(boxSelect){
-    ctx.strokeStyle = "rgba(0,120,255,0.7)";
-    ctx.setLineDash([6,4]);
-    ctx.strokeRect(
-      start.x,
-      start.y,
-      mouse.x - start.x,
-      mouse.y - start.y
-    );
-    ctx.setLineDash([]);
+  for (let y = 0; y < canvas.height; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
   }
 }
 
-/* ================= TRACE BLACK LINES ================= */
-function traceBlackLines(){
-  if(!img || !imgRect) return;
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (bgImage) ctx.drawImage(bgImage, 0, 0);
 
-  const data = ctx.getImageData(
-    imgRect.x,
-    imgRect.y,
-    imgRect.w,
-    imgRect.h
-  );
+  drawGrid();
 
-  const w = data.width;
-  const h = data.height;
-  const d = data.data;
-  const gray = new Float32Array(w*h);
-
-  /* --- black pixel mask --- */
-  for(let i=0;i<w*h;i++){
-    const r=d[i*4], g=d[i*4+1], b=d[i*4+2];
-    gray[i] = (r<140 && g<140 && b<140) ? (r+g+b)/3 : 255;
-  }
-
-  const edges = [];
-
-  /* --- sobel --- */
-  for(let y=1;y<h-1;y++){
-    for(let x=1;x<w-1;x++){
-      const i=y*w+x;
-      const gx =
-        -gray[i-w-1]-2*gray[i-1]-gray[i+w-1] +
-         gray[i-w+1]+2*gray[i+1]+gray[i+w+1];
-      const gy =
-        -gray[i-w-1]-2*gray[i-w]-gray[i-w+1] +
-         gray[i+w-1]+2*gray[i+w]+gray[i+w+1];
-
-      if(Math.hypot(gx,gy) > 35){
-        edges.push({x,y,gx,gy});
-      }
-    }
-  }
-
-  lines = [];
-
-  /* --- vertical lines --- */
-  for(let x=0;x<w;x+=3){
-    const pts = edges.filter(p =>
-      Math.abs(p.x-x)<2 &&
-      Math.abs(Math.atan2(p.gy,p.gx)-Math.PI/2)<0.35
-    );
-    if(pts.length>20){
-      const ys = pts.map(p=>p.y);
-      lines.push({
-        x1: imgRect.x + x,
-        y1: imgRect.y + Math.min(...ys),
-        x2: imgRect.x + x,
-        y2: imgRect.y + Math.max(...ys)
-      });
-    }
-  }
-
-  /* --- horizontal lines --- */
-  for(let y=0;y<h;y+=3){
-    const pts = edges.filter(p =>
-      Math.abs(p.y-y)<2 &&
-      Math.abs(Math.atan2(p.gy,p.gx))<0.35
-    );
-    if(pts.length>20){
-      const xs = pts.map(p=>p.x);
-      lines.push({
-        x1: imgRect.x + Math.min(...xs),
-        y1: imgRect.y + y,
-        x2: imgRect.x + Math.max(...xs),
-        y2: imgRect.y + y
-      });
-    }
-  }
-
-  draw();
+  lines.forEach(l => {
+    ctx.strokeStyle = l === selectedLine ? "red" : "white";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(l.x1, l.y1);
+    ctx.lineTo(l.x2, l.y2);
+    ctx.stroke();
+  });
 }
 
-/* ================= RIGHT CLICK ================= */
-canvas.oncontextmenu = e => {
-  e.preventDefault();
-  traceBlackLines();
-};
-
-/* ================= MOUSE ================= */
+/* ====== MOUSE ====== */
 canvas.onmousedown = e => {
-  const r = canvas.getBoundingClientRect();
-  start.x = mouse.x = e.clientX - r.left;
-  start.y = mouse.y = e.clientY - r.top;
+  const x = snap(e.offsetX);
+  const y = snap(e.offsetY);
 
-  selected.clear();
-  dragging = false;
-  boxSelect = true;
-
-  for(const l of lines){
-    if(Math.abs(l.x1-mouse.x)<6 || Math.abs(l.y1-mouse.y)<6){
-      selected.add(l);
-      dragging = true;
-      boxSelect = false;
+  selectedLine = null;
+  for (let l of lines) {
+    if (distToLine(x, y, l) < 6) {
+      selectedLine = l;
+      redraw();
+      return;
     }
   }
-  draw();
+
+  currentLine = { x1: x, y1: y, x2: x, y2: y };
+  lines.push(currentLine);
 };
 
 canvas.onmousemove = e => {
-  const r = canvas.getBoundingClientRect();
-  mouse.x = e.clientX - r.left;
-  mouse.y = e.clientY - r.top;
-
-  if(dragging){
-    const dx = mouse.x - start.x;
-    const dy = mouse.y - start.y;
-    start.x = mouse.x;
-    start.y = mouse.y;
-
-    for(const l of selected){
-      if(l.x1===l.x2){ l.x1+=dx; l.x2+=dx; }
-      else { l.y1+=dy; l.y2+=dy; }
-    }
-    draw();
-  } else if(boxSelect){
-    draw();
-  }
+  if (!currentLine) return;
+  currentLine.x2 = snap(e.offsetX);
+  currentLine.y2 = snap(e.offsetY);
+  redraw();
 };
 
 canvas.onmouseup = () => {
-  if(boxSelect){
-    const x1=Math.min(start.x,mouse.x);
-    const x2=Math.max(start.x,mouse.x);
-    const y1=Math.min(start.y,mouse.y);
-    const y2=Math.max(start.y,mouse.y);
-
-    for(const l of lines){
-      if(l.x1>=x1 && l.x1<=x2 && l.y1>=y1 && l.y1<=y2){
-        selected.add(l);
-      }
-    }
-  }
-  dragging=false;
-  boxSelect=false;
-  draw();
+  currentLine = null;
 };
 
-/* ================= MERGE ================= */
-function mergeSelected(){
-  if(selected.size<2) return;
+/* ====== OFFSET ====== */
+document.getElementById("offsetBtn").onclick = () => {
+  if (!selectedLine) return;
+  const d = Number(document.getElementById("offsetVal").value);
 
-  const arr=[...selected];
-  const vertical = arr[0].x1===arr[0].x2;
+  const dx = selectedLine.x2 - selectedLine.x1;
+  const dy = selectedLine.y2 - selectedLine.y1;
+  const len = Math.hypot(dx, dy);
+  const nx = -dy / len;
+  const ny = dx / len;
 
-  const avg = vertical
-    ? arr.reduce((s,l)=>s+l.x1,0)/arr.length
-    : arr.reduce((s,l)=>s+l.y1,0)/arr.length;
+  lines.push({
+    x1: selectedLine.x1 + nx * d,
+    y1: selectedLine.y1 + ny * d,
+    x2: selectedLine.x2 + nx * d,
+    y2: selectedLine.y2 + ny * d
+  });
 
-  const min = vertical
-    ? Math.min(...arr.map(l=>l.y1))
-    : Math.min(...arr.map(l=>l.x1));
+  redraw();
+};
 
-  const max = vertical
-    ? Math.max(...arr.map(l=>l.y2))
-    : Math.max(...arr.map(l=>l.x2));
+/* ====== UI ====== */
+document.getElementById("gridToggle").onclick = () => {
+  gridOn = !gridOn;
+  redraw();
+};
 
-  lines = lines.filter(l=>!selected.has(l));
-  lines.push(vertical
-    ? {x1:avg,y1:min,x2:avg,y2:max}
-    : {x1:min,y1:avg,x2:max,y2:avg}
-  );
+document.getElementById("gridSize").onchange = e => {
+  gridSize = Number(e.target.value);
+  redraw();
+};
 
-  selected.clear();
-  draw();
-}
+document.getElementById("bgLoader").onchange = e => {
+  const img = new Image();
+  img.onload = () => {
+    bgImage = img;
+    redraw();
+  };
+  img.src = URL.createObjectURL(e.target.files[0]);
+};
+
+redraw();
 </script>
 
 </body>
