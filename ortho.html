@@ -43,7 +43,7 @@ canvas {
 <div id="menu"></div>
 
 <script>
-/* ================== SETUP ================== */
+/* ===== SETUP ===== */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const menu = document.getElementById("menu");
@@ -55,17 +55,19 @@ ctx.strokeStyle = "#00ff00";
 ctx.lineWidth = 2;
 ctx.lineCap = "round";
 
-/* ================== STATE ================== */
+/* ===== STATE ===== */
 let lines = [];
-let origin = null;
+
+let baseOrigin = null;      // FIXED ORIGIN (never moves unless cleared)
+let currentPoint = null;   // MOVING DRAW POINT
 let previewEnd = null;
 let drawing = false;
 
-let ORTHO = true;          // default ON
-let LENGTH = null;         // must be set
-let LOCKED_ANGLE = null;   // radians
+let ORTHO = true;
+let LENGTH = null;
+let LOCKED_ANGLE = null;
 
-/* ================== UTILS ================== */
+/* ===== UTILS ===== */
 function getPos(e) {
   if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
   return { x: e.clientX, y: e.clientY };
@@ -74,6 +76,7 @@ function getPos(e) {
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // drawn lines
   lines.forEach(l => {
     ctx.beginPath();
     ctx.moveTo(l.x1, l.y1);
@@ -81,11 +84,20 @@ function redraw() {
     ctx.stroke();
   });
 
-  if (origin && previewEnd) {
+  // preview line
+  if (currentPoint && previewEnd) {
     ctx.beginPath();
-    ctx.moveTo(origin.x, origin.y);
+    ctx.moveTo(currentPoint.x, currentPoint.y);
     ctx.lineTo(previewEnd.x, previewEnd.y);
     ctx.stroke();
+  }
+
+  // base origin marker
+  if (baseOrigin) {
+    ctx.fillStyle = "#00ff00";
+    ctx.beginPath();
+    ctx.arc(baseOrigin.x, baseOrigin.y, 3, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -107,11 +119,7 @@ function computeEnd(p1, cursor) {
       LOCKED_ANGLE = parseFloat(a) * Math.PI / 180;
     }
     ang = LOCKED_ANGLE;
-
-    // flip direction if dragging opposite
-    if (dx * Math.cos(ang) + dy * Math.sin(ang) < 0) {
-      ang += Math.PI;
-    }
+    if (dx * Math.cos(ang) + dy * Math.sin(ang) < 0) ang += Math.PI;
   }
 
   return {
@@ -120,61 +128,46 @@ function computeEnd(p1, cursor) {
   };
 }
 
-/* ================== DRAWING ================== */
+/* ===== DRAW ===== */
 canvas.addEventListener("mousedown", e => {
   if (!LENGTH) return;
-  if (!origin) origin = getPos(e);
+  const p = getPos(e);
+
+  // set base origin ONCE
+  if (!baseOrigin) {
+    baseOrigin = p;
+    currentPoint = p;
+  }
+
   drawing = true;
 });
 
 canvas.addEventListener("mousemove", e => {
-  if (!drawing || !origin) return;
-  const end = computeEnd(origin, getPos(e));
+  if (!drawing || !currentPoint) return;
+  const end = computeEnd(currentPoint, getPos(e));
   if (!end) return;
   previewEnd = end;
   redraw();
 });
 
-canvas.addEventListener("mouseup", e => {
-  if (!drawing || !origin || !previewEnd) return;
+canvas.addEventListener("mouseup", () => {
+  if (!drawing || !currentPoint || !previewEnd) return;
   drawing = false;
 
-  lines.push({ x1: origin.x, y1: origin.y, x2: previewEnd.x, y2: previewEnd.y });
-  origin = previewEnd;
+  lines.push({
+    x1: currentPoint.x,
+    y1: currentPoint.y,
+    x2: previewEnd.x,
+    y2: previewEnd.y
+  });
+
+  currentPoint = previewEnd;   // continuous
   previewEnd = null;
   LOCKED_ANGLE = null;
-
   redraw();
 });
 
-/* ================== TOUCH ================== */
-canvas.addEventListener("touchstart", e => {
-  if (!LENGTH) return;
-  if (!origin) origin = getPos(e);
-  drawing = true;
-});
-
-canvas.addEventListener("touchmove", e => {
-  if (!drawing || !origin) return;
-  const end = computeEnd(origin, getPos(e));
-  if (!end) return;
-  previewEnd = end;
-  redraw();
-});
-
-canvas.addEventListener("touchend", () => {
-  if (!drawing || !origin || !previewEnd) return;
-  drawing = false;
-
-  lines.push({ x1: origin.x, y1: origin.y, x2: previewEnd.x, y2: previewEnd.y });
-  origin = previewEnd;
-  previewEnd = null;
-  LOCKED_ANGLE = null;
-
-  redraw();
-});
-
-/* ================== CONTEXT MENU ================== */
+/* ===== CONTEXT MENU ===== */
 canvas.addEventListener("contextmenu", e => {
   e.preventDefault();
   menu.style.left = e.clientX + "px";
@@ -183,25 +176,23 @@ canvas.addEventListener("contextmenu", e => {
   menu.innerHTML = `
     <div onclick="ORTHO=!ORTHO">Ortho</div>
     <div onclick="setLength()">Length</div>
-    <div onclick="offsetOrigin()">Offset</div>
-    <div onclick="exportDXF()">Export DXF</div>
-    <div onclick="exportSVG()">Export SVG</div>
+    <div onclick="offsetFromOrigin()">Offset (from origin)</div>
     <div onclick="undo()">Undo</div>
     <div onclick="clearAll()">Clear</div>
     <div onclick="endDraw()">End</div>
   `;
 });
-
 document.addEventListener("click", () => menu.style.display = "none");
 
-/* ================== ACTIONS ================== */
+/* ===== ACTIONS ===== */
 function setLength() {
   const l = prompt("Length:", LENGTH || "");
   if (l !== null) LENGTH = parseFloat(l);
 }
 
-function offsetOrigin() {
-  if (!origin) return alert("No origin set");
+/* ✅ THIS IS THE FIXED OFFSET */
+function offsetFromOrigin() {
+  if (!baseOrigin) return alert("Base origin not set");
 
   const ox = prompt("X offset:", "0");
   if (ox === null) return;
@@ -209,11 +200,12 @@ function offsetOrigin() {
   const oy = prompt("Y offset:", "0");
   if (oy === null) return;
 
-  origin = {
-    x: origin.x + parseFloat(ox),
-    y: origin.y + parseFloat(oy)
+  currentPoint = {
+    x: baseOrigin.x + parseFloat(ox),
+    y: baseOrigin.y + parseFloat(oy)
   };
 
+  previewEnd = null;
   redraw();
 }
 
@@ -224,68 +216,16 @@ function undo() {
 
 function clearAll() {
   lines = [];
-  origin = null;
-  redraw();
-}
-
-function endDraw() {
-  origin = null;
+  baseOrigin = null;
+  currentPoint = null;
   previewEnd = null;
   redraw();
 }
 
-/* ================== EXPORT ================== */
-function exportDXF() {
-  if (!lines.length) return alert("Nothing to export");
-
-  let dxf = [];
-  dxf.push("0","SECTION","2","ENTITIES");
-
-  lines.forEach(l => {
-    dxf.push(
-      "0","LINE",
-      "8","0",
-      "10", l.x1,
-      "20", -l.y1,
-      "11", l.x2,
-      "21", -l.y2
-    );
-  });
-
-  dxf.push("0","ENDSEC","0","EOF");
-  download(dxf.join("\n"), "drawing.dxf", "application/dxf");
-}
-
-function exportSVG() {
-  if (!lines.length) return alert("Nothing to export");
-
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
-  lines.forEach(l=>{
-    minX=Math.min(minX,l.x1,l.x2);
-    minY=Math.min(minY,l.y1,l.y2);
-    maxX=Math.max(maxX,l.x1,l.x2);
-    maxY=Math.max(maxY,l.y1,l.y2);
-  });
-
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg"
-    viewBox="${minX} ${minY} ${maxX-minX} ${maxY-minY}"
-    stroke="black" fill="none">`;
-
-  lines.forEach(l=>{
-    svg += `<line x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}"/>`;
-  });
-
-  svg += `</svg>`;
-  download(svg, "drawing.svg", "image/svg+xml");
-}
-
-function download(data, name, type) {
-  const blob = new Blob([data], { type });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
+function endDraw() {
+  currentPoint = null;
+  previewEnd = null;
+  redraw();
 }
 </script>
 </body>
