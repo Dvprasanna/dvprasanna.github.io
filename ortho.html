@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Minimal Web CAD</title>
+<title>Minimal Web CAD – Double Line</title>
 
 <style>
 html, body {
@@ -43,7 +43,7 @@ canvas {
 <div id="menu"></div>
 
 <script>
-/* ===== SETUP ===== */
+/* ========= SETUP ========= */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const menu = document.getElementById("menu");
@@ -55,11 +55,11 @@ ctx.strokeStyle = "#00ff00";
 ctx.lineWidth = 2;
 ctx.lineCap = "round";
 
-/* ===== STATE ===== */
+/* ========= STATE ========= */
 let lines = [];
 
-let baseOrigin = null;      // FIXED ORIGIN (never moves unless cleared)
-let currentPoint = null;   // MOVING DRAW POINT
+let baseOrigin = null;
+let currentPoint = null;
 let previewEnd = null;
 let drawing = false;
 
@@ -67,7 +67,11 @@ let ORTHO = true;
 let LENGTH = null;
 let LOCKED_ANGLE = null;
 
-/* ===== UTILS ===== */
+/* DOUBLE LINE */
+let DOUBLE = false;
+let DOUBLE_OFFSET = 0;
+
+/* ========= UTILS ========= */
 function getPos(e) {
   if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
   return { x: e.clientX, y: e.clientY };
@@ -76,7 +80,6 @@ function getPos(e) {
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // drawn lines
   lines.forEach(l => {
     ctx.beginPath();
     ctx.moveTo(l.x1, l.y1);
@@ -84,7 +87,6 @@ function redraw() {
     ctx.stroke();
   });
 
-  // preview line
   if (currentPoint && previewEnd) {
     ctx.beginPath();
     ctx.moveTo(currentPoint.x, currentPoint.y);
@@ -92,7 +94,6 @@ function redraw() {
     ctx.stroke();
   }
 
-  // base origin marker
   if (baseOrigin) {
     ctx.fillStyle = "#00ff00";
     ctx.beginPath();
@@ -101,52 +102,48 @@ function redraw() {
   }
 }
 
-function computeEnd(p1, cursor) {
+function computeAngle(p1, cursor) {
   let dx = cursor.x - p1.x;
   let dy = cursor.y - p1.y;
-  let ang;
 
   if (ORTHO) {
-    if (Math.abs(dx) > Math.abs(dy)) {
-      ang = dx >= 0 ? 0 : Math.PI;
-    } else {
-      ang = dy >= 0 ? Math.PI / 2 : -Math.PI / 2;
-    }
-  } else {
-    if (LOCKED_ANGLE === null) {
-      const a = prompt("Angle (deg):", "0");
-      if (a === null) return null;
-      LOCKED_ANGLE = parseFloat(a) * Math.PI / 180;
-    }
-    ang = LOCKED_ANGLE;
-    if (dx * Math.cos(ang) + dy * Math.sin(ang) < 0) ang += Math.PI;
+    if (Math.abs(dx) > Math.abs(dy)) return dx >= 0 ? 0 : Math.PI;
+    return dy >= 0 ? Math.PI / 2 : -Math.PI / 2;
   }
 
-  return {
-    x: p1.x + Math.cos(ang) * LENGTH,
-    y: p1.y + Math.sin(ang) * LENGTH
-  };
+  if (LOCKED_ANGLE === null) {
+    const a = prompt("Angle (deg):", "0");
+    if (a === null) return null;
+    LOCKED_ANGLE = parseFloat(a) * Math.PI / 180;
+  }
+
+  let ang = LOCKED_ANGLE;
+  if (dx * Math.cos(ang) + dy * Math.sin(ang) < 0) ang += Math.PI;
+  return ang;
 }
 
-/* ===== DRAW ===== */
+/* ========= DRAW ========= */
 canvas.addEventListener("mousedown", e => {
   if (!LENGTH) return;
   const p = getPos(e);
 
-  // set base origin ONCE
   if (!baseOrigin) {
     baseOrigin = p;
     currentPoint = p;
   }
-
   drawing = true;
 });
 
 canvas.addEventListener("mousemove", e => {
   if (!drawing || !currentPoint) return;
-  const end = computeEnd(currentPoint, getPos(e));
-  if (!end) return;
-  previewEnd = end;
+
+  const ang = computeAngle(currentPoint, getPos(e));
+  if (ang === null) return;
+
+  previewEnd = {
+    x: currentPoint.x + Math.cos(ang) * LENGTH,
+    y: currentPoint.y + Math.sin(ang) * LENGTH
+  };
   redraw();
 });
 
@@ -154,20 +151,44 @@ canvas.addEventListener("mouseup", () => {
   if (!drawing || !currentPoint || !previewEnd) return;
   drawing = false;
 
-  lines.push({
-    x1: currentPoint.x,
-    y1: currentPoint.y,
-    x2: previewEnd.x,
-    y2: previewEnd.y
-  });
+  const dx = previewEnd.x - currentPoint.x;
+  const dy = previewEnd.y - currentPoint.y;
+  const len = Math.hypot(dx, dy);
+  const nx = -dy / len;
+  const ny = dx / len;
 
-  currentPoint = previewEnd;   // continuous
+  if (DOUBLE) {
+    // invisible middle line → two real lines
+    lines.push(
+      {
+        x1: currentPoint.x + nx * DOUBLE_OFFSET,
+        y1: currentPoint.y + ny * DOUBLE_OFFSET,
+        x2: previewEnd.x + nx * DOUBLE_OFFSET,
+        y2: previewEnd.y + ny * DOUBLE_OFFSET
+      },
+      {
+        x1: currentPoint.x - nx * DOUBLE_OFFSET,
+        y1: currentPoint.y - ny * DOUBLE_OFFSET,
+        x2: previewEnd.x - nx * DOUBLE_OFFSET,
+        y2: previewEnd.y - ny * DOUBLE_OFFSET
+      }
+    );
+  } else {
+    lines.push({
+      x1: currentPoint.x,
+      y1: currentPoint.y,
+      x2: previewEnd.x,
+      y2: previewEnd.y
+    });
+  }
+
+  currentPoint = previewEnd;
   previewEnd = null;
   LOCKED_ANGLE = null;
   redraw();
 });
 
-/* ===== CONTEXT MENU ===== */
+/* ========= MENU ========= */
 canvas.addEventListener("contextmenu", e => {
   e.preventDefault();
   menu.style.left = e.clientX + "px";
@@ -176,7 +197,8 @@ canvas.addEventListener("contextmenu", e => {
   menu.innerHTML = `
     <div onclick="ORTHO=!ORTHO">Ortho</div>
     <div onclick="setLength()">Length</div>
-    <div onclick="offsetFromOrigin()">Offset (from origin)</div>
+    <div onclick="toggleDouble()">Double Line</div>
+    <div onclick="offsetFromOrigin()">Offset (Origin)</div>
     <div onclick="undo()">Undo</div>
     <div onclick="clearAll()">Clear</div>
     <div onclick="endDraw()">End</div>
@@ -184,19 +206,25 @@ canvas.addEventListener("contextmenu", e => {
 });
 document.addEventListener("click", () => menu.style.display = "none");
 
-/* ===== ACTIONS ===== */
+/* ========= ACTIONS ========= */
 function setLength() {
   const l = prompt("Length:", LENGTH || "");
   if (l !== null) LENGTH = parseFloat(l);
 }
 
-/* ✅ THIS IS THE FIXED OFFSET */
+function toggleDouble() {
+  DOUBLE = !DOUBLE;
+  if (DOUBLE) {
+    const d = prompt("Double line offset:", "5");
+    if (d === null) { DOUBLE = false; return; }
+    DOUBLE_OFFSET = parseFloat(d);
+  }
+}
+
 function offsetFromOrigin() {
   if (!baseOrigin) return alert("Base origin not set");
-
   const ox = prompt("X offset:", "0");
   if (ox === null) return;
-
   const oy = prompt("Y offset:", "0");
   if (oy === null) return;
 
@@ -204,8 +232,6 @@ function offsetFromOrigin() {
     x: baseOrigin.x + parseFloat(ox),
     y: baseOrigin.y + parseFloat(oy)
   };
-
-  previewEnd = null;
   redraw();
 }
 
