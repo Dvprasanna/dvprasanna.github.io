@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>L Shape Room – Corner Fixed</title>
+<title>Room CAD – Inner Wall Logic</title>
 
 <style>
 html, body {
@@ -42,7 +42,7 @@ canvas {
 <div id="menu"></div>
 
 <script>
-/* ================= SETUP ================= */
+/* ========== SETUP ========== */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const menu = document.getElementById("menu");
@@ -52,154 +52,153 @@ canvas.height = innerHeight;
 
 ctx.strokeStyle = "#00ff00";
 ctx.lineWidth = 2;
-ctx.lineCap = "round";
 
-/* ================= STATE ================= */
-let baseLines = [];     // user drawn reference lines
-let wallLines = [];     // offset wall lines (joined)
-let lastOffsetLine = null;
-
+/* ========== STATE ========== */
+let innerPts = [];     // user drawn inner wall polyline
+let outerPts = [];     // generated outer wall
 let drawing = false;
-let startPoint = null;
-let lastEndPoint = null;
 
-let OFFSET = 12;
+let WALL_THICKNESS = 12;
 
-/* ================= UTILS ================= */
+/* ========== UTILS ========== */
 function redraw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  baseLines.forEach(l => drawLine(l));
-  wallLines.forEach(l => drawLine(l));
+  drawPolyline(innerPts);
+  drawPolyline(outerPts);
 }
 
-function drawLine(l) {
+function drawPolyline(pts) {
+  if (pts.length < 2) return;
   ctx.beginPath();
-  ctx.moveTo(l.x1, l.y1);
-  ctx.lineTo(l.x2, l.y2);
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i=1;i<pts.length;i++) {
+    ctx.lineTo(pts[i].x, pts[i].y);
+  }
   ctx.stroke();
 }
 
-function intersect(l1, l2) {
-  const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
-  const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
-
-  const d = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
-  if (Math.abs(d) < 0.0001) return null;
-
-  const px = (
-    (x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4)
-  ) / d;
-
-  const py = (
-    (x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4)
-  ) / d;
-
-  return { x: px, y: py };
+function normalize(x,y) {
+  const l = Math.hypot(x,y);
+  return { x:x/l, y:y/l };
 }
 
-function askSide() {
-  const s = prompt("Wall side? (L / R)", "L");
-  if (!s) return null;
-  return s.toUpperCase().startsWith("R") ? -1 : 1;
-}
+/* ========== GEOMETRY CORE ========== */
+function rebuildOuterWall() {
+  outerPts = [];
+  if (innerPts.length < 2) return;
 
-/* ================= DRAW ================= */
-canvas.addEventListener("mousedown", e => {
-  if (e.button !== 0) return;
-  drawing = true;
-  startPoint = lastEndPoint
-    ? { ...lastEndPoint }
-    : { x: e.clientX, y: e.clientY };
-});
+  const n = innerPts.length;
+  const half = WALL_THICKNESS;
 
-canvas.addEventListener("mouseup", e => {
-  if (!drawing) return;
-  drawing = false;
+  // determine winding (shoelace)
+  let area = 0;
+  for (let i=0;i<n;i++) {
+    const p = innerPts[i];
+    const q = innerPts[(i+1)%n];
+    area += (q.x-p.x)*(q.y+p.y);
+  }
+  const clockwise = area > 0;
 
-  const base = {
-    x1: startPoint.x,
-    y1: startPoint.y,
-    x2: e.clientX,
-    y2: e.clientY
-  };
-  baseLines.push(base);
+  const offsetSegs = [];
 
-  const side = askSide();
-  if (side !== null) {
-    const dx = base.x2 - base.x1;
-    const dy = base.y2 - base.y1;
-    const len = Math.hypot(dx, dy);
-    if (len > 0) {
-      const nx = -dy / len;
-      const ny = dx / len;
+  // offset each segment
+  for (let i=0;i<n-1;i++) {
+    const p1 = innerPts[i];
+    const p2 = innerPts[i+1];
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const v = normalize(dx,dy);
 
-      let offset = {
-        x1: base.x1 + nx * OFFSET * side,
-        y1: base.y1 + ny * OFFSET * side,
-        x2: base.x2 + nx * OFFSET * side,
-        y2: base.y2 + ny * OFFSET * side
-      };
+    // outward normal
+    const nx = clockwise ? v.y : -v.y;
+    const ny = clockwise ? -v.x : v.x;
 
-      // 🔴 CORNER JOIN FIX
-      if (lastOffsetLine) {
-        const p = intersect(lastOffsetLine, offset);
-        if (p) {
-          lastOffsetLine.x2 = p.x;
-          lastOffsetLine.y2 = p.y;
-          offset.x1 = p.x;
-          offset.y1 = p.y;
-        }
-      }
+    offsetSegs.push({
+      x1: p1.x + nx*half,
+      y1: p1.y + ny*half,
+      x2: p2.x + nx*half,
+      y2: p2.y + ny*half
+    });
+  }
 
-      wallLines.push(offset);
-      lastOffsetLine = offset;
+  // intersect adjacent offset segments
+  for (let i=0;i<offsetSegs.length-1;i++) {
+    const a = offsetSegs[i];
+    const b = offsetSegs[i+1];
+    const p = intersect(a,b);
+    if (p) {
+      a.x2 = p.x; a.y2 = p.y;
+      b.x1 = p.x; b.y1 = p.y;
     }
   }
 
-  lastEndPoint = { x: base.x2, y: base.y2 };
+  // build outer polyline
+  outerPts.push({x:offsetSegs[0].x1, y:offsetSegs[0].y1});
+  offsetSegs.forEach(s=>{
+    outerPts.push({x:s.x2, y:s.y2});
+  });
+}
+
+function intersect(l1,l2) {
+  const {x1,y1,x2,y2} = l1;
+  const {x1:x3,y1:y3,x2:x4,y2:y4} = l2;
+  const d = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
+  if (Math.abs(d)<0.0001) return null;
+
+  return {
+    x: ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4))/d,
+    y: ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4))/d
+  };
+}
+
+/* ========== DRAWING ========== */
+canvas.addEventListener("mousedown", e=>{
+  if (!drawing) {
+    innerPts.push({x:e.clientX,y:e.clientY});
+    drawing = true;
+  } else {
+    innerPts.push({x:e.clientX,y:e.clientY});
+    rebuildOuterWall();
+  }
   redraw();
 });
 
-/* ================= RIGHT CLICK MENU ================= */
-canvas.addEventListener("contextmenu", e => {
+/* ========== MENU ========== */
+canvas.addEventListener("contextmenu", e=>{
   e.preventDefault();
-  menu.style.left = e.clientX + "px";
-  menu.style.top = e.clientY + "px";
+  menu.style.left = e.clientX+"px";
+  menu.style.top = e.clientY+"px";
   menu.style.display = "block";
   menu.innerHTML = `
-    <div onclick="setOffset()">Set Wall Thickness</div>
-    <div onclick="undo()">Undo</div>
+    <div onclick="setThickness()">Set Thickness</div>
+    <div onclick="closeRoom()">Close Polyline</div>
     <div onclick="clearAll()">Clear</div>
   `;
 });
 
-document.addEventListener("click", () => {
-  menu.style.display = "none";
-});
+document.addEventListener("click",()=>menu.style.display="none");
 
-/* ================= MENU ACTIONS ================= */
-function setOffset() {
-  const v = prompt("Wall thickness:", OFFSET);
-  if (v !== null && !isNaN(v)) OFFSET = parseFloat(v);
-  menu.style.display = "none";
+/* ========== ACTIONS ========== */
+function setThickness() {
+  const v = prompt("Wall thickness:", WALL_THICKNESS);
+  if (v!==null) WALL_THICKNESS=parseFloat(v);
+  rebuildOuterWall();
+  redraw();
 }
 
-function undo() {
-  baseLines.pop();
-  wallLines.pop();
-  lastOffsetLine = wallLines[wallLines.length - 1] || null;
+function closeRoom() {
+  if (innerPts.length<3) return;
+  innerPts.push({...innerPts[0]});
+  rebuildOuterWall();
   redraw();
-  menu.style.display = "none";
 }
 
 function clearAll() {
-  baseLines = [];
-  wallLines = [];
-  lastOffsetLine = null;
-  lastEndPoint = null;
+  innerPts=[];
+  outerPts=[];
+  drawing=false;
   redraw();
-  menu.style.display = "none";
 }
 </script>
 </body>
