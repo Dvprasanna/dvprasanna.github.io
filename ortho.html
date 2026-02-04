@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Minimal CAD</title>
+
+<style>
+html, body {
+  margin: 0;
+  background: #000;
+  overflow: hidden;
+  touch-action: none;
+}
+
+canvas {
+  display: block;
+  background: #000;
+  border: 3px solid #00ff00;
+}
+
+#menu {
+  position: absolute;
+  background: #111;
+  border: 1px solid #0f0;
+  color: #0f0;
+  font-family: monospace;
+  font-size: 14px;
+  display: none;
+  z-index: 10;
+}
+
+#menu div {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+#menu div:hover {
+  background: #0f0;
+  color: #000;
+}
+</style>
+</head>
+
+<body>
+<canvas id="c"></canvas>
+<div id="menu"></div>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const menu = document.getElementById("menu");
+
+canvas.width = innerWidth;
+canvas.height = innerHeight;
+
+ctx.strokeStyle = "#00ff00";
+ctx.lineWidth = 2;
+ctx.lineCap = "round";
+
+let lines = [];
+let drawing = false;
+let startPoint = null;
+
+let ORTHO = true;
+let ANGLE = 0;
+let LENGTH = null;
+
+function redraw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  lines.forEach(l=>{
+    ctx.beginPath();
+    ctx.moveTo(l.x1,l.y1);
+    ctx.lineTo(l.x2,l.y2);
+    ctx.stroke();
+  });
+}
+
+function getPos(e) {
+  if (e.touches) {
+    return {x:e.touches[0].clientX,y:e.touches[0].clientY};
+  }
+  return {x:e.clientX,y:e.clientY};
+}
+
+function snapLine(p1) {
+  let dx = Math.cos(ANGLE * Math.PI/180);
+  let dy = Math.sin(ANGLE * Math.PI/180);
+
+  if (ORTHO) {
+    dx = Math.abs(dx) > Math.abs(dy) ? Math.sign(dx) : 0;
+    dy = Math.abs(dy) > Math.abs(dx) ? Math.sign(dy) : 0;
+  }
+
+  return {
+    x2: p1.x + dx * LENGTH,
+    y2: p1.y + dy * LENGTH
+  };
+}
+
+/* Drawing */
+canvas.addEventListener("mousedown", e=>{
+  if (!LENGTH) return;
+  drawing = true;
+  startPoint = getPos(e);
+});
+
+canvas.addEventListener("mousemove", e=>{
+  if (!drawing) return;
+  redraw();
+  const end = snapLine(startPoint);
+  ctx.beginPath();
+  ctx.moveTo(startPoint.x,startPoint.y);
+  ctx.lineTo(end.x2,end.y2);
+  ctx.stroke();
+});
+
+canvas.addEventListener("mouseup", e=>{
+  if (!drawing) return;
+  drawing = false;
+  const end = snapLine(startPoint);
+  lines.push({x1:startPoint.x,y1:startPoint.y,x2:end.x2,y2:end.y2});
+  redraw();
+});
+
+/* Touch */
+canvas.addEventListener("touchstart", e=>{
+  if (!LENGTH) return;
+  drawing = true;
+  startPoint = getPos(e);
+});
+canvas.addEventListener("touchend", ()=>{
+  if (!drawing) return;
+  drawing = false;
+  const end = snapLine(startPoint);
+  lines.push({x1:startPoint.x,y1:startPoint.y,x2:end.x2,y2:end.y2});
+  redraw();
+});
+
+/* Right click menu */
+canvas.addEventListener("contextmenu", e=>{
+  e.preventDefault();
+  menu.style.left = e.clientX + "px";
+  menu.style.top = e.clientY + "px";
+  menu.style.display = "block";
+  menu.innerHTML = `
+    <div onclick="toggleOrtho()">Ortho</div>
+    <div onclick="setAngle()">Angle</div>
+    <div onclick="setLength()">Length</div>
+    <div onclick="undo()">Undo</div>
+    <div onclick="clearAll()">Clear</div>
+    <div>Curve C</div>
+    <div>Curve D</div>
+    <div onclick="closeMenu()">End</div>
+  `;
+});
+
+document.addEventListener("click", ()=>menu.style.display="none");
+
+/* Menu actions */
+function toggleOrtho() {
+  ORTHO = !ORTHO;
+  closeMenu();
+}
+
+function setAngle() {
+  const a = prompt("Angle (deg):", ANGLE);
+  if (a !== null) ANGLE = parseFloat(a);
+  closeMenu();
+}
+
+function setLength() {
+  const l = prompt("Length:", LENGTH || "");
+  if (l !== null) LENGTH = parseFloat(l);
+  closeMenu();
+}
+
+function undo() {
+  lines.pop();
+  redraw();
+  closeMenu();
+}
+
+function clearAll() {
+  lines = [];
+  redraw();
+  closeMenu();
+}
+
+function closeMenu() {
+  menu.style.display = "none";
+}
+</script>
+</body>
+</html>
