@@ -2,51 +2,29 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Wall CAD – Polyline Thickness</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wall CAD – Side Pick</title>
 
 <style>
 html, body {
   margin: 0;
   background: #000;
   overflow: hidden;
-  touch-action: none;
 }
 canvas {
   display: block;
   background: #000;
   border: 3px solid #00ff00;
 }
-#menu {
-  position: absolute;
-  background: #111;
-  border: 1px solid #0f0;
-  color: #0f0;
-  font-family: monospace;
-  font-size: 14px;
-  display: none;
-  z-index: 100;
-}
-#menu div {
-  padding: 6px 14px;
-  cursor: pointer;
-}
-#menu div:hover {
-  background: #0f0;
-  color: #000;
-}
 </style>
 </head>
 
 <body>
 <canvas id="c"></canvas>
-<div id="menu"></div>
 
 <script>
-/* ========= SETUP ========= */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
-const menu = document.getElementById("menu");
 
 canvas.width = innerWidth;
 canvas.height = innerHeight;
@@ -55,181 +33,91 @@ ctx.strokeStyle = "#00ff00";
 ctx.lineWidth = 2;
 ctx.lineCap = "round";
 
-/* ========= STATE ========= */
-let centerPts = [];     // invisible construction polyline
-let wallLines = [];     // real geometry to draw
-
+/* ===== STATE ===== */
+let lines = [];          // final geometry
+let tempLine = null;     // last single line
 let drawing = false;
-let previewEnd = null;
+let start = null;
 
-let ORTHO = true;
-let LENGTH = null;
-let WALL_THICKNESS = 10;
+let OFFSET = 15;         // wall thickness
 
-/* ========= UTILS ========= */
-function getPos(e) {
-  if (e.touches) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  return { x: e.clientX, y: e.clientY };
-}
-
-function norm(x, y) {
-  const l = Math.hypot(x, y);
-  return { x: x / l, y: y / l };
-}
-
-/* ========= WALL REBUILD (CORE FIX) ========= */
-function rebuildWall() {
-  wallLines = [];
-  if (centerPts.length < 2) return;
-
-  const half = WALL_THICKNESS / 2;
-  const left = [];
-  const right = [];
-
-  for (let i = 0; i < centerPts.length; i++) {
-    const p = centerPts[i];
-    const p0 = centerPts[i - 1];
-    const p1 = centerPts[i + 1];
-
-    let nx = 0, ny = 0;
-
-    if (p0 && p1) {
-      const v1 = norm(p.x - p0.x, p.y - p0.y);
-      const v2 = norm(p1.x - p.x, p1.y - p.y);
-
-      const n1 = { x: -v1.y, y: v1.x };
-      const n2 = { x: -v2.y, y: v2.x };
-
-      nx = n1.x + n2.x;
-      ny = n1.y + n2.y;
-
-      const l = Math.hypot(nx, ny);
-      nx /= l;
-      ny /= l;
-    } else if (p0) {
-      const v = norm(p.x - p0.x, p.y - p0.y);
-      nx = -v.y;
-      ny = v.x;
-    } else if (p1) {
-      const v = norm(p1.x - p.x, p1.y - p.y);
-      nx = -v.y;
-      ny = v.x;
-    }
-
-    left.push({ x: p.x + nx * half, y: p.y + ny * half });
-    right.push({ x: p.x - nx * half, y: p.y - ny * half });
-  }
-
-  for (let i = 0; i < left.length - 1; i++) {
-    wallLines.push(
-      { x1: left[i].x,  y1: left[i].y,  x2: left[i+1].x,  y2: left[i+1].y },
-      { x1: right[i].x, y1: right[i].y, x2: right[i+1].x, y2: right[i+1].y }
-    );
-  }
-}
-
-/* ========= DRAW ========= */
+/* ===== UTILS ===== */
 function redraw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  wallLines.forEach(l => {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  lines.forEach(l=>{
     ctx.beginPath();
-    ctx.moveTo(l.x1, l.y1);
-    ctx.lineTo(l.x2, l.y2);
+    ctx.moveTo(l.x1,l.y1);
+    ctx.lineTo(l.x2,l.y2);
     ctx.stroke();
   });
-
-  if (centerPts.length && previewEnd) {
+  if (tempLine) {
     ctx.beginPath();
-    ctx.moveTo(centerPts.at(-1).x, centerPts.at(-1).y);
-    ctx.lineTo(previewEnd.x, previewEnd.y);
+    ctx.moveTo(tempLine.x1,tempLine.y1);
+    ctx.lineTo(tempLine.x2,tempLine.y2);
     ctx.stroke();
   }
 }
 
-/* ========= ANGLE ========= */
-function computeEnd(p, cursor) {
-  let dx = cursor.x - p.x;
-  let dy = cursor.y - p.y;
-
-  if (ORTHO) {
-    if (Math.abs(dx) > Math.abs(dy)) dy = 0;
-    else dx = 0;
-  }
-
-  const v = norm(dx, dy);
-  return {
-    x: p.x + v.x * LENGTH,
-    y: p.y + v.y * LENGTH
-  };
+function distPointToLine(p, l) {
+  const A = p.x - l.x1;
+  const B = p.y - l.y1;
+  const C = l.x2 - l.x1;
+  const D = l.y2 - l.y1;
+  return (A * D - B * C);
 }
 
-/* ========= EVENTS ========= */
-canvas.addEventListener("mousedown", e => {
-  if (!LENGTH) return;
-  const p = getPos(e);
-
-  if (!centerPts.length) centerPts.push(p);
+/* ===== DRAW SINGLE LINE ===== */
+canvas.addEventListener("mousedown", e=>{
   drawing = true;
+  start = {x:e.clientX,y:e.clientY};
 });
 
-canvas.addEventListener("mousemove", e => {
-  if (!drawing) return;
-  previewEnd = computeEnd(centerPts.at(-1), getPos(e));
+canvas.addEventListener("mousemove", e=>{
+  if(!drawing) return;
+  tempLine = {
+    x1:start.x, y1:start.y,
+    x2:e.clientX, y2:e.clientY
+  };
   redraw();
 });
 
-canvas.addEventListener("mouseup", () => {
-  if (!drawing || !previewEnd) return;
+canvas.addEventListener("mouseup", e=>{
   drawing = false;
-
-  centerPts.push(previewEnd);
-  previewEnd = null;
-  rebuildWall();
+  tempLine = {
+    x1:start.x, y1:start.y,
+    x2:e.clientX, y2:e.clientY
+  };
+  lines.push(tempLine);     // visible single line
   redraw();
 });
 
-/* ========= MENU ========= */
-canvas.addEventListener("contextmenu", e => {
-  e.preventDefault();
-  menu.style.left = e.clientX + "px";
-  menu.style.top = e.clientY + "px";
-  menu.style.display = "block";
-  menu.innerHTML = `
-    <div onclick="setLength()">Length</div>
-    <div onclick="setThickness()">Wall Thickness</div>
-    <div onclick="undo()">Undo</div>
-    <div onclick="clearAll()">Clear</div>
-  `;
+/* ===== DOUBLE CLICK = PICK SIDE ===== */
+canvas.addEventListener("dblclick", e=>{
+  if(!tempLine) return;
+
+  const dx = tempLine.x2 - tempLine.x1;
+  const dy = tempLine.y2 - tempLine.y1;
+  const len = Math.hypot(dx,dy);
+
+  const nx = -dy / len;
+  const ny = dx / len;
+
+  // which side user clicked
+  const side = distPointToLine({x:e.clientX,y:e.clientY}, tempLine);
+
+  const sign = side > 0 ? 1 : -1;
+
+  const offsetLine = {
+    x1: tempLine.x1 + nx * OFFSET * sign,
+    y1: tempLine.y1 + ny * OFFSET * sign,
+    x2: tempLine.x2 + nx * OFFSET * sign,
+    y2: tempLine.y2 + ny * OFFSET * sign
+  };
+
+  lines.push(offsetLine);
+  tempLine = null;
+  redraw();
 });
-document.addEventListener("click", () => menu.style.display = "none");
-
-/* ========= ACTIONS ========= */
-function setLength() {
-  const v = prompt("Length:", LENGTH || "");
-  if (v !== null) LENGTH = parseFloat(v);
-}
-
-function setThickness() {
-  const v = prompt("Wall thickness:", WALL_THICKNESS);
-  if (v !== null) {
-    WALL_THICKNESS = parseFloat(v);
-    rebuildWall();
-    redraw();
-  }
-}
-
-function undo() {
-  centerPts.pop();
-  rebuildWall();
-  redraw();
-}
-
-function clearAll() {
-  centerPts = [];
-  wallLines = [];
-  redraw();
-}
 </script>
 </body>
 </html>
