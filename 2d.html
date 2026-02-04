@@ -110,7 +110,7 @@ function distToLine(px, py, l) {
 /* ===== DRAW ===== */
 function drawGrid() {
   if (!gridOn) return;
-  ctx.strokeStyle = "#222";
+  ctx.strokeStyle = "#333";
   for (let x = -pan.x % gridSize; x < canvas.width; x += gridSize) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
