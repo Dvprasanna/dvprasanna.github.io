@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wall CAD – Side Pick</title>
+<title>Simple Wall CAD</title>
 
 <style>
 html, body {
@@ -16,15 +16,38 @@ canvas {
   background: #000;
   border: 3px solid #00ff00;
 }
+
+/* Context menu */
+#menu {
+  position: absolute;
+  background: #111;
+  border: 1px solid #0f0;
+  color: #0f0;
+  font-family: monospace;
+  font-size: 14px;
+  display: none;
+  z-index: 1000;
+}
+#menu div {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+#menu div:hover {
+  background: #0f0;
+  color: #000;
+}
 </style>
 </head>
 
 <body>
 <canvas id="c"></canvas>
+<div id="menu"></div>
 
 <script>
+/* ================= SETUP ================= */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
+const menu = document.getElementById("menu");
 
 canvas.width = innerWidth;
 canvas.height = innerHeight;
@@ -33,77 +56,88 @@ ctx.strokeStyle = "#00ff00";
 ctx.lineWidth = 2;
 ctx.lineCap = "round";
 
-/* ===== STATE ===== */
-let lines = [];          // final geometry
-let tempLine = null;     // last single line
+/* ================= STATE ================= */
+let lines = [];        // all drawn lines (walls)
+let tempLine = null;   // current single line
+let startPoint = null;
 let drawing = false;
-let start = null;
 
-let OFFSET = 15;         // wall thickness
+let OFFSET = 20;       // wall thickness (distance between lines)
 
-/* ===== UTILS ===== */
+/* ================= UTILS ================= */
 function redraw() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  lines.forEach(l=>{
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  lines.forEach(l => {
     ctx.beginPath();
-    ctx.moveTo(l.x1,l.y1);
-    ctx.lineTo(l.x2,l.y2);
+    ctx.moveTo(l.x1, l.y1);
+    ctx.lineTo(l.x2, l.y2);
     ctx.stroke();
   });
+
   if (tempLine) {
     ctx.beginPath();
-    ctx.moveTo(tempLine.x1,tempLine.y1);
-    ctx.lineTo(tempLine.x2,tempLine.y2);
+    ctx.moveTo(tempLine.x1, tempLine.y1);
+    ctx.lineTo(tempLine.x2, tempLine.y2);
     ctx.stroke();
   }
 }
 
-function distPointToLine(p, l) {
-  const A = p.x - l.x1;
-  const B = p.y - l.y1;
-  const C = l.x2 - l.x1;
-  const D = l.y2 - l.y1;
-  return (A * D - B * C);
+function pointSideOfLine(p, l) {
+  // cross product sign
+  return (p.x - l.x1) * (l.y2 - l.y1) -
+         (p.y - l.y1) * (l.x2 - l.x1);
 }
 
-/* ===== DRAW SINGLE LINE ===== */
-canvas.addEventListener("mousedown", e=>{
+/* ================= DRAW LINE ================= */
+canvas.addEventListener("mousedown", e => {
+  if (e.button !== 0) return; // left click only
   drawing = true;
-  start = {x:e.clientX,y:e.clientY};
+  startPoint = { x: e.clientX, y: e.clientY };
 });
 
-canvas.addEventListener("mousemove", e=>{
-  if(!drawing) return;
+canvas.addEventListener("mousemove", e => {
+  if (!drawing) return;
   tempLine = {
-    x1:start.x, y1:start.y,
-    x2:e.clientX, y2:e.clientY
+    x1: startPoint.x,
+    y1: startPoint.y,
+    x2: e.clientX,
+    y2: e.clientY
   };
   redraw();
 });
 
-canvas.addEventListener("mouseup", e=>{
+canvas.addEventListener("mouseup", e => {
+  if (!drawing) return;
   drawing = false;
+
   tempLine = {
-    x1:start.x, y1:start.y,
-    x2:e.clientX, y2:e.clientY
+    x1: startPoint.x,
+    y1: startPoint.y,
+    x2: e.clientX,
+    y2: e.clientY
   };
-  lines.push(tempLine);     // visible single line
+
+  lines.push(tempLine); // visible reference line
   redraw();
 });
 
-/* ===== DOUBLE CLICK = PICK SIDE ===== */
-canvas.addEventListener("dblclick", e=>{
-  if(!tempLine) return;
+/* ================= DOUBLE CLICK = WALL SIDE ================= */
+canvas.addEventListener("dblclick", e => {
+  if (!tempLine) return;
 
   const dx = tempLine.x2 - tempLine.x1;
   const dy = tempLine.y2 - tempLine.y1;
-  const len = Math.hypot(dx,dy);
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return;
 
   const nx = -dy / len;
   const ny = dx / len;
 
-  // which side user clicked
-  const side = distPointToLine({x:e.clientX,y:e.clientY}, tempLine);
+  const side = pointSideOfLine(
+    { x: e.clientX, y: e.clientY },
+    tempLine
+  );
 
   const sign = side > 0 ? 1 : -1;
 
@@ -118,6 +152,47 @@ canvas.addEventListener("dblclick", e=>{
   tempLine = null;
   redraw();
 });
+
+/* ================= RIGHT CLICK MENU ================= */
+canvas.addEventListener("contextmenu", e => {
+  e.preventDefault();
+  showMenu(e.clientX, e.clientY);
+});
+
+function showMenu(x, y) {
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+  menu.style.display = "block";
+  menu.innerHTML = `
+    <div onclick="setOffset()">Set Offset</div>
+    <div onclick="undo()">Undo</div>
+    <div onclick="clearAll()">Clear</div>
+  `;
+}
+
+document.addEventListener("click", () => {
+  menu.style.display = "none";
+});
+
+/* ================= MENU ACTIONS ================= */
+function setOffset() {
+  const v = prompt("Wall offset:", OFFSET);
+  if (v !== null && !isNaN(v)) OFFSET = parseFloat(v);
+  menu.style.display = "none";
+}
+
+function undo() {
+  lines.pop();
+  redraw();
+  menu.style.display = "none";
+}
+
+function clearAll() {
+  lines = [];
+  tempLine = null;
+  redraw();
+  menu.style.display = "none";
+}
 </script>
 </body>
 </html>
