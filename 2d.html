@@ -2,13 +2,18 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Mouse Friendly Trace & Merge</title>
+<title>Photo Trace → Merge Lines</title>
 <style>
-  body { margin:0; background:#111; color:#fff; font-family:sans-serif; }
+  body { margin:0; background:#111; color:#fff; font-family:system-ui; }
   #ui {
     background:#222; padding:8px; display:flex; gap:8px; align-items:center;
   }
-  canvas { display:block; margin:auto; background:#fff; cursor:crosshair; }
+  canvas {
+    display:block;
+    margin:auto;
+    background:#fff;
+    cursor:crosshair;
+  }
   button { padding:6px 10px; }
 </style>
 </head>
@@ -18,20 +23,22 @@
   <input type="file" id="imgInput">
   <button id="toggleImg">Hide Photo</button>
   <button id="mergeBtn">Merge Lines</button>
-  <span>Left-drag select | Drag to move | Right-click trace</span>
+  <span>Right-click = Trace | Drag = Move | Box-select = Select</span>
 </div>
 
-<canvas id="c" width="900" height="600"></canvas>
+<canvas id="c" width="1000" height="650"></canvas>
 
 <script>
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
 let img=null, showImg=true;
-let lines=[], selected=new Set();
-let dragMode=null;
-let start={x:0,y:0};
+let lines=[];
+let selected=new Set();
+let dragging=false, boxSelect=false;
+let start={x:0,y:0}, mouse={x:0,y:0};
 
+/* ---------- IMAGE LOAD ---------- */
 imgInput.onchange=e=>{
   img=new Image();
   img.onload=draw;
@@ -39,7 +46,6 @@ imgInput.onchange=e=>{
 };
 
 toggleImg.onclick=()=>{ showImg=!showImg; draw(); };
-
 mergeBtn.onclick=mergeSelected;
 
 /* ---------- DRAW ---------- */
@@ -61,39 +67,90 @@ function draw(){
     ctx.stroke();
   }
 
-  if(dragMode==="box"){
+  if(boxSelect){
     ctx.strokeStyle="rgba(0,0,255,0.6)";
-    ctx.setLineDash([5,5]);
+    ctx.setLineDash([6,4]);
     ctx.strokeRect(start.x,start.y,mouse.x-start.x,mouse.y-start.y);
     ctx.setLineDash([]);
   }
 }
 
-/* ---------- TRACE (RIGHT CLICK) ---------- */
+/* ---------- EDGE TRACE ---------- */
+function trace(){
+  if(!img) return;
+
+  // draw image into canvas buffer
+  draw();
+
+  const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const w=imgData.width, h=imgData.height;
+  const d=imgData.data;
+  const gray=new Float32Array(w*h);
+
+  for(let i=0;i<w*h;i++){
+    gray[i]=(d[i*4]+d[i*4+1]+d[i*4+2])/3;
+  }
+
+  const edges=[];
+  for(let y=1;y<h-1;y++){
+    for(let x=1;x<w-1;x++){
+      const i=y*w+x;
+      const gx=
+        -gray[i-w-1]-2*gray[i-1]-gray[i+w-1]
+        +gray[i-w+1]+2*gray[i+1]+gray[i+w+1];
+      const gy=
+        -gray[i-w-1]-2*gray[i-w]-gray[i-w+1]
+        +gray[i+w-1]+2*gray[i+w]+gray[i+w+1];
+
+      const mag=Math.hypot(gx,gy);
+      if(mag>45) edges.push({x,y,gx,gy});
+    }
+  }
+
+  lines=[];
+
+  // vertical lines
+  for(let x=0;x<w;x+=4){
+    const pts=edges.filter(p=>Math.abs(p.x-x)<2 && Math.abs(Math.atan2(p.gy,p.gx)-Math.PI/2)<0.3);
+    if(pts.length>25){
+      const ys=pts.map(p=>p.y);
+      lines.push({x1:x,y1:Math.min(...ys),x2:x,y2:Math.max(...ys)});
+    }
+  }
+
+  // horizontal lines
+  for(let y=0;y<h;y+=4){
+    const pts=edges.filter(p=>Math.abs(p.y-y)<2 && Math.abs(Math.atan2(p.gy,p.gx))<0.3);
+    if(pts.length>25){
+      const xs=pts.map(p=>p.x);
+      lines.push({x1:Math.min(...xs),y1:y,x2:Math.max(...xs),y2:y});
+    }
+  }
+
+  draw();
+}
+
+/* ---------- RIGHT CLICK ---------- */
 canvas.oncontextmenu=e=>{
   e.preventDefault();
-  lines=[];
-  for(let i=0;i<12;i++){
-    lines.push({x1:300+i*3,y1:100,x2:300+i*3,y2:500});
-  }
-  draw();
+  trace();
 };
 
 /* ---------- MOUSE ---------- */
-let mouse={x:0,y:0};
-
 canvas.onmousedown=e=>{
   const r=canvas.getBoundingClientRect();
-  mouse.x=start.x=e.clientX-r.left;
-  mouse.y=start.y=e.clientY-r.top;
+  start.x=mouse.x=e.clientX-r.left;
+  start.y=mouse.y=e.clientY-r.top;
 
   selected.clear();
-  dragMode="box";
+  dragging=false;
+  boxSelect=true;
 
   for(let l of lines){
-    if(Math.abs(mouse.x-l.x1)<6){
+    if(Math.abs(l.x1-mouse.x)<6 || Math.abs(l.y1-mouse.y)<6){
       selected.add(l);
-      dragMode="move";
+      dragging=true;
+      boxSelect=false;
     }
   }
   draw();
@@ -104,29 +161,37 @@ canvas.onmousemove=e=>{
   mouse.x=e.clientX-r.left;
   mouse.y=e.clientY-r.top;
 
-  if(dragMode==="move"){
+  if(dragging){
     const dx=mouse.x-start.x;
+    const dy=mouse.y-start.y;
     start.x=mouse.x;
+    start.y=mouse.y;
+
     for(let l of selected){
-      l.x1+=dx; l.x2+=dx;
+      if(l.x1===l.x2){ l.x1+=dx; l.x2+=dx; }
+      else { l.y1+=dy; l.y2+=dy; }
     }
     draw();
-  }
-  if(dragMode==="box"){
+  } else if(boxSelect){
     draw();
   }
 };
 
 canvas.onmouseup=e=>{
-  if(dragMode==="box"){
-    selected.clear();
+  if(boxSelect){
     const x1=Math.min(start.x,mouse.x);
     const x2=Math.max(start.x,mouse.x);
+    const y1=Math.min(start.y,mouse.y);
+    const y2=Math.max(start.y,mouse.y);
+
     for(let l of lines){
-      if(l.x1>=x1 && l.x1<=x2) selected.add(l);
+      if(l.x1>=x1 && l.x1<=x2 && l.y1>=y1 && l.y1<=y2){
+        selected.add(l);
+      }
     }
   }
-  dragMode=null;
+  dragging=false;
+  boxSelect=false;
   draw();
 };
 
@@ -134,16 +199,31 @@ canvas.onmouseup=e=>{
 function mergeSelected(){
   if(selected.size<2) return;
 
-  let sum=0;
-  for(let l of selected) sum+=l.x1;
-  const x=sum/selected.size;
-  const ref=[...selected][0];
+  const arr=[...selected];
+  const isVertical=arr[0].x1===arr[0].x2;
+
+  let avg=isVertical
+    ? arr.reduce((s,l)=>s+l.x1,0)/arr.length
+    : arr.reduce((s,l)=>s+l.y1,0)/arr.length;
+
+  const min=isVertical
+    ? Math.min(...arr.map(l=>l.y1))
+    : Math.min(...arr.map(l=>l.x1));
+
+  const max=isVertical
+    ? Math.max(...arr.map(l=>l.y2))
+    : Math.max(...arr.map(l=>l.x2));
 
   lines=lines.filter(l=>!selected.has(l));
-  lines.push({x1:x,y1:ref.y1,x2:x,y2:ref.y2});
+  lines.push(isVertical
+    ? {x1:avg,y1:min,x2:avg,y2:max}
+    : {x1:min,y1:avg,x2:max,y2:avg}
+  );
+
   selected.clear();
   draw();
 }
 </script>
+
 </body>
 </html>
