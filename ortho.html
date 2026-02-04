@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Room CAD – Inner Wall Logic</title>
+<title>Room CAD – Ortho & Angle</title>
 
 <style>
 html, body {
@@ -42,7 +42,7 @@ canvas {
 <div id="menu"></div>
 
 <script>
-/* ========== SETUP ========== */
+/* ===== SETUP ===== */
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 const menu = document.getElementById("menu");
@@ -53,151 +53,180 @@ canvas.height = innerHeight;
 ctx.strokeStyle = "#00ff00";
 ctx.lineWidth = 2;
 
-/* ========== STATE ========== */
-let innerPts = [];     // user drawn inner wall polyline
-let outerPts = [];     // generated outer wall
+/* ===== STATE ===== */
+let innerPts = [];
+let outerPts = [];
 let drawing = false;
+let preview = null;
 
-let WALL_THICKNESS = 12;
+let ORTHO = true;
+let ANGLE = 0;              // degrees
+let WALL = 12;
+let innerClosed = false;
 
-/* ========== UTILS ========== */
+/* ===== UTILS ===== */
 function redraw() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  drawPolyline(innerPts);
-  drawPolyline(outerPts);
+  drawPoly(innerPts);
+  drawPoly(outerPts);
+  if (preview) drawLine(preview);
 }
 
-function drawPolyline(pts) {
+function drawPoly(pts) {
   if (pts.length < 2) return;
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i=1;i<pts.length;i++) {
-    ctx.lineTo(pts[i].x, pts[i].y);
-  }
+  for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.stroke();
 }
 
-function normalize(x,y) {
-  const l = Math.hypot(x,y);
-  return { x:x/l, y:y/l };
+function drawLine(l) {
+  ctx.beginPath();
+  ctx.moveTo(l.x1,l.y1);
+  ctx.lineTo(l.x2,l.y2);
+  ctx.stroke();
 }
 
-/* ========== GEOMETRY CORE ========== */
-function rebuildOuterWall() {
-  outerPts = [];
-  if (innerPts.length < 2) return;
-
-  const n = innerPts.length;
-  const half = WALL_THICKNESS;
-
-  // determine winding (shoelace)
-  let area = 0;
-  for (let i=0;i<n;i++) {
-    const p = innerPts[i];
-    const q = innerPts[(i+1)%n];
-    area += (q.x-p.x)*(q.y+p.y);
-  }
-  const clockwise = area > 0;
-
-  const offsetSegs = [];
-
-  // offset each segment
-  for (let i=0;i<n-1;i++) {
-    const p1 = innerPts[i];
-    const p2 = innerPts[i+1];
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    const v = normalize(dx,dy);
-
-    // outward normal
-    const nx = clockwise ? v.y : -v.y;
-    const ny = clockwise ? -v.x : v.x;
-
-    offsetSegs.push({
-      x1: p1.x + nx*half,
-      y1: p1.y + ny*half,
-      x2: p2.x + nx*half,
-      y2: p2.y + ny*half
-    });
-  }
-
-  // intersect adjacent offset segments
-  for (let i=0;i<offsetSegs.length-1;i++) {
-    const a = offsetSegs[i];
-    const b = offsetSegs[i+1];
-    const p = intersect(a,b);
-    if (p) {
-      a.x2 = p.x; a.y2 = p.y;
-      b.x1 = p.x; b.y1 = p.y;
-    }
-  }
-
-  // build outer polyline
-  outerPts.push({x:offsetSegs[0].x1, y:offsetSegs[0].y1});
-  offsetSegs.forEach(s=>{
-    outerPts.push({x:s.x2, y:s.y2});
-  });
+function norm(dx,dy){
+  const l=Math.hypot(dx,dy);
+  return {x:dx/l,y:dy/l};
 }
 
-function intersect(l1,l2) {
-  const {x1,y1,x2,y2} = l1;
-  const {x1:x3,y1:y3,x2:x4,y2:y4} = l2;
-  const d = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
-  if (Math.abs(d)<0.0001) return null;
-
+/* ===== GEOMETRY ===== */
+function intersect(a,b){
+  const d=(a.x1-a.x2)*(b.y1-b.y2)-(a.y1-a.y2)*(b.x1-b.x2);
+  if(Math.abs(d)<1e-6) return null;
   return {
-    x: ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4))/d,
-    y: ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4))/d
+    x:((a.x1*a.y2-a.y1*a.x2)*(b.x1-b.x2)-(a.x1-a.x2)*(b.x1*b.y2-b.y1*b.x2))/d,
+    y:((a.x1*a.y2-a.y1*a.x2)*(b.y1-b.y2)-(a.y1-a.y2)*(b.x1*b.y2-b.y1*b.x2))/d
   };
 }
 
-/* ========== DRAWING ========== */
-canvas.addEventListener("mousedown", e=>{
-  if (!drawing) {
-    innerPts.push({x:e.clientX,y:e.clientY});
-    drawing = true;
-  } else {
-    innerPts.push({x:e.clientX,y:e.clientY});
-    rebuildOuterWall();
+/* ===== OUTER WALL BUILD ===== */
+function rebuildOuter(){
+  outerPts=[];
+  if(innerPts.length<2) return;
+
+  const segs=[];
+  const n=innerPts.length;
+
+  // winding
+  let area=0;
+  for(let i=0;i<n-1;i++){
+    const p=innerPts[i],q=innerPts[i+1];
+    area+=(q.x-p.x)*(q.y+p.y);
   }
+  const cw=area>0;
+
+  for(let i=0;i<n-1;i++){
+    const p1=innerPts[i],p2=innerPts[i+1];
+    const v=norm(p2.x-p1.x,p2.y-p1.y);
+    const nx=cw?v.y:-v.y;
+    const ny=cw?-v.x:v.x;
+    segs.push({
+      x1:p1.x+nx*WALL,y1:p1.y+ny*WALL,
+      x2:p2.x+nx*WALL,y2:p2.y+ny*WALL
+    });
+  }
+
+  // join corners
+  for(let i=0;i<segs.length-1;i++){
+    const p=intersect(segs[i],segs[i+1]);
+    if(p){
+      segs[i].x2=p.x;segs[i].y2=p.y;
+      segs[i+1].x1=p.x;segs[i+1].y1=p.y;
+    }
+  }
+
+  // close outer if inner closed
+  if(innerClosed && segs.length>2){
+    const p=intersect(segs[segs.length-1],segs[0]);
+    if(p){
+      segs[segs.length-1].x2=p.x;
+      segs[segs.length-1].y2=p.y;
+      segs[0].x1=p.x;
+      segs[0].y1=p.y;
+    }
+  }
+
+  outerPts.push({x:segs[0].x1,y:segs[0].y1});
+  segs.forEach(s=>outerPts.push({x:s.x2,y:s.y2}));
+}
+
+/* ===== DRAW INPUT ===== */
+canvas.addEventListener("mousedown",e=>{
+  if(innerClosed) return;
+  if(!drawing){
+    innerPts.push({x:e.clientX,y:e.clientY});
+    drawing=true;
+  }
+});
+
+canvas.addEventListener("mousemove",e=>{
+  if(!drawing||innerPts.length===0) return;
+  const p=innerPts[innerPts.length-1];
+  let dx=e.clientX-p.x, dy=e.clientY-p.y;
+
+  if(ORTHO){
+    if(Math.abs(dx)>Math.abs(dy)) dy=0;
+    else dx=0;
+  }else{
+    const a=ANGLE*Math.PI/180;
+    const l=Math.hypot(dx,dy);
+    dx=Math.cos(a)*l;
+    dy=Math.sin(a)*l;
+  }
+
+  preview={x1:p.x,y1:p.y,x2:p.x+dx,y2:p.y+dy};
   redraw();
 });
 
-/* ========== MENU ========== */
-canvas.addEventListener("contextmenu", e=>{
+canvas.addEventListener("mouseup",()=>{
+  if(!preview) return;
+  innerPts.push({x:preview.x2,y:preview.y2});
+  preview=null;
+  rebuildOuter();
+  redraw();
+});
+
+/* ===== MENU ===== */
+canvas.addEventListener("contextmenu",e=>{
   e.preventDefault();
-  menu.style.left = e.clientX+"px";
-  menu.style.top = e.clientY+"px";
-  menu.style.display = "block";
-  menu.innerHTML = `
-    <div onclick="setThickness()">Set Thickness</div>
-    <div onclick="closeRoom()">Close Polyline</div>
+  menu.style.left=e.clientX+"px";
+  menu.style.top=e.clientY+"px";
+  menu.style.display="block";
+  menu.innerHTML=`
+    <div onclick="toggleOrtho()">Toggle Ortho</div>
+    <div onclick="setAngle()">Set Angle</div>
+    <div onclick="setWall()">Wall Thickness</div>
+    <div onclick="closeRoom()">Close Room</div>
     <div onclick="clearAll()">Clear</div>
   `;
 });
 
 document.addEventListener("click",()=>menu.style.display="none");
 
-/* ========== ACTIONS ========== */
-function setThickness() {
-  const v = prompt("Wall thickness:", WALL_THICKNESS);
-  if (v!==null) WALL_THICKNESS=parseFloat(v);
-  rebuildOuterWall();
-  redraw();
+/* ===== ACTIONS ===== */
+function toggleOrtho(){ORTHO=!ORTHO;}
+function setAngle(){
+  const v=prompt("Angle (deg):",ANGLE);
+  if(v!==null) ANGLE=parseFloat(v);
 }
-
-function closeRoom() {
-  if (innerPts.length<3) return;
+function setWall(){
+  const v=prompt("Wall thickness:",WALL);
+  if(v!==null) WALL=parseFloat(v);
+  rebuildOuter(); redraw();
+}
+function closeRoom(){
+  if(innerPts.length<3) return;
   innerPts.push({...innerPts[0]});
-  rebuildOuterWall();
+  innerClosed=true;
+  rebuildOuter();
   redraw();
 }
-
-function clearAll() {
-  innerPts=[];
-  outerPts=[];
-  drawing=false;
+function clearAll(){
+  innerPts=[]; outerPts=[];
+  drawing=false; innerClosed=false;
   redraw();
 }
 </script>
