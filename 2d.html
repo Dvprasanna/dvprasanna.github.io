@@ -2,11 +2,15 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Photo Trace → Merge Lines</title>
+<title>Black Line Tracer</title>
 <style>
   body { margin:0; background:#111; color:#fff; font-family:system-ui; }
   #ui {
-    background:#222; padding:8px; display:flex; gap:8px; align-items:center;
+    background:#222;
+    padding:8px;
+    display:flex;
+    gap:8px;
+    align-items:center;
   }
   canvas {
     display:block;
@@ -23,7 +27,7 @@
   <input type="file" id="imgInput">
   <button id="toggleImg">Hide Photo</button>
   <button id="mergeBtn">Merge Lines</button>
-  <span>Right-click = Trace | Drag = Move | Box-select = Select</span>
+  <span>Right-click = Trace | Drag = Move | Box = Select</span>
 </div>
 
 <canvas id="c" width="1000" height="650"></canvas>
@@ -32,35 +36,44 @@
 const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
-let img=null, showImg=true;
-let lines=[];
-let selected=new Set();
-let dragging=false, boxSelect=false;
-let start={x:0,y:0}, mouse={x:0,y:0};
+let img = null;
+let showImg = true;
+let lines = [];
+let selected = new Set();
+
+let dragging = false;
+let boxSelect = false;
+let start = {x:0,y:0};
+let mouse = {x:0,y:0};
 
 /* ---------- IMAGE LOAD ---------- */
-imgInput.onchange=e=>{
-  img=new Image();
-  img.onload=draw;
-  img.src=URL.createObjectURL(e.target.files[0]);
+imgInput.onchange = e => {
+  img = new Image();
+  img.onload = draw;
+  img.src = URL.createObjectURL(e.target.files[0]);
 };
 
-toggleImg.onclick=()=>{ showImg=!showImg; draw(); };
-mergeBtn.onclick=mergeSelected;
+toggleImg.onclick = () => {
+  showImg = !showImg;
+  draw();
+};
+
+mergeBtn.onclick = mergeSelected;
 
 /* ---------- DRAW ---------- */
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   if(img && showImg){
-    const s=Math.min(canvas.width/img.width, canvas.height/img.height);
-    const w=img.width*s, h=img.height*s;
+    const s = Math.min(canvas.width/img.width, canvas.height/img.height);
+    const w = img.width*s;
+    const h = img.height*s;
     ctx.drawImage(img,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
   }
 
-  for(let l of lines){
-    ctx.strokeStyle=selected.has(l)?"red":"black";
-    ctx.lineWidth=2;
+  for(const l of lines){
+    ctx.strokeStyle = selected.has(l) ? "red" : "black";
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(l.x1,l.y1);
     ctx.lineTo(l.x2,l.y2);
@@ -68,61 +81,78 @@ function draw(){
   }
 
   if(boxSelect){
-    ctx.strokeStyle="rgba(0,0,255,0.6)";
+    ctx.strokeStyle = "rgba(0,0,255,0.6)";
     ctx.setLineDash([6,4]);
     ctx.strokeRect(start.x,start.y,mouse.x-start.x,mouse.y-start.y);
     ctx.setLineDash([]);
   }
 }
 
-/* ---------- EDGE TRACE ---------- */
-function trace(){
+/* ---------- TRACE ONLY BLACK LINES ---------- */
+function traceBlackLines(){
   if(!img) return;
 
-  // draw image into canvas buffer
-  draw();
+  draw(); // draw image into buffer
 
-  const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
-  const w=imgData.width, h=imgData.height;
-  const d=imgData.data;
-  const gray=new Float32Array(w*h);
+  const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
+  const w = imgData.width;
+  const h = imgData.height;
+  const d = imgData.data;
 
+  const gray = new Float32Array(w*h);
+
+  // BLACK PIXEL MASK
   for(let i=0;i<w*h;i++){
-    gray[i]=(d[i*4]+d[i*4+1]+d[i*4+2])/3;
-  }
+    const r=d[i*4], g=d[i*4+1], b=d[i*4+2];
 
-  const edges=[];
-  for(let y=1;y<h-1;y++){
-    for(let x=1;x<w-1;x++){
-      const i=y*w+x;
-      const gx=
-        -gray[i-w-1]-2*gray[i-1]-gray[i+w-1]
-        +gray[i-w+1]+2*gray[i+1]+gray[i+w+1];
-      const gy=
-        -gray[i-w-1]-2*gray[i-w]-gray[i-w+1]
-        +gray[i+w-1]+2*gray[i+w]+gray[i+w+1];
-
-      const mag=Math.hypot(gx,gy);
-      if(mag>45) edges.push({x,y,gx,gy});
+    if(r<90 && g<90 && b<90){
+      gray[i] = (r+g+b)/3;
+    } else {
+      gray[i] = 255; // ignore non-black
     }
   }
 
-  lines=[];
+  const edges = [];
 
-  // vertical lines
+  // SOBEL EDGE DETECTION
+  for(let y=1;y<h-1;y++){
+    for(let x=1;x<w-1;x++){
+      const i=y*w+x;
+      const gx =
+        -gray[i-w-1]-2*gray[i-1]-gray[i+w-1] +
+         gray[i-w+1]+2*gray[i+1]+gray[i+w+1];
+
+      const gy =
+        -gray[i-w-1]-2*gray[i-w]-gray[i-w+1] +
+         gray[i+w-1]+2*gray[i+w]+gray[i+w+1];
+
+      const mag = Math.hypot(gx,gy);
+      if(mag > 45) edges.push({x,y,gx,gy});
+    }
+  }
+
+  lines = [];
+
+  // VERTICAL LINES
   for(let x=0;x<w;x+=4){
-    const pts=edges.filter(p=>Math.abs(p.x-x)<2 && Math.abs(Math.atan2(p.gy,p.gx)-Math.PI/2)<0.3);
+    const pts = edges.filter(p =>
+      Math.abs(p.x-x)<2 &&
+      Math.abs(Math.atan2(p.gy,p.gx)-Math.PI/2)<0.3
+    );
     if(pts.length>25){
-      const ys=pts.map(p=>p.y);
+      const ys = pts.map(p=>p.y);
       lines.push({x1:x,y1:Math.min(...ys),x2:x,y2:Math.max(...ys)});
     }
   }
 
-  // horizontal lines
+  // HORIZONTAL LINES
   for(let y=0;y<h;y+=4){
-    const pts=edges.filter(p=>Math.abs(p.y-y)<2 && Math.abs(Math.atan2(p.gy,p.gx))<0.3);
+    const pts = edges.filter(p =>
+      Math.abs(p.y-y)<2 &&
+      Math.abs(Math.atan2(p.gy,p.gx))<0.3
+    );
     if(pts.length>25){
-      const xs=pts.map(p=>p.x);
+      const xs = pts.map(p=>p.x);
       lines.push({x1:Math.min(...xs),y1:y,x2:Math.max(...xs),y2:y});
     }
   }
@@ -131,43 +161,43 @@ function trace(){
 }
 
 /* ---------- RIGHT CLICK ---------- */
-canvas.oncontextmenu=e=>{
+canvas.oncontextmenu = e => {
   e.preventDefault();
-  trace();
+  traceBlackLines();
 };
 
 /* ---------- MOUSE ---------- */
-canvas.onmousedown=e=>{
-  const r=canvas.getBoundingClientRect();
-  start.x=mouse.x=e.clientX-r.left;
-  start.y=mouse.y=e.clientY-r.top;
+canvas.onmousedown = e => {
+  const r = canvas.getBoundingClientRect();
+  start.x = mouse.x = e.clientX-r.left;
+  start.y = mouse.y = e.clientY-r.top;
 
   selected.clear();
-  dragging=false;
-  boxSelect=true;
+  dragging = false;
+  boxSelect = true;
 
-  for(let l of lines){
+  for(const l of lines){
     if(Math.abs(l.x1-mouse.x)<6 || Math.abs(l.y1-mouse.y)<6){
       selected.add(l);
-      dragging=true;
-      boxSelect=false;
+      dragging = true;
+      boxSelect = false;
     }
   }
   draw();
 };
 
-canvas.onmousemove=e=>{
-  const r=canvas.getBoundingClientRect();
-  mouse.x=e.clientX-r.left;
-  mouse.y=e.clientY-r.top;
+canvas.onmousemove = e => {
+  const r = canvas.getBoundingClientRect();
+  mouse.x = e.clientX-r.left;
+  mouse.y = e.clientY-r.top;
 
   if(dragging){
-    const dx=mouse.x-start.x;
-    const dy=mouse.y-start.y;
-    start.x=mouse.x;
-    start.y=mouse.y;
+    const dx = mouse.x-start.x;
+    const dy = mouse.y-start.y;
+    start.x = mouse.x;
+    start.y = mouse.y;
 
-    for(let l of selected){
+    for(const l of selected){
       if(l.x1===l.x2){ l.x1+=dx; l.x2+=dx; }
       else { l.y1+=dy; l.y2+=dy; }
     }
@@ -177,14 +207,14 @@ canvas.onmousemove=e=>{
   }
 };
 
-canvas.onmouseup=e=>{
+canvas.onmouseup = () => {
   if(boxSelect){
     const x1=Math.min(start.x,mouse.x);
     const x2=Math.max(start.x,mouse.x);
     const y1=Math.min(start.y,mouse.y);
     const y2=Math.max(start.y,mouse.y);
 
-    for(let l of lines){
+    for(const l of lines){
       if(l.x1>=x1 && l.x1<=x2 && l.y1>=y1 && l.y1<=y2){
         selected.add(l);
       }
@@ -200,22 +230,22 @@ function mergeSelected(){
   if(selected.size<2) return;
 
   const arr=[...selected];
-  const isVertical=arr[0].x1===arr[0].x2;
+  const vertical = arr[0].x1===arr[0].x2;
 
-  let avg=isVertical
+  const avg = vertical
     ? arr.reduce((s,l)=>s+l.x1,0)/arr.length
     : arr.reduce((s,l)=>s+l.y1,0)/arr.length;
 
-  const min=isVertical
+  const min = vertical
     ? Math.min(...arr.map(l=>l.y1))
     : Math.min(...arr.map(l=>l.x1));
 
-  const max=isVertical
+  const max = vertical
     ? Math.max(...arr.map(l=>l.y2))
     : Math.max(...arr.map(l=>l.x2));
 
-  lines=lines.filter(l=>!selected.has(l));
-  lines.push(isVertical
+  lines = lines.filter(l=>!selected.has(l));
+  lines.push(vertical
     ? {x1:avg,y1:min,x2:avg,y2:max}
     : {x1:min,y1:avg,x2:max,y2:avg}
   );
