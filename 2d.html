@@ -2,30 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Mouse Drawing App v1.1</title>
+<title>Mouse Drawing App v1.2</title>
 
 <style>
 body {
   margin: 0;
   background: #1c1c1c;
-  color: #fff;
-  font-family: system-ui, sans-serif;
   overflow: hidden;
-}
-
-#topbar {
-  display: flex;
-  gap: 8px;
-  padding: 6px;
-  background: #2a2a2a;
-  align-items: center;
-}
-
-input, button {
-  background: #111;
-  color: #fff;
-  border: 1px solid #444;
-  padding: 4px 6px;
 }
 
 canvas {
@@ -34,54 +17,63 @@ canvas {
   cursor: crosshair;
 }
 
-/* Context menu */
+/* Context Menu */
 #menu {
   position: absolute;
   background: #222;
   border: 1px solid #555;
   display: none;
-  z-index: 10;
+  z-index: 100;
+  min-width: 200px;
 }
 #menu div {
-  padding: 6px 12px;
+  padding: 8px 12px;
+  color: #fff;
   cursor: pointer;
+  border-bottom: 1px solid #333;
 }
 #menu div:hover {
   background: #444;
+}
+#menu hr {
+  border: none;
+  border-top: 1px solid #444;
+  margin: 4px 0;
 }
 </style>
 </head>
 
 <body>
 
-<div id="topbar">
-  <input type="file" id="bgLoader">
-  Grid(px) <input id="gridSize" type="number" value="20" style="width:60px">
-  <button id="gridToggle">Grid ON</button>
-  Offset(px) <input id="offsetVal" type="number" value="10" style="width:60px">
-  <button id="offsetBtn">Offset</button>
-  <button id="panToggle">Pan OFF</button>
-  <button id="fsBtn">Fullscreen</button>
-</div>
-
 <canvas id="canvas"></canvas>
 
 <div id="menu">
-  <div id="menuOffset">Offset Line</div>
-  <div id="menuDelete">Delete Line</div>
+  <div id="loadBg">Load Background Image</div>
+  <div id="toggleGrid">Toggle Grid</div>
+  <div id="setGrid">Set Grid Size (px)</div>
+  <hr>
+  <div id="togglePan">Toggle Pan</div>
+  <hr>
+  <div id="offsetLine">Offset Selected Line</div>
+  <div id="deleteLine">Delete Selected Line</div>
+  <div id="clearAll">Clear All Lines</div>
+  <hr>
+  <div id="fullscreen">Toggle Fullscreen</div>
 </div>
 
+<input type="file" id="bgLoader" hidden>
+
 <script>
-/* ===== VERSION =====
-   Mouse Drawing App v1.1
-===================== */
+/* ========= VERSION =========
+   Mouse Drawing App v1.2
+=========================== */
 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 function resize() {
   canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight - 40;
+  canvas.height = window.innerHeight;
 }
 window.onresize = resize;
 resize();
@@ -90,6 +82,7 @@ resize();
 let bgImage = null;
 let gridOn = true;
 let gridSize = 20;
+
 let lines = [];
 let currentLine = null;
 let selectedLine = null;
@@ -119,10 +112,16 @@ function drawGrid() {
   if (!gridOn) return;
   ctx.strokeStyle = "#222";
   for (let x = -pan.x % gridSize; x < canvas.width; x += gridSize) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
   }
   for (let y = -pan.y % gridSize; y < canvas.height; y += gridSize) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
   }
 }
 
@@ -147,6 +146,7 @@ function redraw() {
 /* ===== MOUSE ===== */
 canvas.onmousedown = e => {
   hideMenu();
+
   const x = snap(e.offsetX - pan.x);
   const y = snap(e.offsetY - pan.y);
 
@@ -187,10 +187,9 @@ canvas.onmouseup = () => {
   panStart = null;
 };
 
-/* ===== RIGHT CLICK MENU ===== */
+/* ===== CONTEXT MENU ===== */
 canvas.oncontextmenu = e => {
   e.preventDefault();
-  if (!selectedLine) return;
   const menu = document.getElementById("menu");
   menu.style.left = e.clientX + "px";
   menu.style.top = e.clientY + "px";
@@ -202,8 +201,21 @@ function hideMenu() {
 }
 
 /* ===== MENU ACTIONS ===== */
-menuOffset.onclick = () => {
-  const d = Number(offsetVal.value);
+toggleGrid.onclick = () => { gridOn = !gridOn; redraw(); };
+
+setGrid.onclick = () => {
+  const v = prompt("Grid size in pixels:", gridSize);
+  if (v) gridSize = Number(v);
+  redraw();
+};
+
+togglePan.onclick = () => {
+  panMode = !panMode;
+};
+
+offsetLine.onclick = () => {
+  if (!selectedLine) return alert("Select a line first");
+  const d = Number(prompt("Offset in px:", 10));
   const dx = selectedLine.x2 - selectedLine.x1;
   const dy = selectedLine.y2 - selectedLine.y1;
   const len = Math.hypot(dx, dy);
@@ -214,36 +226,36 @@ menuOffset.onclick = () => {
     x2: selectedLine.x2 + nx*d,
     y2: selectedLine.y2 + ny*d
   });
-  hideMenu();
   redraw();
 };
 
-menuDelete.onclick = () => {
+deleteLine.onclick = () => {
+  if (!selectedLine) return;
   lines = lines.filter(l => l !== selectedLine);
   selectedLine = null;
-  hideMenu();
   redraw();
 };
 
-/* ===== UI ===== */
-gridToggle.onclick = () => { gridOn = !gridOn; redraw(); };
-gridSize.onchange = e => { gridSize = +e.target.value; redraw(); };
-
-panToggle.onclick = () => {
-  panMode = !panMode;
-  panToggle.textContent = panMode ? "Pan ON" : "Pan OFF";
+clearAll.onclick = () => {
+  lines = [];
+  selectedLine = null;
+  redraw();
 };
 
-fsBtn.onclick = () => {
+fullscreen.onclick = () => {
   if (!document.fullscreenElement) document.body.requestFullscreen();
   else document.exitFullscreen();
 };
+
+loadBg.onclick = () => bgLoader.click();
 
 bgLoader.onchange = e => {
   const img = new Image();
   img.onload = () => { bgImage = img; redraw(); };
   img.src = URL.createObjectURL(e.target.files[0]);
 };
+
+document.onclick = hideMenu;
 
 redraw();
 </script>
