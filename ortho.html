@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>L Shape Room – Ask Side</title>
+<title>L Shape Room – Corner Fixed</title>
 
 <style>
 html, body {
@@ -55,96 +55,109 @@ ctx.lineWidth = 2;
 ctx.lineCap = "round";
 
 /* ================= STATE ================= */
-let lines = [];
-let drawing = false;
+let baseLines = [];     // user drawn reference lines
+let wallLines = [];     // offset wall lines (joined)
+let lastOffsetLine = null;
 
+let drawing = false;
 let startPoint = null;
 let lastEndPoint = null;
-let tempLine = null;
 
-let OFFSET = 10; // wall thickness
+let OFFSET = 12;
 
 /* ================= UTILS ================= */
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  lines.forEach(l => {
-    ctx.beginPath();
-    ctx.moveTo(l.x1, l.y1);
-    ctx.lineTo(l.x2, l.y2);
-    ctx.stroke();
-  });
+  baseLines.forEach(l => drawLine(l));
+  wallLines.forEach(l => drawLine(l));
+}
 
-  if (tempLine) {
-    ctx.beginPath();
-    ctx.moveTo(tempLine.x1, tempLine.y1);
-    ctx.lineTo(tempLine.x2, tempLine.y2);
-    ctx.stroke();
-  }
+function drawLine(l) {
+  ctx.beginPath();
+  ctx.moveTo(l.x1, l.y1);
+  ctx.lineTo(l.x2, l.y2);
+  ctx.stroke();
+}
+
+function intersect(l1, l2) {
+  const x1=l1.x1,y1=l1.y1,x2=l1.x2,y2=l1.y2;
+  const x3=l2.x1,y3=l2.y1,x4=l2.x2,y4=l2.y2;
+
+  const d = (x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
+  if (Math.abs(d) < 0.0001) return null;
+
+  const px = (
+    (x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4)
+  ) / d;
+
+  const py = (
+    (x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4)
+  ) / d;
+
+  return { x: px, y: py };
 }
 
 function askSide() {
   const s = prompt("Wall side? (L / R)", "L");
   if (!s) return null;
-  return s.toUpperCase().startsWith("R") ? "R" : "L";
+  return s.toUpperCase().startsWith("R") ? -1 : 1;
 }
 
 /* ================= DRAW ================= */
 canvas.addEventListener("mousedown", e => {
   if (e.button !== 0) return;
-
   drawing = true;
   startPoint = lastEndPoint
     ? { ...lastEndPoint }
     : { x: e.clientX, y: e.clientY };
 });
 
-canvas.addEventListener("mousemove", e => {
-  if (!drawing) return;
-
-  tempLine = {
-    x1: startPoint.x,
-    y1: startPoint.y,
-    x2: e.clientX,
-    y2: e.clientY
-  };
-  redraw();
-});
-
 canvas.addEventListener("mouseup", e => {
   if (!drawing) return;
   drawing = false;
 
-  const baseLine = {
+  const base = {
     x1: startPoint.x,
     y1: startPoint.y,
     x2: e.clientX,
     y2: e.clientY
   };
-
-  lines.push(baseLine); // visible reference line
+  baseLines.push(base);
 
   const side = askSide();
-  if (side) {
-    const dx = baseLine.x2 - baseLine.x1;
-    const dy = baseLine.y2 - baseLine.y1;
+  if (side !== null) {
+    const dx = base.x2 - base.x1;
+    const dy = base.y2 - base.y1;
     const len = Math.hypot(dx, dy);
     if (len > 0) {
       const nx = -dy / len;
       const ny = dx / len;
-      const sign = side === "L" ? 1 : -1;
 
-      lines.push({
-        x1: baseLine.x1 + nx * OFFSET * sign,
-        y1: baseLine.y1 + ny * OFFSET * sign,
-        x2: baseLine.x2 + nx * OFFSET * sign,
-        y2: baseLine.y2 + ny * OFFSET * sign
-      });
+      let offset = {
+        x1: base.x1 + nx * OFFSET * side,
+        y1: base.y1 + ny * OFFSET * side,
+        x2: base.x2 + nx * OFFSET * side,
+        y2: base.y2 + ny * OFFSET * side
+      };
+
+      // 🔴 CORNER JOIN FIX
+      if (lastOffsetLine) {
+        const p = intersect(lastOffsetLine, offset);
+        if (p) {
+          lastOffsetLine.x2 = p.x;
+          lastOffsetLine.y2 = p.y;
+          offset.x1 = p.x;
+          offset.y1 = p.y;
+        }
+      }
+
+      wallLines.push(offset);
+      lastOffsetLine = offset;
     }
   }
 
-  lastEndPoint = { x: baseLine.x2, y: baseLine.y2 };
-  tempLine = null;
+  lastEndPoint = { x: base.x2, y: base.y2 };
   redraw();
 });
 
@@ -173,15 +186,18 @@ function setOffset() {
 }
 
 function undo() {
-  lines.pop();
+  baseLines.pop();
+  wallLines.pop();
+  lastOffsetLine = wallLines[wallLines.length - 1] || null;
   redraw();
   menu.style.display = "none";
 }
 
 function clearAll() {
-  lines = [];
+  baseLines = [];
+  wallLines = [];
+  lastOffsetLine = null;
   lastEndPoint = null;
-  tempLine = null;
   redraw();
   menu.style.display = "none";
 }
