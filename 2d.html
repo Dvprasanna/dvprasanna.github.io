@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Black Line Tracer</title>
+<title>Black Line Floorplan Tracer</title>
 <style>
   body { margin:0; background:#111; color:#fff; font-family:system-ui; }
   #ui {
@@ -37,7 +37,9 @@ const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
 let img = null;
+let imgRect = null; // exact image draw position
 let showImg = true;
+
 let lines = [];
 let selected = new Set();
 
@@ -46,7 +48,7 @@ let boxSelect = false;
 let start = {x:0,y:0};
 let mouse = {x:0,y:0};
 
-/* ---------- IMAGE LOAD ---------- */
+/* ================= IMAGE LOAD ================= */
 imgInput.onchange = e => {
   img = new Image();
   img.onload = draw;
@@ -60,15 +62,19 @@ toggleImg.onclick = () => {
 
 mergeBtn.onclick = mergeSelected;
 
-/* ---------- DRAW ---------- */
+/* ================= DRAW ================= */
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   if(img && showImg){
     const s = Math.min(canvas.width/img.width, canvas.height/img.height);
-    const w = img.width*s;
-    const h = img.height*s;
-    ctx.drawImage(img,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
+    const w = img.width * s;
+    const h = img.height * s;
+    const x = (canvas.width - w) / 2;
+    const y = (canvas.height - h) / 2;
+
+    imgRect = { x, y, w, h };
+    ctx.drawImage(img, x, y, w, h);
   }
 
   for(const l of lines){
@@ -81,96 +87,109 @@ function draw(){
   }
 
   if(boxSelect){
-    ctx.strokeStyle = "rgba(0,0,255,0.6)";
+    ctx.strokeStyle = "rgba(0,120,255,0.7)";
     ctx.setLineDash([6,4]);
-    ctx.strokeRect(start.x,start.y,mouse.x-start.x,mouse.y-start.y);
+    ctx.strokeRect(
+      start.x,
+      start.y,
+      mouse.x - start.x,
+      mouse.y - start.y
+    );
     ctx.setLineDash([]);
   }
 }
 
-/* ---------- TRACE ONLY BLACK LINES ---------- */
+/* ================= TRACE BLACK LINES ================= */
 function traceBlackLines(){
-  if(!img) return;
+  if(!img || !imgRect) return;
 
-  draw(); // draw image into buffer
+  const data = ctx.getImageData(
+    imgRect.x,
+    imgRect.y,
+    imgRect.w,
+    imgRect.h
+  );
 
-  const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
-  const w = imgData.width;
-  const h = imgData.height;
-  const d = imgData.data;
-
+  const w = data.width;
+  const h = data.height;
+  const d = data.data;
   const gray = new Float32Array(w*h);
 
-  // BLACK PIXEL MASK
+  /* --- black pixel mask --- */
   for(let i=0;i<w*h;i++){
     const r=d[i*4], g=d[i*4+1], b=d[i*4+2];
-
-    if(r<90 && g<90 && b<90){
-      gray[i] = (r+g+b)/3;
-    } else {
-      gray[i] = 255; // ignore non-black
-    }
+    gray[i] = (r<140 && g<140 && b<140) ? (r+g+b)/3 : 255;
   }
 
   const edges = [];
 
-  // SOBEL EDGE DETECTION
+  /* --- sobel --- */
   for(let y=1;y<h-1;y++){
     for(let x=1;x<w-1;x++){
       const i=y*w+x;
       const gx =
         -gray[i-w-1]-2*gray[i-1]-gray[i+w-1] +
          gray[i-w+1]+2*gray[i+1]+gray[i+w+1];
-
       const gy =
         -gray[i-w-1]-2*gray[i-w]-gray[i-w+1] +
          gray[i+w-1]+2*gray[i+w]+gray[i+w+1];
 
-      const mag = Math.hypot(gx,gy);
-      if(mag > 45) edges.push({x,y,gx,gy});
+      if(Math.hypot(gx,gy) > 35){
+        edges.push({x,y,gx,gy});
+      }
     }
   }
 
   lines = [];
 
-  // VERTICAL LINES
-  for(let x=0;x<w;x+=4){
+  /* --- vertical lines --- */
+  for(let x=0;x<w;x+=3){
     const pts = edges.filter(p =>
       Math.abs(p.x-x)<2 &&
-      Math.abs(Math.atan2(p.gy,p.gx)-Math.PI/2)<0.3
+      Math.abs(Math.atan2(p.gy,p.gx)-Math.PI/2)<0.35
     );
-    if(pts.length>25){
+    if(pts.length>20){
       const ys = pts.map(p=>p.y);
-      lines.push({x1:x,y1:Math.min(...ys),x2:x,y2:Math.max(...ys)});
+      lines.push({
+        x1: imgRect.x + x,
+        y1: imgRect.y + Math.min(...ys),
+        x2: imgRect.x + x,
+        y2: imgRect.y + Math.max(...ys)
+      });
     }
   }
 
-  // HORIZONTAL LINES
-  for(let y=0;y<h;y+=4){
+  /* --- horizontal lines --- */
+  for(let y=0;y<h;y+=3){
     const pts = edges.filter(p =>
       Math.abs(p.y-y)<2 &&
-      Math.abs(Math.atan2(p.gy,p.gx))<0.3
+      Math.abs(Math.atan2(p.gy,p.gx))<0.35
     );
-    if(pts.length>25){
+    if(pts.length>20){
       const xs = pts.map(p=>p.x);
-      lines.push({x1:Math.min(...xs),y1:y,x2:Math.max(...xs),y2:y});
+      lines.push({
+        x1: imgRect.x + Math.min(...xs),
+        y1: imgRect.y + y,
+        x2: imgRect.x + Math.max(...xs),
+        y2: imgRect.y + y
+      });
     }
   }
 
   draw();
 }
 
-/* ---------- RIGHT CLICK ---------- */
+/* ================= RIGHT CLICK ================= */
 canvas.oncontextmenu = e => {
   e.preventDefault();
   traceBlackLines();
 };
 
-/* ---------- MOUSE ---------- */
+/* ================= MOUSE ================= */
 canvas.onmousedown = e => {
   const r = canvas.getBoundingClientRect();
-  start.x = mouse.x = e.clientX-r.left;
-  start.y = mouse.y = e.clientY-r.top;
+  start.x = mouse.x = e.clientX - r.left;
+  start.y = mouse.y = e.clientY - r.top;
 
   selected.clear();
   dragging = false;
@@ -188,12 +207,12 @@ canvas.onmousedown = e => {
 
 canvas.onmousemove = e => {
   const r = canvas.getBoundingClientRect();
-  mouse.x = e.clientX-r.left;
-  mouse.y = e.clientY-r.top;
+  mouse.x = e.clientX - r.left;
+  mouse.y = e.clientY - r.top;
 
   if(dragging){
-    const dx = mouse.x-start.x;
-    const dy = mouse.y-start.y;
+    const dx = mouse.x - start.x;
+    const dy = mouse.y - start.y;
     start.x = mouse.x;
     start.y = mouse.y;
 
@@ -225,7 +244,7 @@ canvas.onmouseup = () => {
   draw();
 };
 
-/* ---------- MERGE ---------- */
+/* ================= MERGE ================= */
 function mergeSelected(){
   if(selected.size<2) return;
 
