@@ -1,33 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Mouse Drawing App v1.0</title>
+<meta charset="UTF-8">
+<title>Mouse Drawing App v1.1</title>
 
 <style>
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
   background: #1c1c1c;
   color: #fff;
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
 }
+
 #topbar {
   display: flex;
   gap: 8px;
-  padding: 8px;
+  padding: 6px;
   background: #2a2a2a;
   align-items: center;
 }
+
 input, button {
   background: #111;
   color: #fff;
   border: 1px solid #444;
   padding: 4px 6px;
 }
+
 canvas {
   display: block;
   background: #111;
   cursor: crosshair;
+}
+
+/* Context menu */
+#menu {
+  position: absolute;
+  background: #222;
+  border: 1px solid #555;
+  display: none;
+  z-index: 10;
+}
+#menu div {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+#menu div:hover {
+  background: #444;
 }
 </style>
 </head>
@@ -35,29 +55,50 @@ canvas {
 <body>
 
 <div id="topbar">
-  <input type="file" id="bgLoader" />
-  Grid(px): <input id="gridSize" type="number" value="20" style="width:60px">
+  <input type="file" id="bgLoader">
+  Grid(px) <input id="gridSize" type="number" value="20" style="width:60px">
   <button id="gridToggle">Grid ON</button>
-  Offset(px): <input id="offsetVal" type="number" value="10" style="width:60px">
-  <button id="offsetBtn">Apply Offset</button>
+  Offset(px) <input id="offsetVal" type="number" value="10" style="width:60px">
+  <button id="offsetBtn">Offset</button>
+  <button id="panToggle">Pan OFF</button>
+  <button id="fsBtn">Fullscreen</button>
 </div>
 
-<canvas id="canvas" width="1200" height="700"></canvas>
+<canvas id="canvas"></canvas>
+
+<div id="menu">
+  <div id="menuOffset">Offset Line</div>
+  <div id="menuDelete">Delete Line</div>
+</div>
 
 <script>
-/* ====== STATE ====== */
+/* ===== VERSION =====
+   Mouse Drawing App v1.1
+===================== */
+
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight - 40;
+}
+window.onresize = resize;
+resize();
+
+/* ===== STATE ===== */
 let bgImage = null;
 let gridOn = true;
 let gridSize = 20;
-
 let lines = [];
 let currentLine = null;
 let selectedLine = null;
 
-/* ====== HELPERS ====== */
+let panMode = false;
+let pan = { x: 0, y: 0 };
+let panStart = null;
+
+/* ===== HELPERS ===== */
 function snap(v) {
   return gridOn ? Math.round(v / gridSize) * gridSize : v;
 }
@@ -67,36 +108,30 @@ function distToLine(px, py, l) {
   const B = py - l.y1;
   const C = l.x2 - l.x1;
   const D = l.y2 - l.y1;
-  const dot = A * C + B * D;
-  const len = C * C + D * D;
-  const t = Math.max(0, Math.min(1, dot / len));
-  const dx = l.x1 + t * C - px;
-  const dy = l.y1 + t * D - py;
-  return Math.sqrt(dx * dx + dy * dy);
+  const t = Math.max(0, Math.min(1, (A*C + B*D) / (C*C + D*D)));
+  const dx = l.x1 + t*C - px;
+  const dy = l.y1 + t*D - py;
+  return Math.hypot(dx, dy);
 }
 
-/* ====== DRAW ====== */
+/* ===== DRAW ===== */
 function drawGrid() {
   if (!gridOn) return;
   ctx.strokeStyle = "#222";
-  for (let x = 0; x < canvas.width; x += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
-    ctx.stroke();
+  for (let x = -pan.x % gridSize; x < canvas.width; x += gridSize) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
   }
-  for (let y = 0; y < canvas.height; y += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(canvas.width, y);
-    ctx.stroke();
+  for (let y = -pan.y % gridSize; y < canvas.height; y += gridSize) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
   }
 }
 
 function redraw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (bgImage) ctx.drawImage(bgImage, 0, 0);
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.translate(pan.x, pan.y);
 
+  if (bgImage) ctx.drawImage(bgImage, 0, 0);
   drawGrid();
 
   lines.forEach(l => {
@@ -109,10 +144,16 @@ function redraw() {
   });
 }
 
-/* ====== MOUSE ====== */
+/* ===== MOUSE ===== */
 canvas.onmousedown = e => {
-  const x = snap(e.offsetX);
-  const y = snap(e.offsetY);
+  hideMenu();
+  const x = snap(e.offsetX - pan.x);
+  const y = snap(e.offsetY - pan.y);
+
+  if (panMode) {
+    panStart = { x: e.clientX, y: e.clientY };
+    return;
+  }
 
   selectedLine = null;
   for (let l of lines) {
@@ -128,54 +169,79 @@ canvas.onmousedown = e => {
 };
 
 canvas.onmousemove = e => {
+  if (panStart) {
+    pan.x += e.clientX - panStart.x;
+    pan.y += e.clientY - panStart.y;
+    panStart = { x: e.clientX, y: e.clientY };
+    redraw();
+    return;
+  }
   if (!currentLine) return;
-  currentLine.x2 = snap(e.offsetX);
-  currentLine.y2 = snap(e.offsetY);
+  currentLine.x2 = snap(e.offsetX - pan.x);
+  currentLine.y2 = snap(e.offsetY - pan.y);
   redraw();
 };
 
 canvas.onmouseup = () => {
   currentLine = null;
+  panStart = null;
 };
 
-/* ====== OFFSET ====== */
-document.getElementById("offsetBtn").onclick = () => {
+/* ===== RIGHT CLICK MENU ===== */
+canvas.oncontextmenu = e => {
+  e.preventDefault();
   if (!selectedLine) return;
-  const d = Number(document.getElementById("offsetVal").value);
+  const menu = document.getElementById("menu");
+  menu.style.left = e.clientX + "px";
+  menu.style.top = e.clientY + "px";
+  menu.style.display = "block";
+};
 
+function hideMenu() {
+  document.getElementById("menu").style.display = "none";
+}
+
+/* ===== MENU ACTIONS ===== */
+menuOffset.onclick = () => {
+  const d = Number(offsetVal.value);
   const dx = selectedLine.x2 - selectedLine.x1;
   const dy = selectedLine.y2 - selectedLine.y1;
   const len = Math.hypot(dx, dy);
-  const nx = -dy / len;
-  const ny = dx / len;
-
+  const nx = -dy / len, ny = dx / len;
   lines.push({
-    x1: selectedLine.x1 + nx * d,
-    y1: selectedLine.y1 + ny * d,
-    x2: selectedLine.x2 + nx * d,
-    y2: selectedLine.y2 + ny * d
+    x1: selectedLine.x1 + nx*d,
+    y1: selectedLine.y1 + ny*d,
+    x2: selectedLine.x2 + nx*d,
+    y2: selectedLine.y2 + ny*d
   });
-
+  hideMenu();
   redraw();
 };
 
-/* ====== UI ====== */
-document.getElementById("gridToggle").onclick = () => {
-  gridOn = !gridOn;
+menuDelete.onclick = () => {
+  lines = lines.filter(l => l !== selectedLine);
+  selectedLine = null;
+  hideMenu();
   redraw();
 };
 
-document.getElementById("gridSize").onchange = e => {
-  gridSize = Number(e.target.value);
-  redraw();
+/* ===== UI ===== */
+gridToggle.onclick = () => { gridOn = !gridOn; redraw(); };
+gridSize.onchange = e => { gridSize = +e.target.value; redraw(); };
+
+panToggle.onclick = () => {
+  panMode = !panMode;
+  panToggle.textContent = panMode ? "Pan ON" : "Pan OFF";
 };
 
-document.getElementById("bgLoader").onchange = e => {
+fsBtn.onclick = () => {
+  if (!document.fullscreenElement) document.body.requestFullscreen();
+  else document.exitFullscreen();
+};
+
+bgLoader.onchange = e => {
   const img = new Image();
-  img.onload = () => {
-    bgImage = img;
-    redraw();
-  };
+  img.onload = () => { bgImage = img; redraw(); };
   img.src = URL.createObjectURL(e.target.files[0]);
 };
 
