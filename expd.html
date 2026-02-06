@@ -13,9 +13,10 @@ c.height = innerHeight;
 
 let camX = 0, camY = 0;
 let drag = false, lx = 0, ly = 0;
-let drawMode = true; // left = draw, right = pan
+let drawMode = true;
+let blocked = false; // 🔒 stops drawing on collision
 
-// fixed pen (screen)
+// fixed pen
 const px = () => c.width / 2;
 const py = () => c.height / 2;
 
@@ -24,12 +25,31 @@ let sx = 0, sy = 0;
 const SMOOTH = 0.25;
 
 const lines = [];
+const HIT = 5; // collision tolerance (px)
+
+// distance point → segment
+function hitLine(px, py, l) {
+  const dx = l.x2 - l.x1;
+  const dy = l.y2 - l.y1;
+  const len2 = dx*dx + dy*dy;
+  let t = ((px - l.x1)*dx + (py - l.y1)*dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const hx = l.x1 + t*dx;
+  const hy = l.y1 + t*dy;
+  return Math.hypot(px - hx, py - hy) < HIT;
+}
+
+function penHitsLine() {
+  const wx = px() - camX;
+  const wy = py() - camY;
+  return lines.some(l => hitLine(wx, wy, l));
+}
 
 function draw() {
   x.clearRect(0,0,c.width,c.height);
 
   x.strokeStyle = "#000";
-  x.lineWidth = 6;              // 🔥 3x thickness
+  x.lineWidth = 6;
   x.lineCap = "round";
   x.lineJoin = "round";
 
@@ -40,14 +60,13 @@ function draw() {
     x.stroke();
   }
 
-  // pen (fixed)
-  x.fillStyle = "red";
+  // pen indicator
+  x.fillStyle = blocked ? "orange" : "red";
   x.beginPath();
   x.arc(px(), py(), 4, 0, Math.PI*2);
   x.fill();
 }
 
-// disable context menu
 c.oncontextmenu = e => e.preventDefault();
 
 c.onmousedown = e => {
@@ -55,7 +74,10 @@ c.onmousedown = e => {
   lx = e.clientX;
   ly = e.clientY;
 
-  drawMode = (e.button === 0); // left = draw, right = pan
+  drawMode = (e.button === 0);
+
+  // right-drag resets block
+  if (!drawMode) blocked = false;
 
   sx = px() - camX;
   sy = py() - camY;
@@ -67,23 +89,28 @@ c.onmousemove = e => {
   const dx = e.clientX - lx;
   const dy = e.clientY - ly;
 
-  if (drawMode) {
-    const wx = px() - camX;
-    const wy = py() - camY;
+  if (drawMode && !blocked) {
 
-    // smoothing
-    sx += (wx - sx) * SMOOTH;
-    sy += (wy - sy) * SMOOTH;
+    // stop drawing if pen touches a line
+    if (penHitsLine()) {
+      blocked = true;
+    } else {
+      const wx = px() - camX;
+      const wy = py() - camY;
 
-    lines.push({
-      x1: sx,
-      y1: sy,
-      x2: sx - dx,
-      y2: sy - dy
-    });
+      sx += (wx - sx) * SMOOTH;
+      sy += (wy - sy) * SMOOTH;
+
+      lines.push({
+        x1: sx,
+        y1: sy,
+        x2: sx - dx,
+        y2: sy - dy
+      });
+    }
   }
 
-  // always move canvas
+  // canvas always moves
   camX += dx;
   camY += dy;
 
