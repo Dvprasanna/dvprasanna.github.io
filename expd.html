@@ -2,13 +2,13 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Drag-to-Draw Canvas</title>
+<title>Fixed Pen – Moving Canvas Drawing</title>
 <style>
   html, body {
     margin: 0;
     height: 100%;
     overflow: hidden;
-    background: #eee;
+    background: #ddd;
   }
   canvas {
     display: block;
@@ -22,10 +22,10 @@
 </head>
 <body>
 
-<canvas id="canvas"></canvas>
+<canvas id="c"></canvas>
 
 <script>
-const canvas = document.getElementById("canvas");
+const canvas = document.getElementById("c");
 const ctx = canvas.getContext("2d");
 
 function resize() {
@@ -35,23 +35,46 @@ function resize() {
 resize();
 window.addEventListener("resize", resize);
 
-// Pen starts at center
-let penX = canvas.width / 2;
-let penY = canvas.height / 2;
+// Camera offset (world → screen)
+let camX = 0;
+let camY = 0;
+
+// Fixed pen on screen
+function penScreenX() { return canvas.width / 2; }
+function penScreenY() { return canvas.height / 2; }
+
+// Convert pen to world coords
+function penWorldX() { return penScreenX() - camX; }
+function penWorldY() { return penScreenY() - camY; }
 
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
 
-// Draw pen marker
-function drawPen() {
+// Store lines in WORLD coordinates
+const lines = [];
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw lines
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+
+  for (const l of lines) {
+    ctx.beginPath();
+    ctx.moveTo(l.x1 + camX, l.y1 + camY);
+    ctx.lineTo(l.x2 + camX, l.y2 + camY);
+    ctx.stroke();
+  }
+
+  // Draw fixed pen
   ctx.fillStyle = "red";
   ctx.beginPath();
-  ctx.arc(penX, penY, 4, 0, Math.PI * 2);
+  ctx.arc(penScreenX(), penScreenY(), 4, 0, Math.PI * 2);
   ctx.fill();
 }
-
-drawPen();
 
 canvas.addEventListener("mousedown", e => {
   dragging = true;
@@ -65,27 +88,31 @@ canvas.addEventListener("mousemove", e => {
   const dx = e.clientX - lastX;
   const dy = e.clientY - lastY;
 
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
-  ctx.lineCap = "round";
+  // Line is drawn at current pen WORLD position
+  const px = penWorldX();
+  const py = penWorldY();
 
-  ctx.beginPath();
-  ctx.moveTo(penX, penY);
-  ctx.lineTo(penX - dx, penY - dy);
-  ctx.stroke();
+  lines.push({
+    x1: px,
+    y1: py,
+    x2: px - dx,
+    y2: py - dy
+  });
 
-  // Move pen opposite to drag
-  penX -= dx;
-  penY -= dy;
+  // Move camera
+  camX += dx;
+  camY += dy;
 
   lastX = e.clientX;
   lastY = e.clientY;
 
-  drawPen();
+  draw();
 });
 
 canvas.addEventListener("mouseup", () => dragging = false);
 canvas.addEventListener("mouseleave", () => dragging = false);
+
+draw();
 </script>
 
 </body>
