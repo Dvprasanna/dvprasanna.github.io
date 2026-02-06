@@ -1,119 +1,92 @@
 <!DOCTYPE html>
 <html>
-<head>
-<meta charset="UTF-8">
-<title>Fixed Pen – Moving Canvas Drawing</title>
-<style>
-  html, body {
-    margin: 0;
-    height: 100%;
-    overflow: hidden;
-    background: #ddd;
-  }
-  canvas {
-    display: block;
-    background: #fff;
-    cursor: grab;
-  }
-  canvas:active {
-    cursor: grabbing;
-  }
-</style>
-</head>
-<body>
+<body style="margin:0;overflow:hidden">
 
 <canvas id="c"></canvas>
 
 <script>
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
+const c = document.getElementById("c");
+const x = c.getContext("2d");
 
-function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-resize();
-window.addEventListener("resize", resize);
+c.width = innerWidth;
+c.height = innerHeight;
 
-// Camera offset (world → screen)
-let camX = 0;
-let camY = 0;
+let camX = 0, camY = 0;
+let drag = false, lx = 0, ly = 0;
 
-// Fixed pen on screen
-function penScreenX() { return canvas.width / 2; }
-function penScreenY() { return canvas.height / 2; }
+// fixed pen (screen)
+const px = () => c.width / 2;
+const py = () => c.height / 2;
 
-// Convert pen to world coords
-function penWorldX() { return penScreenX() - camX; }
-function penWorldY() { return penScreenY() - camY; }
+// smoothed pen (world)
+let sx = 0, sy = 0;
+const SMOOTH = 0.25;
 
-let dragging = false;
-let lastX = 0;
-let lastY = 0;
-
-// Store lines in WORLD coordinates
 const lines = [];
 
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  x.clearRect(0,0,c.width,c.height);
 
-  // Draw lines
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
-  ctx.lineCap = "round";
+  x.lineWidth = 2;
+  x.lineCap = "round";
 
-  for (const l of lines) {
-    ctx.beginPath();
-    ctx.moveTo(l.x1 + camX, l.y1 + camY);
-    ctx.lineTo(l.x2 + camX, l.y2 + camY);
-    ctx.stroke();
+  for (let l of lines) {
+    x.beginPath();
+    x.moveTo(l.x1 + camX, l.y1 + camY);
+    x.lineTo(l.x2 + camX, l.y2 + camY);
+    x.stroke();
   }
 
-  // Draw fixed pen
-  ctx.fillStyle = "red";
-  ctx.beginPath();
-  ctx.arc(penScreenX(), penScreenY(), 4, 0, Math.PI * 2);
-  ctx.fill();
+  // pen
+  x.fillStyle = "red";
+  x.beginPath();
+  x.arc(px(), py(), 4, 0, Math.PI*2);
+  x.fill();
 }
 
-canvas.addEventListener("mousedown", e => {
-  dragging = true;
-  lastX = e.clientX;
-  lastY = e.clientY;
-});
+c.onmousedown = e => {
+  drag = true;
+  lx = e.clientX;
+  ly = e.clientY;
 
-canvas.addEventListener("mousemove", e => {
-  if (!dragging) return;
+  // init smooth position
+  sx = px() - camX;
+  sy = py() - camY;
+};
 
-  const dx = e.clientX - lastX;
-  const dy = e.clientY - lastY;
+c.onmousemove = e => {
+  if (!drag) return;
 
-  // Line is drawn at current pen WORLD position
-  const px = penWorldX();
-  const py = penWorldY();
+  const dx = e.clientX - lx;
+  const dy = e.clientY - ly;
+
+  const wx = px() - camX;
+  const wy = py() - camY;
+
+  // 🔹 smoothing (THE MAGIC)
+  sx += (wx - sx) * SMOOTH;
+  sy += (wy - sy) * SMOOTH;
 
   lines.push({
-    x1: px,
-    y1: py,
-    x2: px - dx,
-    y2: py - dy
+    x1: sx,
+    y1: sy,
+    x2: sx - dx,
+    y2: sy - dy
   });
 
-  // Move camera
   camX += dx;
   camY += dy;
 
-  lastX = e.clientX;
-  lastY = e.clientY;
+  lx = e.clientX;
+  ly = e.clientY;
 
   draw();
-});
+};
 
-canvas.addEventListener("mouseup", () => dragging = false);
-canvas.addEventListener("mouseleave", () => dragging = false);
+c.onmouseup = () => drag = false;
+c.onmouseleave = () => drag = false;
 
 draw();
 </script>
-
 </body>
 </html>
