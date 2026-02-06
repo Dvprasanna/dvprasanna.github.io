@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<body style="margin:0;overflow:hidden;background:#ddd">
+
+<canvas id="c"></canvas>
+
+<script>
+const c = document.getElementById("c");
+const ctx = c.getContext("2d");
+
+function resize(){
+  c.width = innerWidth;
+  c.height = innerHeight;
+}
+resize();
+onresize = resize;
+
+let camX=0, camY=0;
+let dragging=false, drawMode=true, blocked=false;
+let lastX=0, lastY=0;
+
+const penSX = () => c.width/2;
+const penSY = () => c.height/2;
+
+let sx=0, sy=0;
+const SMOOTH=0.25;
+const HIT=5;
+const lines=[];
+
+function hitLine(px,py,l){
+  const dx=l.x2-l.x1, dy=l.y2-l.y1;
+  const len2=dx*dx+dy*dy;
+  if(!len2) return false;
+  let t=((px-l.x1)*dx+(py-l.y1)*dy)/len2;
+  t=Math.max(0,Math.min(1,t));
+  const hx=l.x1+t*dx, hy=l.y1+t*dy;
+  return Math.hypot(px-hx,py-hy)<HIT;
+}
+
+function penHitsOld(){
+  const wx=penSX()-camX, wy=penSY()-camY;
+  for(let i=0;i<lines.length-1;i++)
+    if(hitLine(wx,wy,lines[i])) return true;
+  return false;
+}
+
+function draw(){
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.lineWidth=6;
+  ctx.lineCap="round";
+  ctx.lineJoin="round";
+
+  for(const l of lines){
+    ctx.beginPath();
+    ctx.moveTo(l.x1+camX,l.y1+camY);
+    ctx.lineTo(l.x2+camX,l.y2+camY);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle=blocked?"orange":"red";
+  ctx.beginPath();
+  ctx.arc(penSX(),penSY(),4,0,Math.PI*2);
+  ctx.fill();
+}
+
+/* ---------- MOUSE ---------- */
+c.oncontextmenu=e=>e.preventDefault();
+
+c.onmousedown=e=>{
+  dragging=true;
+  lastX=e.clientX; lastY=e.clientY;
+  drawMode=(e.button===0);
+  if(!drawMode) blocked=false;
+  sx=penSX()-camX; sy=penSY()-camY;
+};
+
+c.onmousemove=e=>{
+  if(!dragging) return;
+  moveLogic(e.clientX,e.clientY);
+};
+
+c.onmouseup=()=>dragging=false;
+c.onmouseleave=()=>dragging=false;
+
+/* ---------- TOUCH ---------- */
+c.addEventListener("touchstart",e=>{
+  e.preventDefault();
+  dragging=true;
+  const t=e.touches[0];
+  lastX=t.clientX; lastY=t.clientY;
+  drawMode=(e.touches.length===1);
+  if(!drawMode) blocked=false;
+  sx=penSX()-camX; sy=penSY()-camY;
+},{passive:false});
+
+c.addEventListener("touchmove",e=>{
+  e.preventDefault();
+  if(!dragging) return;
+  const t=e.touches[0];
+  moveLogic(t.clientX,t.clientY);
+},{passive:false});
+
+c.addEventListener("touchend",()=>dragging=false);
+
+/* ---------- SHARED MOVE LOGIC ---------- */
+function moveLogic(x,y){
+  const dx=x-lastX, dy=y-lastY;
+
+  if(drawMode && !blocked){
+    if(penHitsOld()) blocked=true;
+    else{
+      const wx=penSX()-camX, wy=penSY()-camY;
+      sx+=(wx-sx)*SMOOTH;
+      sy+=(wy-sy)*SMOOTH;
+      lines.push({x1:sx,y1:sy,x2:sx-dx,y2:sy-dy});
+    }
+  }
+
+  camX+=dx; camY+=dy;
+  lastX=x; lastY=y;
+  draw();
+}
+
+draw();
+</script>
+</body>
+</html>
