@@ -5,6 +5,7 @@
 <canvas id="c"></canvas>
 
 <script>
+/* ================== SETUP ================== */
 const c = document.getElementById("c");
 const ctx = c.getContext("2d");
 
@@ -15,16 +16,18 @@ function resize(){
 resize();
 onresize = resize;
 
-/* ---------------- STATE ---------------- */
+/* ================== STATE ================== */
 let camX = 0, camY = 0;
 let dragging = false;
 let drawMode = true;
 let blocked = false;
+let warmedUp = false;
+
 let lastX = 0, lastY = 0;
 
 const lines = [];
 
-/* ---------------- PEN ---------------- */
+/* ================== PEN ================== */
 const penSX = () => c.width / 2;
 const penSY = () => c.height / 2;
 
@@ -33,7 +36,7 @@ const SMOOTH = 0.25;
 const HIT = 5;
 const SPEED_LIMIT = 12;
 
-/* ---------------- COLLISION ---------------- */
+/* ================== COLLISION ================== */
 function hitLine(px, py, l){
   const dx = l.x2 - l.x1;
   const dy = l.y2 - l.y1;
@@ -50,6 +53,8 @@ function hitLine(px, py, l){
 }
 
 function penHitsOldLine(){
+  if (lines.length < 3) return false;
+
   const wx = penSX() - camX;
   const wy = penSY() - camY;
 
@@ -59,7 +64,7 @@ function penHitsOldLine(){
   return false;
 }
 
-/* ---------------- DRAW ---------------- */
+/* ================== DRAW ================== */
 function draw(){
   ctx.clearRect(0,0,c.width,c.height);
 
@@ -77,19 +82,22 @@ function draw(){
 
   ctx.fillStyle = blocked ? "orange" : "red";
   ctx.beginPath();
-  ctx.arc(penSX(), penSY(), 4, 0, Math.PI * 2);
+  ctx.arc(penSX(), penSY(), 4, 0, Math.PI*2);
   ctx.fill();
 }
 
-/* ---------------- INPUT CORE ---------------- */
+/* ================== CORE INPUT ================== */
 function start(x, y, mode){
   dragging = true;
   drawMode = mode;
+  warmedUp = false;
+
   if (!drawMode) blocked = false;
 
   lastX = x;
   lastY = y;
 
+  // hard-sync smoothed pen (startup fix)
   sx = penSX() - camX;
   sy = penSY() - camY;
 }
@@ -99,6 +107,18 @@ function move(x, y){
 
   const dx = x - lastX;
   const dy = y - lastY;
+
+  // one-frame warmup (startup fix)
+  if (!warmedUp) {
+    warmedUp = true;
+    camX += dx;
+    camY += dy;
+    lastX = x;
+    lastY = y;
+    draw();
+    return;
+  }
+
   const speed = Math.hypot(dx, dy);
 
   if (drawMode && !blocked) {
@@ -133,7 +153,7 @@ function end(){
   dragging = false;
 }
 
-/* ---------------- MOUSE ---------------- */
+/* ================== MOUSE ================== */
 c.oncontextmenu = e => e.preventDefault();
 
 c.onmousedown = e => start(e.clientX, e.clientY, e.button === 0);
@@ -141,11 +161,12 @@ c.onmousemove = e => move(e.clientX, e.clientY);
 c.onmouseup = end;
 c.onmouseleave = end;
 
-/* ---------------- TOUCH ---------------- */
+/* ================== TOUCH ================== */
 c.addEventListener("touchstart", e => {
   e.preventDefault();
   const t = e.touches[0];
   start(t.clientX, t.clientY, e.touches.length === 1);
+  requestAnimationFrame(draw);
 }, { passive:false });
 
 c.addEventListener("touchmove", e => {
@@ -156,6 +177,7 @@ c.addEventListener("touchmove", e => {
 
 c.addEventListener("touchend", end);
 
+/* ================== INIT ================== */
 draw();
 </script>
 
