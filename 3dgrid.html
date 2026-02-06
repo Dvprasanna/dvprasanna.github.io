@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>3D Grid Test</title>
+<title>3D Grid – CAD Controls</title>
 <style>
 html, body {
   margin: 0;
@@ -14,41 +14,52 @@ canvas { display: block; }
 </style>
 </head>
 <body>
-  v2.1
-  
+
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
 <script>
-/* SCENE */
+/* =========================
+   SCENE
+========================= */
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111111);
 
-/* CAMERA */
+/* =========================
+   CAMERA (CAD STYLE)
+========================= */
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
+
+let target = new THREE.Vector3(0,0,0);
 let radius = 35;
-let theta = Math.PI / 4;
-let phi = Math.PI / 4;
+let theta  = Math.PI / 4;
+let phi    = Math.PI / 4;
 
 function updateCamera() {
   camera.position.set(
-    radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta)
+    target.x + radius * Math.sin(phi) * Math.cos(theta),
+    target.y + radius * Math.cos(phi),
+    target.z + radius * Math.sin(phi) * Math.sin(theta)
   );
-  camera.lookAt(0,0,0);
+  camera.lookAt(target);
 }
 updateCamera();
 
-/* RENDERER */
+/* =========================
+   RENDERER
+========================= */
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
-/* GRID + AXES */
+/* =========================
+   GRID + AXES
+========================= */
 scene.add(new THREE.GridHelper(50, 50, 0x00ff00, 0x444444));
 scene.add(new THREE.AxesHelper(10));
 
-/* TEST CUBE */
+/* =========================
+   TEST OBJECT
+========================= */
 const cube = new THREE.Mesh(
   new THREE.BoxGeometry(2,2,2),
   new THREE.MeshBasicMaterial({ color: 0xff0000 })
@@ -56,44 +67,86 @@ const cube = new THREE.Mesh(
 cube.position.y = 1;
 scene.add(cube);
 
-/* RENDER LOOP */
-function animate(){
+/* =========================
+   RENDER LOOP
+========================= */
+function animate() {
   requestAnimationFrame(animate);
   renderer.render(scene, camera);
 }
 animate();
 
-/* -------- INPUT -------- */
-let dragging = false;
+/* =========================
+   INPUT SYSTEM (CHOOSY)
+========================= */
+let mode = null;
 let lastX = 0;
 let lastY = 0;
 
+const ROTATE_SPEED = 0.004;
+const PAN_SPEED    = 0.02;
+const ZOOM_SPEED   = 0.08;
+const DEAD_ZONE    = 2;
+
 renderer.domElement.addEventListener("pointerdown", e=>{
-  dragging = true;
+  renderer.domElement.setPointerCapture(e.pointerId);
   lastX = e.clientX;
   lastY = e.clientY;
+
+  if (e.button === 0) mode = "rotate";
+  if (e.button === 2) mode = "pan";
 });
 
-renderer.domElement.addEventListener("pointerup", ()=> dragging=false);
-renderer.domElement.addEventListener("pointerleave", ()=> dragging=false);
+renderer.domElement.addEventListener("pointerup", ()=>{
+  mode = null;
+});
 
 renderer.domElement.addEventListener("pointermove", e=>{
-  if(!dragging) return;
-  theta -= (e.clientX - lastX) * 0.005;
-  phi   -= (e.clientY - lastY) * 0.005;
-  phi = Math.max(0.1, Math.min(Math.PI-0.1, phi));
+  if (!mode) return;
+
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
+
+  if (Math.abs(dx) < DEAD_ZONE && Math.abs(dy) < DEAD_ZONE) return;
+
+  if (mode === "rotate") {
+    theta -= dx * ROTATE_SPEED;
+    phi   -= dy * ROTATE_SPEED;
+    phi = Math.max(0.15, Math.min(Math.PI - 0.15, phi));
+  }
+
+  if (mode === "pan") {
+    const panX = -dx * PAN_SPEED;
+    const panZ =  dy * PAN_SPEED;
+
+    const right = new THREE.Vector3(
+      Math.cos(theta), 0, -Math.sin(theta)
+    );
+    const forward = new THREE.Vector3(
+      Math.sin(theta), 0,  Math.cos(theta)
+    );
+
+    target.addScaledVector(right, panX);
+    target.addScaledVector(forward, panZ);
+  }
+
   lastX = e.clientX;
   lastY = e.clientY;
   updateCamera();
 });
 
 renderer.domElement.addEventListener("wheel", e=>{
-  radius += e.deltaY * 0.02;
-  radius = Math.max(5, Math.min(100, radius));
+  e.preventDefault();
+  radius += e.deltaY * ZOOM_SPEED;
+  radius = Math.max(5, Math.min(120, radius));
   updateCamera();
-});
+},{ passive:false });
 
-/* RESIZE */
+renderer.domElement.oncontextmenu = e => e.preventDefault();
+
+/* =========================
+   RESIZE
+========================= */
 addEventListener("resize", ()=>{
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
