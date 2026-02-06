@@ -1,11 +1,27 @@
 <!DOCTYPE html>
 <html>
-<body style="margin:0;overflow:hidden;background:#ddd">
+<body style="margin:0;overflow:hidden;background:#ddd;font-family:sans-serif">
+
+<!-- MODE BUTTON -->
+<button id="modeBtn"
+style="
+position:fixed;
+top:12px;
+left:12px;
+z-index:10;
+padding:10px 14px;
+font-size:14px;
+border-radius:8px;
+border:none;
+background:#222;
+color:#fff;">
+MODE: FREE
+</button>
 
 <canvas id="c"></canvas>
 
 <script>
-/* ================== SETUP ================== */
+/* ============== SETUP ============== */
 const c = document.getElementById("c");
 const ctx = c.getContext("2d");
 
@@ -16,170 +32,167 @@ function resize(){
 resize();
 onresize = resize;
 
-/* ================== STATE ================== */
-let camX = 0, camY = 0;
-let dragging = false;
-let drawMode = true;
-let blocked = false;
-let warmedUp = false;
+/* ============== STATE ============== */
+let camX=0, camY=0;
+let dragging=false, drawMode=true;
+let blocked=false, warmedUp=false;
+let lastX=0, lastY=0;
 
-let lastX = 0, lastY = 0;
+let mode="free";        // UI mode
+let strokeMode="free"; // locked per stroke
 
-const lines = [];
+const points=[];
+let sx=0, sy=0;
 
-/* ================== PEN ================== */
-const penSX = () => c.width / 2;
-const penSY = () => c.height / 2;
+const SMOOTH=0.25;
+const SPEED_LIMIT=12;
+const HIT=5;
 
-let sx = 0, sy = 0;
-const SMOOTH = 0.25;
-const HIT = 5;
-const SPEED_LIMIT = 12;
+/* ============== PEN ============== */
+const penSX=()=>c.width/2;
+const penSY=()=>c.height/2;
 
-/* ================== COLLISION ================== */
-function hitLine(px, py, l){
-  const dx = l.x2 - l.x1;
-  const dy = l.y2 - l.y1;
-  const len2 = dx*dx + dy*dy;
-  if (!len2) return false;
+/* ============== UI ============== */
+const btn=document.getElementById("modeBtn");
+btn.onclick=()=>{
+  mode = mode==="free" ? "bezier" : "free";
+  btn.textContent="MODE: "+(mode==="free"?"FREE":"BEZIER");
+};
 
-  let t = ((px - l.x1)*dx + (py - l.y1)*dy) / len2;
-  t = Math.max(0, Math.min(1, t));
-
-  const hx = l.x1 + t*dx;
-  const hy = l.y1 + t*dy;
-
-  return Math.hypot(px - hx, py - hy) < HIT;
+/* ============== COLLISION ============== */
+function hitLine(px,py,a,b){
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const len2=dx*dx+dy*dy;
+  if(!len2) return false;
+  let t=((px-a.x)*dx+(py-a.y)*dy)/len2;
+  t=Math.max(0,Math.min(1,t));
+  const hx=a.x+t*dx, hy=a.y+t*dy;
+  return Math.hypot(px-hx,py-hy)<HIT;
 }
 
-function penHitsOldLine(){
-  if (lines.length < 3) return false;
-
-  const wx = penSX() - camX;
-  const wy = penSY() - camY;
-
-  for (let i = 0; i < lines.length - 1; i++) {
-    if (hitLine(wx, wy, lines[i])) return true;
-  }
+function penHitsOldStroke(){
+  if(points.length<4) return false;
+  const wx=penSX()-camX, wy=penSY()-camY;
+  for(let i=0;i<points.length-3;i++)
+    if(hitLine(wx,wy,points[i],points[i+1])) return true;
   return false;
 }
 
-/* ================== DRAW ================== */
+/* ============== DRAW ============== */
 function draw(){
   ctx.clearRect(0,0,c.width,c.height);
 
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 6;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+  ctx.strokeStyle="#000";
+  ctx.lineWidth=6;
+  ctx.lineCap="round";
+  ctx.lineJoin="round";
 
-  for (const l of lines) {
+  if(points.length>1){
     ctx.beginPath();
-    ctx.moveTo(l.x1 + camX, l.y1 + camY);
-    ctx.lineTo(l.x2 + camX, l.y2 + camY);
+    ctx.moveTo(points[0].x+camX,points[0].y+camY);
+
+    if(strokeMode==="free"){
+      for(let i=1;i<points.length;i++)
+        ctx.lineTo(points[i].x+camX,points[i].y+camY);
+    }
+
+    if(strokeMode==="bezier"){
+      for(let i=1;i<points.length-1;i++){
+        const mx=(points[i].x+points[i+1].x)/2;
+        const my=(points[i].y+points[i+1].y)/2;
+        ctx.quadraticCurveTo(
+          points[i].x+camX,
+          points[i].y+camY,
+          mx+camX,
+          my+camY
+        );
+      }
+    }
     ctx.stroke();
   }
 
-  ctx.fillStyle = blocked ? "orange" : "red";
+  // pen indicator
+  ctx.fillStyle=blocked?"orange":"red";
   ctx.beginPath();
-  ctx.arc(penSX(), penSY(), 4, 0, Math.PI*2);
+  ctx.arc(penSX(),penSY(),4,0,Math.PI*2);
   ctx.fill();
 }
 
-/* ================== CORE INPUT ================== */
-function start(x, y, mode){
-  dragging = true;
-  drawMode = mode;
-  warmedUp = false;
+/* ============== CORE INPUT ============== */
+function start(x,y,isDraw){
+  dragging=true;
+  drawMode=isDraw;
+  warmedUp=false;
 
-  if (!drawMode) blocked = false;
+  if(!drawMode) blocked=false;
 
-  lastX = x;
-  lastY = y;
+  lastX=x; lastY=y;
+  sx=penSX()-camX; sy=penSY()-camY;
 
-  // hard-sync smoothed pen (startup fix)
-  sx = penSX() - camX;
-  sy = penSY() - camY;
+  if(drawMode){
+    points.length=0;
+    strokeMode=mode; // 🔒 lock mode
+  }
 }
 
-function move(x, y){
-  if (!dragging) return;
+function move(x,y){
+  if(!dragging) return;
 
-  const dx = x - lastX;
-  const dy = y - lastY;
+  const dx=x-lastX, dy=y-lastY;
 
-  // one-frame warmup (startup fix)
-  if (!warmedUp) {
-    warmedUp = true;
-    camX += dx;
-    camY += dy;
-    lastX = x;
-    lastY = y;
+  if(!warmedUp){
+    warmedUp=true;
+    camX+=dx; camY+=dy;
+    lastX=x; lastY=y;
     draw();
     return;
   }
 
-  const speed = Math.hypot(dx, dy);
+  const speed=Math.hypot(dx,dy);
 
-  if (drawMode && !blocked) {
-    if (speed < SPEED_LIMIT && penHitsOldLine()) {
-      blocked = true;
-    } else {
-      const wx = penSX() - camX;
-      const wy = penSY() - camY;
-
-      sx += (wx - sx) * SMOOTH;
-      sy += (wy - sy) * SMOOTH;
-
-      lines.push({
-        x1: sx,
-        y1: sy,
-        x2: sx - dx,
-        y2: sy - dy
-      });
+  if(drawMode && !blocked){
+    if(speed<SPEED_LIMIT && penHitsOldStroke()){
+      blocked=true;
+    }else{
+      const wx=penSX()-camX, wy=penSY()-camY;
+      sx+=(wx-sx)*SMOOTH;
+      sy+=(wy-sy)*SMOOTH;
+      points.push({x:sx,y:sy});
     }
   }
 
-  camX += dx;
-  camY += dy;
-
-  lastX = x;
-  lastY = y;
-
+  camX+=dx; camY+=dy;
+  lastX=x; lastY=y;
   draw();
 }
 
-function end(){
-  dragging = false;
-}
+function end(){ dragging=false; }
 
-/* ================== MOUSE ================== */
-c.oncontextmenu = e => e.preventDefault();
+/* ============== MOUSE ============== */
+c.oncontextmenu=e=>e.preventDefault();
+c.onmousedown=e=>start(e.clientX,e.clientY,e.button===0);
+c.onmousemove=e=>move(e.clientX,e.clientY);
+c.onmouseup=end;
+c.onmouseleave=end;
 
-c.onmousedown = e => start(e.clientX, e.clientY, e.button === 0);
-c.onmousemove = e => move(e.clientX, e.clientY);
-c.onmouseup = end;
-c.onmouseleave = end;
-
-/* ================== TOUCH ================== */
-c.addEventListener("touchstart", e => {
+/* ============== TOUCH ============== */
+c.addEventListener("touchstart",e=>{
   e.preventDefault();
-  const t = e.touches[0];
-  start(t.clientX, t.clientY, e.touches.length === 1);
+  const t=e.touches[0];
+  start(t.clientX,t.clientY,e.touches.length===1);
   requestAnimationFrame(draw);
-}, { passive:false });
+},{passive:false});
 
-c.addEventListener("touchmove", e => {
+c.addEventListener("touchmove",e=>{
   e.preventDefault();
-  const t = e.touches[0];
-  move(t.clientX, t.clientY);
-}, { passive:false });
+  const t=e.touches[0];
+  move(t.clientX,t.clientY);
+},{passive:false});
 
-c.addEventListener("touchend", end);
+c.addEventListener("touchend",end);
 
-/* ================== INIT ================== */
+/* ============== INIT ============== */
 draw();
 </script>
-
 </body>
 </html>
