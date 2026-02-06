@@ -1,103 +1,120 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Canvas-Drag Drawing</title>
-  <style>
-    html, body {
-      margin: 0;
-      height: 100%;
-      overflow: hidden;
-    }
-    canvas {
-      background: #fff;
-      display: block;
-      cursor: grab;
-    }
-    canvas:active {
-      cursor: grabbing;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Drag World Drawing</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #f5f5f5;
+  }
+  canvas {
+    display: block;
+    cursor: grab;
+  }
+  canvas:active {
+    cursor: grabbing;
+  }
+</style>
 </head>
 <body>
 
-<canvas id="drawCanvas"></canvas>
+<canvas id="c"></canvas>
 
 <script>
-  const canvas = document.getElementById('drawCanvas');
-  const ctx = canvas.getContext('2d');
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
 
-  // Fullscreen canvas
-  function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-  resize();
-  window.onresize = resize;
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener("resize", resize);
 
-  // Track dragging
-  let dragging = false;
-  let lastX = 0;
-  let lastY = 0;
+// Fixed pen position (center)
+const pen = {
+  x: () => canvas.width / 2,
+  y: () => canvas.height / 2
+};
 
-  // Store drawn lines
-  let lines = [];
+let dragging = false;
+let lastX = 0;
+let lastY = 0;
 
-  // Mouse down / touch start
-  function start(e) {
-    dragging = true;
-    const x = e.clientX ?? e.touches[0].clientX;
-    const y = e.clientY ?? e.touches[0].clientY;
-    lastX = x;
-    lastY = y;
-  }
+// World offset
+let worldX = 0;
+let worldY = 0;
 
-  // Mouse move / touch move
-  function move(e) {
-    if (!dragging) return;
+// Store lines in world space
+const lines = [];
 
-    const x = e.clientX ?? e.touches[0].clientX;
-    const y = e.clientY ?? e.touches[0].clientY;
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Store segment
-    lines.push({ x1: lastX, y1: lastY, x2: x, y2: y });
+  // Draw all lines
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
 
-    lastX = x;
-    lastY = y;
-
-    render();
+  for (const l of lines) {
+    ctx.beginPath();
+    ctx.moveTo(l.x1 + worldX, l.y1 + worldY);
+    ctx.lineTo(l.x2 + worldX, l.y2 + worldY);
+    ctx.stroke();
   }
 
-  // Mouse up / touch end
-  function end() {
-    dragging = false;
-  }
+  // Draw pen marker
+  ctx.fillStyle = "red";
+  ctx.beginPath();
+  ctx.arc(pen.x(), pen.y(), 4, 0, Math.PI * 2);
+  ctx.fill();
+}
 
-  // Render all lines
-  function render() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+function start(e) {
+  dragging = true;
+  lastX = e.clientX;
+  lastY = e.clientY;
+}
 
-    ctx.strokeStyle = 'black';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
+function move(e) {
+  if (!dragging) return;
 
-    for (const l of lines) {
-      ctx.beginPath();
-      ctx.moveTo(l.x1, l.y1);
-      ctx.lineTo(l.x2, l.y2);
-      ctx.stroke();
-    }
-  }
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
 
-  // Event listeners
-  canvas.addEventListener('mousedown', start);
-  canvas.addEventListener('mousemove', move);
-  canvas.addEventListener('mouseup', end);
+  // Draw line in opposite direction of world movement
+  const px = pen.x() - worldX;
+  const py = pen.y() - worldY;
 
-  canvas.addEventListener('touchstart', start);
-  canvas.addEventListener('touchmove', move);
-  canvas.addEventListener('touchend', end);
+  lines.push({
+    x1: px,
+    y1: py,
+    x2: px - dx,
+    y2: py - dy
+  });
 
+  // Move world
+  worldX += dx;
+  worldY += dy;
+
+  lastX = e.clientX;
+  lastY = e.clientY;
+
+  draw();
+}
+
+function end() {
+  dragging = false;
+}
+
+canvas.addEventListener("mousedown", start);
+canvas.addEventListener("mousemove", move);
+canvas.addEventListener("mouseup", end);
+
+draw();
 </script>
 
 </body>
