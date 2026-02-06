@@ -2,22 +2,47 @@
 <html>
 <body style="margin:0;overflow:hidden;background:#ddd;font-family:sans-serif">
 
-<!-- UI -->
-<button id="modeBtn"
-style="
-position:fixed;top:12px;left:12px;z-index:10;
-padding:10px 14px;border-radius:8px;border:none;
-background:#222;color:#fff;">
+<!-- MENU BAR -->
+<div style="
+position:fixed;
+top:10px;
+left:10px;
+z-index:10;
+display:flex;
+gap:10px;
+">
+
+<button id="modeBtn" style="
+padding:14px 18px;
+font-size:16px;
+border-radius:10px;
+border:none;
+background:#222;
+color:#fff;">
 MODE: FREE
 </button>
 
-<button id="gridBtn"
-style="
-position:fixed;top:12px;left:120px;z-index:10;
-padding:10px 14px;border-radius:8px;border:none;
-background:#f2f2f2;color:#333;">
+<button id="gridBtn" style="
+padding:14px 18px;
+font-size:16px;
+border-radius:10px;
+border:none;
+background:#f2f2f2;
+color:#333;">
 GRID: OFF
 </button>
+
+<button id="snapBtn" style="
+padding:14px 18px;
+font-size:16px;
+border-radius:10px;
+border:none;
+background:#f2f2f2;
+color:#333;">
+SNAP: OFF
+</button>
+
+</div>
 
 <canvas id="c"></canvas>
 
@@ -39,9 +64,10 @@ let dragging=false, drawMode=true;
 let blocked=false, warmedUp=false;
 let lastX=0, lastY=0;
 
-let mode="free";        // free | bezier
-let strokeMode="free"; // locked per stroke
+let mode="free";
+let strokeMode="free";
 let showGrid=false;
+let snapGrid=false;
 
 const points=[];
 let sx=0, sy=0;
@@ -57,17 +83,29 @@ const penSY=()=>c.height/2;
 
 /* ================= UI ================= */
 const modeBtn=document.getElementById("modeBtn");
+const gridBtn=document.getElementById("gridBtn");
+const snapBtn=document.getElementById("snapBtn");
+
 modeBtn.onclick=()=>{
   mode = mode==="free" ? "bezier" : "free";
   modeBtn.textContent="MODE: "+(mode==="free"?"FREE":"BEZIER");
 };
 
-const gridBtn=document.getElementById("gridBtn");
 gridBtn.onclick=()=>{
   showGrid=!showGrid;
   gridBtn.textContent="GRID: "+(showGrid?"ON":"OFF");
   draw();
 };
+
+snapBtn.onclick=()=>{
+  snapGrid=!snapGrid;
+  snapBtn.textContent="SNAP: "+(snapGrid?"ON":"OFF");
+};
+
+/* ================= HELPERS ================= */
+function snap(v){
+  return Math.round(v / GRID) * GRID;
+}
 
 /* ================= COLLISION ================= */
 function hitLine(px,py,a,b){
@@ -93,17 +131,15 @@ function drawGrid(){
   ctx.strokeStyle="#e6e6e6";
   ctx.lineWidth=1;
 
-  const startX = (-camX) % GRID;
-  const startY = (-camY) % GRID;
+  const startX=(-camX)%GRID;
+  const startY=(-camY)%GRID;
 
   ctx.beginPath();
-  for(let x=startX; x<c.width; x+=GRID){
-    ctx.moveTo(x,0);
-    ctx.lineTo(x,c.height);
+  for(let x=startX;x<c.width;x+=GRID){
+    ctx.moveTo(x,0); ctx.lineTo(x,c.height);
   }
-  for(let y=startY; y<c.height; y+=GRID){
-    ctx.moveTo(0,y);
-    ctx.lineTo(c.width,y);
+  for(let y=startY;y<c.height;y+=GRID){
+    ctx.moveTo(0,y); ctx.lineTo(c.width,y);
   }
   ctx.stroke();
 }
@@ -143,7 +179,6 @@ function draw(){
     ctx.stroke();
   }
 
-  // pen
   ctx.fillStyle=blocked?"orange":"red";
   ctx.beginPath();
   ctx.arc(penSX(),penSY(),4,0,Math.PI*2);
@@ -186,10 +221,19 @@ function move(x,y){
     if(speed<SPEED_LIMIT && penHitsOldStroke()){
       blocked=true;
     }else{
-      const wx=penSX()-camX, wy=penSY()-camY;
+      let wx=penSX()-camX;
+      let wy=penSY()-camY;
+
       sx+=(wx-sx)*SMOOTH;
       sy+=(wy-sy)*SMOOTH;
-      points.push({x:sx,y:sy});
+
+      let px=sx, py=sy;
+      if(snapGrid){
+        px=snap(px);
+        py=snap(py);
+      }
+
+      points.push({x:px,y:py});
     }
   }
 
