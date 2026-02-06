@@ -2,26 +2,27 @@
 <html>
 <body style="margin:0;overflow:hidden;background:#ddd;font-family:sans-serif">
 
-<!-- MODE BUTTON -->
+<!-- UI -->
 <button id="modeBtn"
 style="
-position:fixed;
-top:12px;
-left:12px;
-z-index:10;
-padding:10px 14px;
-font-size:14px;
-border-radius:8px;
-border:none;
-background:#222;
-color:#fff;">
+position:fixed;top:12px;left:12px;z-index:10;
+padding:10px 14px;border-radius:8px;border:none;
+background:#222;color:#fff;">
 MODE: FREE
+</button>
+
+<button id="gridBtn"
+style="
+position:fixed;top:12px;left:120px;z-index:10;
+padding:10px 14px;border-radius:8px;border:none;
+background:#f2f2f2;color:#333;">
+GRID: OFF
 </button>
 
 <canvas id="c"></canvas>
 
 <script>
-/* ============== SETUP ============== */
+/* ================= SETUP ================= */
 const c = document.getElementById("c");
 const ctx = c.getContext("2d");
 
@@ -32,14 +33,15 @@ function resize(){
 resize();
 onresize = resize;
 
-/* ============== STATE ============== */
+/* ================= STATE ================= */
 let camX=0, camY=0;
 let dragging=false, drawMode=true;
 let blocked=false, warmedUp=false;
 let lastX=0, lastY=0;
 
-let mode="free";        // UI mode
+let mode="free";        // free | bezier
 let strokeMode="free"; // locked per stroke
+let showGrid=false;
 
 const points=[];
 let sx=0, sy=0;
@@ -47,19 +49,27 @@ let sx=0, sy=0;
 const SMOOTH=0.25;
 const SPEED_LIMIT=12;
 const HIT=5;
+const GRID=40;
 
-/* ============== PEN ============== */
+/* ================= PEN ================= */
 const penSX=()=>c.width/2;
 const penSY=()=>c.height/2;
 
-/* ============== UI ============== */
-const btn=document.getElementById("modeBtn");
-btn.onclick=()=>{
+/* ================= UI ================= */
+const modeBtn=document.getElementById("modeBtn");
+modeBtn.onclick=()=>{
   mode = mode==="free" ? "bezier" : "free";
-  btn.textContent="MODE: "+(mode==="free"?"FREE":"BEZIER");
+  modeBtn.textContent="MODE: "+(mode==="free"?"FREE":"BEZIER");
 };
 
-/* ============== COLLISION ============== */
+const gridBtn=document.getElementById("gridBtn");
+gridBtn.onclick=()=>{
+  showGrid=!showGrid;
+  gridBtn.textContent="GRID: "+(showGrid?"ON":"OFF");
+  draw();
+};
+
+/* ================= COLLISION ================= */
 function hitLine(px,py,a,b){
   const dx=b.x-a.x, dy=b.y-a.y;
   const len2=dx*dx+dy*dy;
@@ -78,9 +88,31 @@ function penHitsOldStroke(){
   return false;
 }
 
-/* ============== DRAW ============== */
+/* ================= GRID ================= */
+function drawGrid(){
+  ctx.strokeStyle="#e6e6e6";
+  ctx.lineWidth=1;
+
+  const startX = (-camX) % GRID;
+  const startY = (-camY) % GRID;
+
+  ctx.beginPath();
+  for(let x=startX; x<c.width; x+=GRID){
+    ctx.moveTo(x,0);
+    ctx.lineTo(x,c.height);
+  }
+  for(let y=startY; y<c.height; y+=GRID){
+    ctx.moveTo(0,y);
+    ctx.lineTo(c.width,y);
+  }
+  ctx.stroke();
+}
+
+/* ================= DRAW ================= */
 function draw(){
   ctx.clearRect(0,0,c.width,c.height);
+
+  if(showGrid) drawGrid();
 
   ctx.strokeStyle="#000";
   ctx.lineWidth=6;
@@ -111,14 +143,14 @@ function draw(){
     ctx.stroke();
   }
 
-  // pen indicator
+  // pen
   ctx.fillStyle=blocked?"orange":"red";
   ctx.beginPath();
   ctx.arc(penSX(),penSY(),4,0,Math.PI*2);
   ctx.fill();
 }
 
-/* ============== CORE INPUT ============== */
+/* ================= CORE INPUT ================= */
 function start(x,y,isDraw){
   dragging=true;
   drawMode=isDraw;
@@ -131,7 +163,7 @@ function start(x,y,isDraw){
 
   if(drawMode){
     points.length=0;
-    strokeMode=mode; // 🔒 lock mode
+    strokeMode=mode;
   }
 }
 
@@ -168,14 +200,14 @@ function move(x,y){
 
 function end(){ dragging=false; }
 
-/* ============== MOUSE ============== */
+/* ================= INPUT ================= */
 c.oncontextmenu=e=>e.preventDefault();
+
 c.onmousedown=e=>start(e.clientX,e.clientY,e.button===0);
 c.onmousemove=e=>move(e.clientX,e.clientY);
 c.onmouseup=end;
 c.onmouseleave=end;
 
-/* ============== TOUCH ============== */
 c.addEventListener("touchstart",e=>{
   e.preventDefault();
   const t=e.touches[0];
@@ -191,7 +223,7 @@ c.addEventListener("touchmove",e=>{
 
 c.addEventListener("touchend",end);
 
-/* ============== INIT ============== */
+/* ================= INIT ================= */
 draw();
 </script>
 </body>
