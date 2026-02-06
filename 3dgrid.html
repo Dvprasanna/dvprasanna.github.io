@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>3D Grid – CAD Controls</title>
+<title>3D Grid – Center Locked</title>
 <style>
 html, body {
   margin: 0;
@@ -25,16 +25,23 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111111);
 
 /* =========================
-   CAMERA (CAD STYLE)
+   CAMERA STATE (CAD)
 ========================= */
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
 
 let target = new THREE.Vector3(0,0,0);
 let radius = 35;
 let theta  = Math.PI / 4;
 let phi    = Math.PI / 4;
 
-function updateCamera() {
+function updateCamera(reset=false) {
+  if (reset) {
+    target.set(0,0,0);
+    radius = 35;
+    theta  = Math.PI / 4;
+    phi    = Math.PI / 4;
+  }
+
   camera.position.set(
     target.x + radius * Math.sin(phi) * Math.cos(theta),
     target.y + radius * Math.cos(phi),
@@ -42,13 +49,12 @@ function updateCamera() {
   );
   camera.lookAt(target);
 }
-updateCamera();
 
 /* =========================
-   RENDERER
+   RENDERER (IMPORTANT)
 ========================= */
 const renderer = new THREE.WebGLRenderer({ antialias:true });
-renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 document.body.appendChild(renderer.domElement);
 
 /* =========================
@@ -68,13 +74,25 @@ cube.position.y = 1;
 scene.add(cube);
 
 /* =========================
-   RENDER LOOP
+   RESIZE (CENTER LOCK)
 ========================= */
-function animate() {
-  requestAnimationFrame(animate);
-  renderer.render(scene, camera);
+function resize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  renderer.setSize(w, h, false);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+
+  updateCamera(false);
 }
-animate();
+
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", resize);
+resize();
+updateCamera(true);
 
 /* =========================
    INPUT SYSTEM (CHOOSY)
@@ -97,9 +115,8 @@ renderer.domElement.addEventListener("pointerdown", e=>{
   if (e.button === 2) mode = "pan";
 });
 
-renderer.domElement.addEventListener("pointerup", ()=>{
-  mode = null;
-});
+renderer.domElement.addEventListener("pointerup", ()=> mode=null);
+renderer.domElement.addEventListener("pointerleave", ()=> mode=null);
 
 renderer.domElement.addEventListener("pointermove", e=>{
   if (!mode) return;
@@ -119,12 +136,8 @@ renderer.domElement.addEventListener("pointermove", e=>{
     const panX = -dx * PAN_SPEED;
     const panZ =  dy * PAN_SPEED;
 
-    const right = new THREE.Vector3(
-      Math.cos(theta), 0, -Math.sin(theta)
-    );
-    const forward = new THREE.Vector3(
-      Math.sin(theta), 0,  Math.cos(theta)
-    );
+    const right = new THREE.Vector3(Math.cos(theta), 0, -Math.sin(theta));
+    const forward = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta));
 
     target.addScaledVector(right, panX);
     target.addScaledVector(forward, panZ);
@@ -132,26 +145,33 @@ renderer.domElement.addEventListener("pointermove", e=>{
 
   lastX = e.clientX;
   lastY = e.clientY;
-  updateCamera();
+  updateCamera(false);
 });
 
 renderer.domElement.addEventListener("wheel", e=>{
   e.preventDefault();
   radius += e.deltaY * ZOOM_SPEED;
   radius = Math.max(5, Math.min(120, radius));
-  updateCamera();
+  updateCamera(false);
 },{ passive:false });
 
 renderer.domElement.oncontextmenu = e => e.preventDefault();
 
 /* =========================
-   RESIZE
+   HOME KEY (RE-CENTER)
 ========================= */
-addEventListener("resize", ()=>{
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+window.addEventListener("keydown", e=>{
+  if (e.key === "h") updateCamera(true);
 });
+
+/* =========================
+   RENDER LOOP
+========================= */
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+animate();
 </script>
 
 </body>
