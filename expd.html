@@ -13,6 +13,7 @@ c.height = innerHeight;
 
 let camX = 0, camY = 0;
 let drag = false, lx = 0, ly = 0;
+let drawMode = true; // left = draw, right = pan
 
 // fixed pen (screen)
 const px = () => c.width / 2;
@@ -27,8 +28,10 @@ const lines = [];
 function draw() {
   x.clearRect(0,0,c.width,c.height);
 
-  x.lineWidth = 2;
+  x.strokeStyle = "#000";
+  x.lineWidth = 6;              // 🔥 3x thickness
   x.lineCap = "round";
+  x.lineJoin = "round";
 
   for (let l of lines) {
     x.beginPath();
@@ -37,19 +40,23 @@ function draw() {
     x.stroke();
   }
 
-  // pen
+  // pen (fixed)
   x.fillStyle = "red";
   x.beginPath();
   x.arc(px(), py(), 4, 0, Math.PI*2);
   x.fill();
 }
 
+// disable context menu
+c.oncontextmenu = e => e.preventDefault();
+
 c.onmousedown = e => {
   drag = true;
   lx = e.clientX;
   ly = e.clientY;
 
-  // init smooth position
+  drawMode = (e.button === 0); // left = draw, right = pan
+
   sx = px() - camX;
   sy = py() - camY;
 };
@@ -60,20 +67,23 @@ c.onmousemove = e => {
   const dx = e.clientX - lx;
   const dy = e.clientY - ly;
 
-  const wx = px() - camX;
-  const wy = py() - camY;
+  if (drawMode) {
+    const wx = px() - camX;
+    const wy = py() - camY;
 
-  // 🔹 smoothing (THE MAGIC)
-  sx += (wx - sx) * SMOOTH;
-  sy += (wy - sy) * SMOOTH;
+    // smoothing
+    sx += (wx - sx) * SMOOTH;
+    sy += (wy - sy) * SMOOTH;
 
-  lines.push({
-    x1: sx,
-    y1: sy,
-    x2: sx - dx,
-    y2: sy - dy
-  });
+    lines.push({
+      x1: sx,
+      y1: sy,
+      x2: sx - dx,
+      y2: sy - dy
+    });
+  }
 
+  // always move canvas
   camX += dx;
   camY += dy;
 
