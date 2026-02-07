@@ -42,6 +42,11 @@ input, select, button {
 .row { display: flex; gap: 6px; }
 .row > * { flex: 1; }
 
+.filters {
+  display: flex;
+  gap: 6px;
+}
+
 .entry {
   display: flex;
   justify-content: space-between;
@@ -101,6 +106,24 @@ small { color: #888; }
   <button id="saveBtn">Add Entry</button>
 </div>
 
+<!-- FILTERS (RESTORED) -->
+<div class="card filters">
+  <select id="typeFilter">
+    <option value="All">All Types</option>
+    <option>Investment</option>
+    <option>Loan</option>
+    <option>Income</option>
+    <option>Other</option>
+  </select>
+
+  <select id="flowFilter">
+    <option value="All">All Cash Flow</option>
+    <option value="Rec">Receive</option>
+    <option value="Pay">Pay</option>
+    <option value="None">No Cash Flow</option>
+  </select>
+</div>
+
 <!-- TOTALS -->
 <div class="card">
   <small>
@@ -121,6 +144,7 @@ small { color: #888; }
 let data = JSON.parse(localStorage.getItem("financeData") || "[]");
 let editIndex = null;
 
+/* ELEMENTS */
 const typeEl = document.getElementById("type");
 const nameEl = document.getElementById("name");
 const amtEl = document.getElementById("amt");
@@ -130,13 +154,20 @@ const monthlyEl = document.getElementById("monthly");
 const dateEl = document.getElementById("date");
 const saveBtn = document.getElementById("saveBtn");
 
+const typeFilter = document.getElementById("typeFilter");
+const flowFilter = document.getElementById("flowFilter");
+
 const list = document.getElementById("list");
 const tRec = document.getElementById("tRec");
 const tPay = document.getElementById("tPay");
 const tNet = document.getElementById("tNet");
 
+/* EVENTS */
 saveBtn.onclick = saveEntry;
+typeFilter.onchange = render;
+flowFilter.onchange = render;
 
+/* LOGIC */
 function saveEntry() {
   const flow = flowEl.value;
   const flowAmt = Number(flowAmtEl.value);
@@ -206,7 +237,13 @@ function render() {
   list.innerHTML = "";
   let totalRec = 0, totalPay = 0;
 
-  data.forEach((e, i) => {
+  const filtered = data.filter(e => {
+    if (typeFilter.value !== "All" && e.type !== typeFilter.value) return false;
+    if (flowFilter.value !== "All" && e.flow !== flowFilter.value) return false;
+    return true;
+  });
+
+  filtered.forEach((e, i) => {
     if (e.flow === "Rec") totalRec += e.flowAmt;
     if (e.flow === "Pay") totalPay += e.flowAmt;
 
@@ -232,8 +269,8 @@ function render() {
         </small>
       </div>
       <div class="actions">
-        <button onclick="editEntry(${i})">✏️</button>
-        <button onclick="deleteEntry(${i})">🗑</button>
+        <button onclick="editEntry(${data.indexOf(e)})">✏️</button>
+        <button onclick="deleteEntry(${data.indexOf(e)})">🗑</button>
       </div>
     `;
     list.appendChild(div);
@@ -247,6 +284,6 @@ function render() {
 render();
 </script>
 
-<!-- Version: 2.3 -->
+<!-- Version: 2.4 -->
 </body>
 </html>
