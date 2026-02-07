@@ -15,40 +15,54 @@ body {
   color: #eee;
 }
 header {
-  padding: 14px;
+  padding: 10px;
   text-align: center;
-  font-size: 18px;
+  font-size: 16px;
   border-bottom: 1px solid #222;
 }
-.container { padding: 14px; }
+.container { padding: 10px; }
 .card {
-  background: #161616;
+  background: #151515;
   border: 1px solid #222;
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 12px;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
 }
 input, select, button {
   width: 100%;
-  padding: 8px;
-  margin: 6px 0;
+  padding: 6px;
+  margin: 4px 0;
   background: #222;
   color: #fff;
   border: 1px solid #333;
-  border-radius: 6px;
+  border-radius: 5px;
+  font-size: 13px;
 }
 button { font-weight: 600; }
+.filters {
+  display: flex;
+  gap: 6px;
+}
+.filters select {
+  flex: 1;
+}
 .entry {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 0;
+  gap: 6px;
+  padding: 6px 0;
   border-bottom: 1px solid #222;
+  font-size: 13px;
+}
+.entry small { color: #888; }
+.actions button {
+  font-size: 11px;
+  padding: 3px 6px;
+  margin-top: 2px;
 }
 .status-normal { color: #9aa0a6; }
 .status-urgent { color: #fbbc04; }
 .status-overdue { color: #ea4335; }
-small { color: #888; }
 </style>
 </head>
 
@@ -58,20 +72,32 @@ small { color: #888; }
 <div class="container">
 
 <div class="card">
-  <h3>Add / Edit Entry</h3>
   <select id="entryType">
     <option>Investment</option>
     <option>Income</option>
     <option>Loan</option>
   </select>
-  <input id="entryName" placeholder="Name / Source">
+  <input id="entryName" placeholder="Name">
   <input id="entryAmount" type="number" placeholder="Amount">
   <input id="entryDate" type="date">
   <button id="saveBtn">Add Entry</button>
 </div>
 
+<div class="card filters">
+  <select id="typeFilter">
+    <option value="All">All Types</option>
+    <option>Investment</option>
+    <option>Income</option>
+    <option>Loan</option>
+  </select>
+  <select id="dateFilter">
+    <option value="All">All Dates</option>
+    <option value="Upcoming">Upcoming</option>
+    <option value="Overdue">Overdue</option>
+  </select>
+</div>
+
 <div class="card">
-  <h3>All Entries</h3>
   <div id="list"></div>
 </div>
 
@@ -82,11 +108,9 @@ small { color: #888; }
 </div>
 
 <script>
-/* ---------- STATE ---------- */
 let data = JSON.parse(localStorage.getItem("financeData") || "[]");
 let editIndex = null;
 
-/* ---------- ELEMENTS ---------- */
 const entryType   = document.getElementById("entryType");
 const entryName   = document.getElementById("entryName");
 const entryAmount = document.getElementById("entryAmount");
@@ -94,12 +118,14 @@ const entryDate   = document.getElementById("entryDate");
 const saveBtn     = document.getElementById("saveBtn");
 const list        = document.getElementById("list");
 const pdfBtn      = document.getElementById("pdfBtn");
+const typeFilter  = document.getElementById("typeFilter");
+const dateFilter  = document.getElementById("dateFilter");
 
-/* ---------- EVENTS ---------- */
-saveBtn.addEventListener("click", saveEntry);
-pdfBtn.addEventListener("click", exportPDF);
+saveBtn.onclick = saveEntry;
+pdfBtn.onclick = exportPDF;
+typeFilter.onchange = render;
+dateFilter.onchange = render;
 
-/* ---------- FUNCTIONS ---------- */
 function saveEntry() {
   const entry = {
     type: entryType.value,
@@ -107,11 +133,7 @@ function saveEntry() {
     amount: entryAmount.value,
     date: entryDate.value
   };
-
-  if (!entry.name || !entry.amount || !entry.date) {
-    alert("Fill all fields");
-    return;
-  }
+  if (!entry.name || !entry.amount || !entry.date) return alert("Fill all fields");
 
   if (editIndex !== null) {
     data[editIndex] = entry;
@@ -122,14 +144,8 @@ function saveEntry() {
   }
 
   localStorage.setItem("financeData", JSON.stringify(data));
-  clearForm();
+  entryName.value = entryAmount.value = entryDate.value = "";
   render();
-}
-
-function clearForm() {
-  entryName.value = "";
-  entryAmount.value = "";
-  entryDate.value = "";
 }
 
 function editEntry(i) {
@@ -139,34 +155,42 @@ function editEntry(i) {
   entryAmount.value = e.amount;
   entryDate.value = e.date;
   editIndex = i;
-  saveBtn.innerText = "Save Changes";
+  saveBtn.innerText = "Save";
 }
 
 function deleteEntry(i) {
-  if (!confirm("Delete this entry?")) return;
-  data.splice(i, 1);
+  if (!confirm("Delete?")) return;
+  data.splice(i,1);
   localStorage.setItem("financeData", JSON.stringify(data));
   render();
 }
 
 function getStatus(d) {
-  const today = new Date();
-  today.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0,0,0,0);
   const due = new Date(d);
-  const diff = Math.ceil((due - today) / 86400000);
-  if (diff < 0) return ["Overdue", "status-overdue"];
-  if (diff <= 5) return ["Urgent", "status-urgent"];
-  return ["Normal", "status-normal"];
+  const diff = Math.ceil((due - today)/86400000);
+  if (diff < 0) return ["Overdue","status-overdue"];
+  if (diff <= 5) return ["Urgent","status-urgent"];
+  return ["Normal","status-normal"];
 }
 
 function render() {
   list.innerHTML = "";
-  if (data.length === 0) {
-    list.innerHTML = "<small>No entries yet</small>";
+
+  let filtered = data.filter(e => {
+    if (typeFilter.value !== "All" && e.type !== typeFilter.value) return false;
+    const [status] = getStatus(e.date);
+    if (dateFilter.value === "Upcoming" && status === "Overdue") return false;
+    if (dateFilter.value === "Overdue" && status !== "Overdue") return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = "<small>No matching entries</small>";
     return;
   }
 
-  data
+  filtered
     .sort((a,b)=>new Date(a.date)-new Date(b.date))
     .forEach((e,i) => {
       const [label, cls] = getStatus(e.date);
@@ -177,10 +201,10 @@ function render() {
           <b>${e.name}</b><br>
           <small>${e.type} | ₹${e.amount} | ${e.date}</small>
         </div>
-        <div>
+        <div class="actions">
           <div class="${cls}">${label}</div>
-          <button onclick="editEntry(${i})">Edit</button>
-          <button onclick="deleteEntry(${i})">Delete</button>
+          <button onclick="editEntry(${data.indexOf(e)})">✏️</button>
+          <button onclick="deleteEntry(${data.indexOf(e)})">🗑</button>
         </div>
       `;
       list.appendChild(div);
@@ -193,20 +217,17 @@ function exportPDF() {
   let y = 10;
   pdf.text("My Financial View", 10, y);
   y += 10;
-
-  data.forEach(e => {
-    pdf.text(`${e.type} | ${e.name} | ₹${e.amount} | ${e.date}`, 10, y);
-    y += 8;
-    if (y > 280) { pdf.addPage(); y = 10; }
+  data.forEach(e=>{
+    pdf.text(`${e.type} | ${e.name} | ₹${e.amount} | ${e.date}`,10,y);
+    y+=8;
+    if(y>280){pdf.addPage();y=10;}
   });
-
   pdf.save("financial-view.pdf");
 }
 
-/* ---------- INIT ---------- */
 render();
 </script>
 
-<!-- Version: 1.3 -->
+<!-- Version: 1.4 -->
 </body>
 </html>
