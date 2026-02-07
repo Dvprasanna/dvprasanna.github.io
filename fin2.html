@@ -68,30 +68,42 @@ small { color: #888; }
 
 <!-- ADD / EDIT -->
 <div class="card">
-  <input id="type" placeholder="Type (Investment / Loan / etc)">
+  <select id="type">
+    <option value="">Select Type</option>
+    <option>Investment</option>
+    <option>Loan</option>
+    <option>Income</option>
+    <option>Other</option>
+  </select>
+
   <input id="name" placeholder="Name">
-  <input id="amt" type="number" placeholder="Amount">
+
+  <input id="amt" type="number" placeholder="Principal / Base Amount">
 
   <div class="row">
     <select id="flow">
       <option value="Rec">Receive</option>
       <option value="Pay">Pay</option>
     </select>
+    <input id="flowAmt" type="number" placeholder="Pay / Receive Amount">
+  </div>
+
+  <div class="row">
     <select id="monthly">
       <option value="No">Monthly: No</option>
       <option value="Yes">Monthly: Yes</option>
     </select>
+    <input id="date" type="date">
   </div>
 
-  <input id="date" type="date">
   <button id="saveBtn">Add Entry</button>
 </div>
 
 <!-- TOTALS -->
 <div class="card">
   <small>
-    Receive: ₹<span id="tRec">0</span> |
-    Pay: ₹<span id="tPay">0</span> |
+    Received: ₹<span id="tRec">0</span> |
+    Paid: ₹<span id="tPay">0</span> |
     <b>Net: ₹<span id="tNet">0</span></b>
   </small>
 </div>
@@ -111,6 +123,7 @@ const typeEl = document.getElementById("type");
 const nameEl = document.getElementById("name");
 const amtEl = document.getElementById("amt");
 const flowEl = document.getElementById("flow");
+const flowAmtEl = document.getElementById("flowAmt");
 const monthlyEl = document.getElementById("monthly");
 const dateEl = document.getElementById("date");
 const saveBtn = document.getElementById("saveBtn");
@@ -124,16 +137,17 @@ saveBtn.onclick = saveEntry;
 
 function saveEntry() {
   const entry = {
-    type: typeEl.value.trim(),
+    type: typeEl.value,
     name: nameEl.value.trim(),
     amt: Number(amtEl.value),
     flow: flowEl.value,
+    flowAmt: Number(flowAmtEl.value),
     monthly: monthlyEl.value,
     date: dateEl.value
   };
 
-  if (!entry.type || !entry.name || !entry.amt || !entry.date) {
-    alert("Fill all fields");
+  if (!entry.type || !entry.name || !entry.amt || !entry.flowAmt || !entry.date) {
+    alert("Fill all required fields");
     return;
   }
 
@@ -151,7 +165,11 @@ function saveEntry() {
 }
 
 function clearForm() {
-  typeEl.value = nameEl.value = amtEl.value = dateEl.value = "";
+  typeEl.value = "";
+  nameEl.value = "";
+  amtEl.value = "";
+  flowAmtEl.value = "";
+  dateEl.value = "";
 }
 
 function editEntry(i) {
@@ -160,6 +178,7 @@ function editEntry(i) {
   nameEl.value = e.name;
   amtEl.value = e.amt;
   flowEl.value = e.flow;
+  flowAmtEl.value = e.flowAmt;
   monthlyEl.value = e.monthly;
   dateEl.value = e.date;
   editIndex = i;
@@ -178,8 +197,8 @@ function render() {
   let totalRec = 0, totalPay = 0;
 
   data.forEach((e, i) => {
-    if (e.flow === "Rec") totalRec += e.amt;
-    if (e.flow === "Pay") totalPay += e.amt;
+    if (e.flow === "Rec") totalRec += e.flowAmt;
+    if (e.flow === "Pay") totalPay += e.flowAmt;
 
     const div = document.createElement("div");
     div.className = "entry";
@@ -187,8 +206,11 @@ function render() {
       <div>
         <b>${e.name}</b><br>
         <small>
-          ${e.type} | ₹${e.amt} |
-          <span class="${e.flow === "Rec" ? "rec" : "pay"}">${e.flow}</span> |
+          ${e.type} |
+          Principal ₹${e.amt} |
+          <span class="${e.flow === "Rec" ? "rec" : "pay"}">
+            ${e.flow} ₹${e.flowAmt}
+          </span> |
           ${e.monthly} | ${e.date}
         </small>
       </div>
@@ -208,6 +230,6 @@ function render() {
 render();
 </script>
 
-<!-- Version: 2.0 -->
+<!-- Version: 2.2 -->
 </body>
 </html>
