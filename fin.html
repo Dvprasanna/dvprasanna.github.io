@@ -21,6 +21,7 @@ header {
   border-bottom: 1px solid #222;
 }
 .container { padding: 10px; }
+
 .card {
   background: #151515;
   border: 1px solid #222;
@@ -28,6 +29,7 @@ header {
   padding: 8px;
   margin-bottom: 8px;
 }
+
 input, select, button {
   width: 100%;
   padding: 6px;
@@ -38,14 +40,18 @@ input, select, button {
   border-radius: 5px;
   font-size: 13px;
 }
+
 button { font-weight: 600; }
+
 .filters {
   display: flex;
   gap: 6px;
 }
+
 .filters select {
   flex: 1;
 }
+
 .entry {
   display: flex;
   justify-content: space-between;
@@ -54,15 +60,23 @@ button { font-weight: 600; }
   border-bottom: 1px solid #222;
   font-size: 13px;
 }
+
 .entry small { color: #888; }
+
 .actions button {
   font-size: 11px;
   padding: 3px 6px;
   margin-top: 2px;
 }
+
 .status-normal { color: #9aa0a6; }
 .status-urgent { color: #fbbc04; }
 .status-overdue { color: #ea4335; }
+
+#totalsBar small {
+  display: block;
+  text-align: center;
+}
 </style>
 </head>
 
@@ -71,18 +85,20 @@ button { font-weight: 600; }
 
 <div class="container">
 
+<!-- ADD / EDIT -->
 <div class="card">
   <select id="entryType">
     <option>Investment</option>
     <option>Income</option>
     <option>Loan</option>
   </select>
-  <input id="entryName" placeholder="Name">
+  <input id="entryName" placeholder="Name / Source">
   <input id="entryAmount" type="number" placeholder="Amount">
   <input id="entryDate" type="date">
   <button id="saveBtn">Add Entry</button>
 </div>
 
+<!-- FILTERS -->
 <div class="card filters">
   <select id="typeFilter">
     <option value="All">All Types</option>
@@ -97,10 +113,22 @@ button { font-weight: 600; }
   </select>
 </div>
 
+<!-- TOTALS (FILTER AWARE) -->
+<div class="card" id="totalsBar">
+  <small>
+    Invest: ₹<span id="tInv">0</span> |
+    Income: ₹<span id="tInc">0</span> |
+    Loans: ₹<span id="tLoan">0</span> |
+    <b>Net: ₹<span id="tNet">0</span></b>
+  </small>
+</div>
+
+<!-- LIST -->
 <div class="card">
   <div id="list"></div>
 </div>
 
+<!-- EXPORT -->
 <div class="card">
   <button id="pdfBtn">Export PDF</button>
 </div>
@@ -108,9 +136,11 @@ button { font-weight: 600; }
 </div>
 
 <script>
+/* ---------- STATE ---------- */
 let data = JSON.parse(localStorage.getItem("financeData") || "[]");
 let editIndex = null;
 
+/* ---------- ELEMENTS ---------- */
 const entryType   = document.getElementById("entryType");
 const entryName   = document.getElementById("entryName");
 const entryAmount = document.getElementById("entryAmount");
@@ -121,19 +151,30 @@ const pdfBtn      = document.getElementById("pdfBtn");
 const typeFilter  = document.getElementById("typeFilter");
 const dateFilter  = document.getElementById("dateFilter");
 
+const tInv  = document.getElementById("tInv");
+const tInc  = document.getElementById("tInc");
+const tLoan = document.getElementById("tLoan");
+const tNet  = document.getElementById("tNet");
+
+/* ---------- EVENTS ---------- */
 saveBtn.onclick = saveEntry;
 pdfBtn.onclick = exportPDF;
 typeFilter.onchange = render;
 dateFilter.onchange = render;
 
+/* ---------- LOGIC ---------- */
 function saveEntry() {
   const entry = {
     type: entryType.value,
     name: entryName.value.trim(),
-    amount: entryAmount.value,
+    amount: Number(entryAmount.value),
     date: entryDate.value
   };
-  if (!entry.name || !entry.amount || !entry.date) return alert("Fill all fields");
+
+  if (!entry.name || !entry.amount || !entry.date) {
+    alert("Fill all fields");
+    return;
+  }
 
   if (editIndex !== null) {
     data[editIndex] = entry;
@@ -159,8 +200,8 @@ function editEntry(i) {
 }
 
 function deleteEntry(i) {
-  if (!confirm("Delete?")) return;
-  data.splice(i,1);
+  if (!confirm("Delete this entry?")) return;
+  data.splice(i, 1);
   localStorage.setItem("financeData", JSON.stringify(data));
   render();
 }
@@ -168,7 +209,7 @@ function deleteEntry(i) {
 function getStatus(d) {
   const today = new Date(); today.setHours(0,0,0,0);
   const due = new Date(d);
-  const diff = Math.ceil((due - today)/86400000);
+  const diff = Math.ceil((due - today) / 86400000);
   if (diff < 0) return ["Overdue","status-overdue"];
   if (diff <= 5) return ["Urgent","status-urgent"];
   return ["Normal","status-normal"];
@@ -176,6 +217,8 @@ function getStatus(d) {
 
 function render() {
   list.innerHTML = "";
+
+  let totalInv = 0, totalInc = 0, totalLoan = 0;
 
   let filtered = data.filter(e => {
     if (typeFilter.value !== "All" && e.type !== typeFilter.value) return false;
@@ -185,6 +228,17 @@ function render() {
     return true;
   });
 
+  filtered.forEach(e => {
+    if (e.type === "Investment") totalInv += e.amount;
+    if (e.type === "Income") totalInc += e.amount;
+    if (e.type === "Loan") totalLoan += e.amount;
+  });
+
+  tInv.textContent  = totalInv;
+  tInc.textContent  = totalInc;
+  tLoan.textContent = totalLoan;
+  tNet.textContent  = totalInv + totalInc - totalLoan;
+
   if (filtered.length === 0) {
     list.innerHTML = "<small>No matching entries</small>";
     return;
@@ -192,7 +246,7 @@ function render() {
 
   filtered
     .sort((a,b)=>new Date(a.date)-new Date(b.date))
-    .forEach((e,i) => {
+    .forEach(e => {
       const [label, cls] = getStatus(e.date);
       const div = document.createElement("div");
       div.className = "entry";
@@ -217,17 +271,19 @@ function exportPDF() {
   let y = 10;
   pdf.text("My Financial View", 10, y);
   y += 10;
-  data.forEach(e=>{
-    pdf.text(`${e.type} | ${e.name} | ₹${e.amount} | ${e.date}`,10,y);
-    y+=8;
-    if(y>280){pdf.addPage();y=10;}
+
+  data.forEach(e => {
+    pdf.text(`${e.type} | ${e.name} | ₹${e.amount} | ${e.date}`, 10, y);
+    y += 8;
+    if (y > 280) { pdf.addPage(); y = 10; }
   });
+
   pdf.save("financial-view.pdf");
 }
 
 render();
 </script>
 
-<!-- Version: 1.4 -->
+<!-- Version: 1.5 -->
 </body>
 </html>
