@@ -1,19 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>My Financial View</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system;
+  background: #111;
+  color: #eee;
+}
+header {
+  padding: 14px;
+  text-align: center;
+  font-size: 18px;
+  border-bottom: 1px solid #222;
+}
+.container {
+  padding: 14px;
+}
+.card {
+  background: #161616;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+input, select, button {
+  width: 100%;
+  padding: 8px;
+  margin: 6px 0;
+  background: #222;
+  color: #fff;
+  border: 1px solid #333;
+  border-radius: 6px;
+}
+button {
+  background: #2a2a2a;
+  font-weight: 600;
+}
+button.small {
+  width: auto;
+  margin-top: 4px;
+}
+.entry {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #222;
+}
+.status-normal { color: #9aa0a6; }
+.status-urgent { color: #fbbc04; }
+.status-overdue { color: #ea4335; }
+small { color: #888; }
+</style>
+</head>
+
+<body>
+<header>My Financial View</header>
+
+<div class="container">
+
+<div class="card">
+  <h3>Add / Edit Entry</h3>
+  <select id="type">
+    <option>Investment</option>
+    <option>Income</option>
+    <option>Loan</option>
+  </select>
+  <input id="name" placeholder="Name / Source">
+  <input id="amount" type="number" placeholder="Amount">
+  <input id="date" type="date">
+  <button id="saveBtn">Add Entry</button>
+</div>
+
+<div class="card">
+  <h3>All Entries</h3>
+  <div id="list"></div>
+</div>
+
+<div class="card">
+  <button onclick="exportPDF()">Export PDF</button>
+</div>
+
+</div>
+
 <script>
 let data = JSON.parse(localStorage.getItem("financeData") || "[]");
 let editIndex = null;
 
-function addEntry() {
+const saveBtn = document.getElementById("saveBtn");
+const list = document.getElementById("list");
+
+saveBtn.onclick = saveEntry;
+
+function saveEntry() {
   const entry = {
     type: type.value,
-    name: name.value,
+    name: name.value.trim(),
     amount: amount.value,
     date: date.value
   };
-  if (!entry.name || !entry.amount || !entry.date) return;
+
+  if (!entry.name || !entry.amount || !entry.date) {
+    alert("Fill all fields");
+    return;
+  }
 
   if (editIndex !== null) {
     data[editIndex] = entry;
     editIndex = null;
+    saveBtn.innerText = "Add Entry";
   } else {
     data.push(entry);
   }
@@ -24,8 +126,9 @@ function addEntry() {
 }
 
 function clearForm() {
-  name.value = amount.value = date.value = "";
-  document.querySelector("button").innerText = "Add";
+  name.value = "";
+  amount.value = "";
+  date.value = "";
 }
 
 function editEntry(i) {
@@ -35,7 +138,7 @@ function editEntry(i) {
   amount.value = e.amount;
   date.value = e.date;
   editIndex = i;
-  document.querySelector("button").innerText = "Save";
+  saveBtn.innerText = "Save Changes";
 }
 
 function deleteEntry(i) {
@@ -47,8 +150,10 @@ function deleteEntry(i) {
 
 function getStatus(d) {
   const today = new Date();
+  today.setHours(0,0,0,0);
   const due = new Date(d);
   const diff = Math.ceil((due - today) / 86400000);
+
   if (diff < 0) return ["Overdue", "status-overdue"];
   if (diff <= 5) return ["Urgent", "status-urgent"];
   return ["Normal", "status-normal"];
@@ -56,28 +161,56 @@ function getStatus(d) {
 
 function render() {
   list.innerHTML = "";
-  data.sort((a,b)=>new Date(a.date)-new Date(b.date));
 
-  data.forEach((e, i) => {
-    const [label, cls] = getStatus(e.date);
-    const div = document.createElement("div");
-    div.className = "entry";
-    div.innerHTML = `
-      <div>
-        <b>${e.name}</b><br>
-        <small>${e.type} | ₹${e.amount} | ${e.date}</small>
-      </div>
-      <div>
-        <span class="${cls}">${label}</span><br>
-        <button onclick="editEntry(${i})">Edit</button>
-        <button onclick="deleteEntry(${i})">Delete</button>
-      </div>
-    `;
-    list.appendChild(div);
+  if (data.length === 0) {
+    list.innerHTML = "<small>No entries yet</small>";
+    return;
+  }
+
+  data
+    .sort((a,b)=>new Date(a.date)-new Date(b.date))
+    .forEach((e, i) => {
+      const [label, cls] = getStatus(e.date);
+      const div = document.createElement("div");
+      div.className = "entry";
+      div.innerHTML = `
+        <div>
+          <b>${e.name}</b><br>
+          <small>${e.type} | ₹${e.amount} | ${e.date}</small>
+        </div>
+        <div>
+          <div class="${cls}">${label}</div>
+          <button class="small" onclick="editEntry(${i})">Edit</button>
+          <button class="small" onclick="deleteEntry(${i})">Delete</button>
+        </div>
+      `;
+      list.appendChild(div);
+    });
+}
+
+function exportPDF() {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF();
+  let y = 10;
+
+  pdf.text("My Financial View", 10, y);
+  y += 10;
+
+  data.forEach(e => {
+    pdf.text(
+      `${e.type} | ${e.name} | ₹${e.amount} | ${e.date}`,
+      10, y
+    );
+    y += 8;
+    if (y > 280) { pdf.addPage(); y = 10; }
   });
+
+  pdf.save("financial-view.pdf");
 }
 
 render();
 </script>
 
-<!-- Version: 1.1 -->
+<!-- Version: 1.2 -->
+</body>
+</html>
