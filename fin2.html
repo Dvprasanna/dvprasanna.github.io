@@ -53,6 +53,7 @@ input, select, button {
 small { color: #888; }
 .rec { color: #34a853; }
 .pay { color: #ea4335; }
+.none { color: #9aa0a6; }
 
 .actions button {
   font-size: 11px;
@@ -78,14 +79,15 @@ small { color: #888; }
 
   <input id="name" placeholder="Name">
 
-  <input id="amt" type="number" placeholder="Principal / Base Amount">
+  <input id="amt" type="number" placeholder="Principal / Invested Amount">
 
   <div class="row">
     <select id="flow">
+      <option value="None">No Pay / Rec</option>
       <option value="Rec">Receive</option>
       <option value="Pay">Pay</option>
     </select>
-    <input id="flowAmt" type="number" placeholder="Pay / Receive Amount">
+    <input id="flowAmt" type="number" placeholder="Pay / Receive Amount (optional)">
   </div>
 
   <div class="row">
@@ -136,18 +138,26 @@ const tNet = document.getElementById("tNet");
 saveBtn.onclick = saveEntry;
 
 function saveEntry() {
+  const flow = flowEl.value;
+  const flowAmt = Number(flowAmtEl.value);
+
+  if ((flow === "Pay" || flow === "Rec") && !flowAmt) {
+    alert("Enter Pay / Receive amount");
+    return;
+  }
+
   const entry = {
     type: typeEl.value,
     name: nameEl.value.trim(),
-    amt: Number(amtEl.value),
-    flow: flowEl.value,
-    flowAmt: Number(flowAmtEl.value),
+    amt: Number(amtEl.value) || 0,
+    flow,
+    flowAmt: flow === "None" ? 0 : flowAmt,
     monthly: monthlyEl.value,
     date: dateEl.value
   };
 
-  if (!entry.type || !entry.name || !entry.amt || !entry.flowAmt || !entry.date) {
-    alert("Fill all required fields");
+  if (!entry.type || !entry.name || !entry.date) {
+    alert("Fill required fields");
     return;
   }
 
@@ -178,7 +188,7 @@ function editEntry(i) {
   nameEl.value = e.name;
   amtEl.value = e.amt;
   flowEl.value = e.flow;
-  flowAmtEl.value = e.flowAmt;
+  flowAmtEl.value = e.flowAmt || "";
   monthlyEl.value = e.monthly;
   dateEl.value = e.date;
   editIndex = i;
@@ -200,6 +210,15 @@ function render() {
     if (e.flow === "Rec") totalRec += e.flowAmt;
     if (e.flow === "Pay") totalPay += e.flowAmt;
 
+    const cls =
+      e.flow === "Rec" ? "rec" :
+      e.flow === "Pay" ? "pay" : "none";
+
+    const label =
+      e.flow === "Rec" ? `Rec ₹${e.flowAmt}` :
+      e.flow === "Pay" ? `Pay ₹${e.flowAmt}` :
+      "No cash flow";
+
     const div = document.createElement("div");
     div.className = "entry";
     div.innerHTML = `
@@ -208,9 +227,7 @@ function render() {
         <small>
           ${e.type} |
           Principal ₹${e.amt} |
-          <span class="${e.flow === "Rec" ? "rec" : "pay"}">
-            ${e.flow} ₹${e.flowAmt}
-          </span> |
+          <span class="${cls}">${label}</span> |
           ${e.monthly} | ${e.date}
         </small>
       </div>
@@ -230,6 +247,6 @@ function render() {
 render();
 </script>
 
-<!-- Version: 2.2 -->
+<!-- Version: 2.3 -->
 </body>
 </html>
