@@ -20,9 +20,7 @@ header {
   font-size: 18px;
   border-bottom: 1px solid #222;
 }
-.container {
-  padding: 14px;
-}
+.container { padding: 14px; }
 .card {
   background: #161616;
   border: 1px solid #222;
@@ -39,14 +37,7 @@ input, select, button {
   border: 1px solid #333;
   border-radius: 6px;
 }
-button {
-  background: #2a2a2a;
-  font-weight: 600;
-}
-button.small {
-  width: auto;
-  margin-top: 4px;
-}
+button { font-weight: 600; }
 .entry {
   display: flex;
   justify-content: space-between;
@@ -68,14 +59,14 @@ small { color: #888; }
 
 <div class="card">
   <h3>Add / Edit Entry</h3>
-  <select id="type">
+  <select id="entryType">
     <option>Investment</option>
     <option>Income</option>
     <option>Loan</option>
   </select>
-  <input id="name" placeholder="Name / Source">
-  <input id="amount" type="number" placeholder="Amount">
-  <input id="date" type="date">
+  <input id="entryName" placeholder="Name / Source">
+  <input id="entryAmount" type="number" placeholder="Amount">
+  <input id="entryDate" type="date">
   <button id="saveBtn">Add Entry</button>
 </div>
 
@@ -85,26 +76,36 @@ small { color: #888; }
 </div>
 
 <div class="card">
-  <button onclick="exportPDF()">Export PDF</button>
+  <button id="pdfBtn">Export PDF</button>
 </div>
 
 </div>
 
 <script>
+/* ---------- STATE ---------- */
 let data = JSON.parse(localStorage.getItem("financeData") || "[]");
 let editIndex = null;
 
-const saveBtn = document.getElementById("saveBtn");
-const list = document.getElementById("list");
+/* ---------- ELEMENTS ---------- */
+const entryType   = document.getElementById("entryType");
+const entryName   = document.getElementById("entryName");
+const entryAmount = document.getElementById("entryAmount");
+const entryDate   = document.getElementById("entryDate");
+const saveBtn     = document.getElementById("saveBtn");
+const list        = document.getElementById("list");
+const pdfBtn      = document.getElementById("pdfBtn");
 
-saveBtn.onclick = saveEntry;
+/* ---------- EVENTS ---------- */
+saveBtn.addEventListener("click", saveEntry);
+pdfBtn.addEventListener("click", exportPDF);
 
+/* ---------- FUNCTIONS ---------- */
 function saveEntry() {
   const entry = {
-    type: type.value,
-    name: name.value.trim(),
-    amount: amount.value,
-    date: date.value
+    type: entryType.value,
+    name: entryName.value.trim(),
+    amount: entryAmount.value,
+    date: entryDate.value
   };
 
   if (!entry.name || !entry.amount || !entry.date) {
@@ -126,17 +127,17 @@ function saveEntry() {
 }
 
 function clearForm() {
-  name.value = "";
-  amount.value = "";
-  date.value = "";
+  entryName.value = "";
+  entryAmount.value = "";
+  entryDate.value = "";
 }
 
 function editEntry(i) {
   const e = data[i];
-  type.value = e.type;
-  name.value = e.name;
-  amount.value = e.amount;
-  date.value = e.date;
+  entryType.value = e.type;
+  entryName.value = e.name;
+  entryAmount.value = e.amount;
+  entryDate.value = e.date;
   editIndex = i;
   saveBtn.innerText = "Save Changes";
 }
@@ -153,7 +154,6 @@ function getStatus(d) {
   today.setHours(0,0,0,0);
   const due = new Date(d);
   const diff = Math.ceil((due - today) / 86400000);
-
   if (diff < 0) return ["Overdue", "status-overdue"];
   if (diff <= 5) return ["Urgent", "status-urgent"];
   return ["Normal", "status-normal"];
@@ -161,7 +161,6 @@ function getStatus(d) {
 
 function render() {
   list.innerHTML = "";
-
   if (data.length === 0) {
     list.innerHTML = "<small>No entries yet</small>";
     return;
@@ -169,7 +168,7 @@ function render() {
 
   data
     .sort((a,b)=>new Date(a.date)-new Date(b.date))
-    .forEach((e, i) => {
+    .forEach((e,i) => {
       const [label, cls] = getStatus(e.date);
       const div = document.createElement("div");
       div.className = "entry";
@@ -180,8 +179,8 @@ function render() {
         </div>
         <div>
           <div class="${cls}">${label}</div>
-          <button class="small" onclick="editEntry(${i})">Edit</button>
-          <button class="small" onclick="deleteEntry(${i})">Delete</button>
+          <button onclick="editEntry(${i})">Edit</button>
+          <button onclick="deleteEntry(${i})">Delete</button>
         </div>
       `;
       list.appendChild(div);
@@ -192,15 +191,11 @@ function exportPDF() {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF();
   let y = 10;
-
   pdf.text("My Financial View", 10, y);
   y += 10;
 
   data.forEach(e => {
-    pdf.text(
-      `${e.type} | ${e.name} | ₹${e.amount} | ${e.date}`,
-      10, y
-    );
+    pdf.text(`${e.type} | ${e.name} | ₹${e.amount} | ${e.date}`, 10, y);
     y += 8;
     if (y > 280) { pdf.addPage(); y = 10; }
   });
@@ -208,9 +203,10 @@ function exportPDF() {
   pdf.save("financial-view.pdf");
 }
 
+/* ---------- INIT ---------- */
 render();
 </script>
 
-<!-- Version: 1.2 -->
+<!-- Version: 1.3 -->
 </body>
 </html>
