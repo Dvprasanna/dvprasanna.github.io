@@ -28,7 +28,7 @@ header {
   margin-bottom: 8px;
 }
 
-input, select, button {
+input, select, textarea, button {
   width: 100%;
   padding: 6px;
   margin: 4px 0;
@@ -39,13 +39,15 @@ input, select, button {
   font-size: 13px;
 }
 
+textarea {
+  min-height: 100px;
+  font-family: monospace;
+}
+
 .row { display: flex; gap: 6px; }
 .row > * { flex: 1; }
 
-.filters {
-  display: flex;
-  gap: 6px;
-}
+.filters { display: flex; gap: 6px; }
 
 .entry {
   display: flex;
@@ -83,7 +85,6 @@ small { color: #888; }
   </select>
 
   <input id="name" placeholder="Name">
-
   <input id="amt" type="number" placeholder="Principal / Invested Amount">
 
   <div class="row">
@@ -92,7 +93,7 @@ small { color: #888; }
       <option value="Rec">Receive</option>
       <option value="Pay">Pay</option>
     </select>
-    <input id="flowAmt" type="number" placeholder="Pay / Receive Amount (optional)">
+    <input id="flowAmt" type="number" placeholder="Pay / Receive Amount">
   </div>
 
   <div class="row">
@@ -106,7 +107,7 @@ small { color: #888; }
   <button id="saveBtn">Add Entry</button>
 </div>
 
-<!-- FILTERS (RESTORED) -->
+<!-- FILTERS -->
 <div class="card filters">
   <select id="typeFilter">
     <option value="All">All Types</option>
@@ -138,6 +139,13 @@ small { color: #888; }
   <div id="list"></div>
 </div>
 
+<!-- EXPORT / IMPORT -->
+<div class="card">
+  <button onclick="exportText()">Export TEXT</button>
+  <textarea id="textBox" placeholder="Paste exported text here to import"></textarea>
+  <button onclick="importText()">Import TEXT</button>
+</div>
+
 </div>
 
 <script>
@@ -161,13 +169,14 @@ const list = document.getElementById("list");
 const tRec = document.getElementById("tRec");
 const tPay = document.getElementById("tPay");
 const tNet = document.getElementById("tNet");
+const textBox = document.getElementById("textBox");
 
 /* EVENTS */
 saveBtn.onclick = saveEntry;
 typeFilter.onchange = render;
 flowFilter.onchange = render;
 
-/* LOGIC */
+/* SAVE */
 function saveEntry() {
   const flow = flowEl.value;
   const flowAmt = Number(flowAmtEl.value);
@@ -213,26 +222,50 @@ function clearForm() {
   dateEl.value = "";
 }
 
-function editEntry(i) {
-  const e = data[i];
-  typeEl.value = e.type;
-  nameEl.value = e.name;
-  amtEl.value = e.amt;
-  flowEl.value = e.flow;
-  flowAmtEl.value = e.flowAmt || "";
-  monthlyEl.value = e.monthly;
-  dateEl.value = e.date;
-  editIndex = i;
-  saveBtn.innerText = "Save";
+/* TEXT EXPORT */
+function exportText() {
+  const lines = data.map(e =>
+    `${e.type}|${e.name}|${e.amt}|${e.flow}|${e.flowAmt}|${e.monthly}|${e.date}`
+  );
+  textBox.value = lines.join("\n");
 }
 
-function deleteEntry(i) {
-  if (!confirm("Delete entry?")) return;
-  data.splice(i, 1);
+/* TEXT IMPORT */
+function importText() {
+  const lines = textBox.value.split("\n");
+  const imported = [];
+
+  lines.forEach(line => {
+    const parts = line.split("|");
+    if (parts.length !== 7) return;
+
+    const [type,name,amt,flow,flowAmt,monthly,date] = parts;
+    if (!type || !name || !date) return;
+
+    imported.push({
+      type,
+      name,
+      amt: Number(amt) || 0,
+      flow,
+      flowAmt: Number(flowAmt) || 0,
+      monthly,
+      date
+    });
+  });
+
+  if (imported.length === 0) {
+    alert("No valid entries found");
+    return;
+  }
+
+  if (!confirm(`Import ${imported.length} entries? This will replace current data.`)) return;
+
+  data = imported;
   localStorage.setItem("financeData", JSON.stringify(data));
   render();
 }
 
+/* RENDER */
 function render() {
   list.innerHTML = "";
   let totalRec = 0, totalPay = 0;
@@ -247,10 +280,7 @@ function render() {
     if (e.flow === "Rec") totalRec += e.flowAmt;
     if (e.flow === "Pay") totalPay += e.flowAmt;
 
-    const cls =
-      e.flow === "Rec" ? "rec" :
-      e.flow === "Pay" ? "pay" : "none";
-
+    const cls = e.flow === "Rec" ? "rec" : e.flow === "Pay" ? "pay" : "none";
     const label =
       e.flow === "Rec" ? `Rec ₹${e.flowAmt}` :
       e.flow === "Pay" ? `Pay ₹${e.flowAmt}` :
@@ -281,9 +311,29 @@ function render() {
   tNet.textContent = totalRec - totalPay;
 }
 
+function editEntry(i) {
+  const e = data[i];
+  typeEl.value = e.type;
+  nameEl.value = e.name;
+  amtEl.value = e.amt;
+  flowEl.value = e.flow;
+  flowAmtEl.value = e.flowAmt || "";
+  monthlyEl.value = e.monthly;
+  dateEl.value = e.date;
+  editIndex = i;
+  saveBtn.innerText = "Save";
+}
+
+function deleteEntry(i) {
+  if (!confirm("Delete entry?")) return;
+  data.splice(i, 1);
+  localStorage.setItem("financeData", JSON.stringify(data));
+  render();
+}
+
 render();
 </script>
 
-<!-- Version: 2.4 -->
+<!-- Version: 2.5 -->
 </body>
 </html>
