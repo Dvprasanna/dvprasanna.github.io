@@ -29,22 +29,15 @@ header {
 
 .card-header {
   padding: 8px;
-  font-size: 14px;
   font-weight: 600;
   border-bottom: 1px solid #222;
   display: flex;
   justify-content: space-between;
-  align-items: center;
   cursor: pointer;
 }
 
-.card-body {
-  padding: 8px;
-}
-
-.hidden {
-  display: none;
-}
+.card-body { padding: 8px; }
+.hidden { display: none; }
 
 input, select, textarea, button {
   width: 100%;
@@ -92,15 +85,13 @@ small { color: #888; }
 
 <div class="container">
 
-<!-- ENTRY SECTION -->
+<!-- ENTRY -->
 <div class="card">
   <div class="card-header" onclick="toggle('entryBody','entryArrow')">
-    Entry
-    <span id="entryArrow">▼</span>
+    Entry <span id="entryArrow">▼</span>
   </div>
   <div class="card-body" id="entryBody">
-
-    <select id="type">
+    <select id="typeEl">
       <option value="">Select Type</option>
       <option>Investment</option>
       <option>Loan</option>
@@ -108,24 +99,24 @@ small { color: #888; }
       <option>Other</option>
     </select>
 
-    <input id="name" placeholder="Name">
-    <input id="amt" type="number" placeholder="Principal / Invested Amount">
+    <input id="nameEl" placeholder="Name">
+    <input id="amtEl" type="number" placeholder="Principal / Invested Amount">
 
     <div class="row">
-      <select id="flow">
+      <select id="flowEl">
         <option value="None">No Pay / Rec</option>
         <option value="Rec">Receive</option>
         <option value="Pay">Pay</option>
       </select>
-      <input id="flowAmt" type="number" placeholder="Pay / Receive Amount">
+      <input id="flowAmtEl" type="number" placeholder="Pay / Receive Amount">
     </div>
 
     <div class="row">
-      <select id="monthly">
+      <select id="monthlyEl">
         <option value="No">Monthly: No</option>
         <option value="Yes">Monthly: Yes</option>
       </select>
-      <input id="date" type="date">
+      <input id="dateEl" type="date">
     </div>
 
     <button id="saveBtn">Add Entry</button>
@@ -163,26 +154,24 @@ small { color: #888; }
   </div>
 </div>
 
-<!-- LIST SECTION -->
+<!-- LIST -->
 <div class="card">
   <div class="card-header" onclick="toggle('listBody','listArrow')">
-    Entries
-    <span id="listArrow">▼</span>
+    Entries <span id="listArrow">▼</span>
   </div>
   <div class="card-body" id="listBody">
     <div id="list"></div>
   </div>
 </div>
 
-<!-- EXPORT / IMPORT SECTION -->
+<!-- EXPORT -->
 <div class="card">
   <div class="card-header" onclick="toggle('exportBody','exportArrow')">
-    Export / Import
-    <span id="exportArrow">▼</span>
+    Export / Import <span id="exportArrow">▼</span>
   </div>
   <div class="card-body" id="exportBody">
     <button onclick="exportText()">Export TEXT</button>
-    <textarea id="textBox" placeholder="Paste text here to import"></textarea>
+    <textarea id="textBox"></textarea>
     <button onclick="importText()">Import TEXT</button>
   </div>
 </div>
@@ -196,28 +185,21 @@ function toggle(bodyId, arrowId) {
   const arrow = document.getElementById(arrowId);
   const hidden = body.classList.toggle("hidden");
   arrow.textContent = hidden ? "▶" : "▼";
-  localStorage.setItem(bodyId + "_hidden", hidden);
 }
 
-["entryBody","listBody","exportBody"].forEach(id => {
-  if (localStorage.getItem(id + "_hidden") === "true") {
-    document.getElementById(id).classList.add("hidden");
-    document.getElementById(id.replace("Body","Arrow")).textContent = "▶";
-  }
-});
-
-/* ---------- DATA ---------- */
+/* ---------- STATE ---------- */
 let data = JSON.parse(localStorage.getItem("financeData") || "[]");
 let editIndex = null;
 
-const typeEl = type;
-const nameEl = name;
-const amtEl = amt;
-const flowEl = flow;
-const flowAmtEl = flowAmt;
-const monthlyEl = monthly;
-const dateEl = date;
-const saveBtn = saveBtn;
+/* ---------- ELEMENTS ---------- */
+const typeEl = document.getElementById("typeEl");
+const nameEl = document.getElementById("nameEl");
+const amtEl = document.getElementById("amtEl");
+const flowEl = document.getElementById("flowEl");
+const flowAmtEl = document.getElementById("flowAmtEl");
+const monthlyEl = document.getElementById("monthlyEl");
+const dateEl = document.getElementById("dateEl");
+const saveBtn = document.getElementById("saveBtn");
 
 const typeFilter = document.getElementById("typeFilter");
 const flowFilter = document.getElementById("flowFilter");
@@ -228,9 +210,10 @@ const tPay = document.getElementById("tPay");
 const tNet = document.getElementById("tNet");
 const textBox = document.getElementById("textBox");
 
-saveBtn.onclick = saveEntry;
-typeFilter.onchange = render;
-flowFilter.onchange = render;
+/* ---------- EVENTS ---------- */
+saveBtn.addEventListener("click", saveEntry);
+typeFilter.addEventListener("change", render);
+flowFilter.addEventListener("change", render);
 
 /* ---------- SAVE ---------- */
 function saveEntry() {
@@ -336,8 +319,8 @@ function render() {
         <small>${e.type} | Principal ₹${e.amt} | <span class="${cls}">${label}</span> | ${e.monthly} | ${e.date}</small>
       </div>
       <div class="actions">
-        <button onclick="editEntry(${data.indexOf(e)})">✏️</button>
-        <button onclick="deleteEntry(${data.indexOf(e)})">🗑</button>
+        <button onclick="editEntry(${i})">✏️</button>
+        <button onclick="deleteEntry(${i})">🗑</button>
       </div>
     `;
     list.appendChild(div);
@@ -371,6 +354,6 @@ function deleteEntry(i) {
 render();
 </script>
 
-<!-- Version: 2.6 -->
+<!-- Version: 2.6.1 -->
 </body>
 </html>
