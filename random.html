@@ -2,21 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Random Shape Generator</title>
+<title>Closed Random Shape – Gradient Fill</title>
 <style>
   body {
     margin: 0;
-    font-family: system-ui;
     background: #111;
     color: #fff;
+    font-family: system-ui, sans-serif;
   }
   #toolbar {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     padding: 10px;
     background: #1a1a1a;
+    align-items: center;
   }
-  button, input {
+  input, button {
     padding: 6px 10px;
     font-size: 14px;
   }
@@ -52,45 +53,54 @@ window.addEventListener("resize", resize);
 
 let points = [];
 
+// ---------- RANDOM HELPERS ----------
+function rand(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function randomGradient() {
+  const g = ctx.createLinearGradient(
+    rand(0, canvas.width),
+    rand(0, canvas.height),
+    rand(0, canvas.width),
+    rand(0, canvas.height)
+  );
+
+  g.addColorStop(0, `hsl(${Math.random()*360},70%,55%)`);
+  g.addColorStop(1, `hsl(${Math.random()*360},70%,45%)`);
+  return g;
+}
+
+// ---------- INTERACTION ----------
 canvas.addEventListener("pointerdown", generateShape);
 
-function generateShape(e) {
+function generateShape() {
   const n = parseInt(dotInput.value, 10);
   points = [];
 
   for (let i = 0; i < n; i++) {
     points.push({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height
+      x: rand(50, canvas.width - 50),
+      y: rand(50, canvas.height - 50)
     });
   }
 
   draw();
 }
 
+// ---------- DRAW ----------
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // draw dots
-  ctx.fillStyle = "#000";
-  for (const p of points) {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
   if (points.length < 3) return;
 
-  // ---- CLOSED LOOP LOGIC ----
+  // closed-loop point duplication
   const pts = [
-    points[points.length - 1], // last
+    points[points.length - 1],
     ...points,
-    points[0],                 // first
-    points[1]                  // second
+    points[0],
+    points[1]
   ];
 
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(pts[1].x, pts[1].y);
 
@@ -109,19 +119,35 @@ function draw() {
   }
 
   ctx.closePath();
+
+  // fill + stroke
+  ctx.fillStyle = randomGradient();
+  ctx.fill();
+
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
   ctx.stroke();
+
+  // optional: draw control dots
+  ctx.fillStyle = "#000";
+  for (const p of points) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
+// ---------- CONTROLS ----------
 document.getElementById("clearBtn").onclick = () => {
   points = [];
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 };
 
 document.getElementById("exportBtn").onclick = () => {
-  const link = document.createElement("a");
-  link.download = "random-shape.png";
-  link.href = canvas.toDataURL("image/png");
-  link.click();
+  const a = document.createElement("a");
+  a.download = "gradient-shape.png";
+  a.href = canvas.toDataURL("image/png");
+  a.click();
 };
 </script>
 
