@@ -50,15 +50,8 @@ input, select, textarea, button {
   font-size: 13px;
 }
 
-textarea {
-  min-height: 100px;
-  font-family: monospace;
-}
-
 .row { display: flex; gap: 6px; }
 .row > * { flex: 1; }
-
-.filters { display: flex; gap: 6px; }
 
 .entry {
   display: flex;
@@ -91,6 +84,7 @@ small { color: #888; }
     Entry <span id="entryArrow">▼</span>
   </div>
   <div class="card-body" id="entryBody">
+
     <select id="typeEl">
       <option value="">Select Type</option>
       <option>Investment</option>
@@ -100,7 +94,7 @@ small { color: #888; }
     </select>
 
     <input id="nameEl" placeholder="Name">
-    <input id="amtEl" type="number" placeholder="Principal / Invested Amount">
+    <input id="amtEl" type="number" placeholder="Principal / Amount">
 
     <div class="row">
       <select id="flowEl">
@@ -125,7 +119,7 @@ small { color: #888; }
 
 <!-- FILTERS -->
 <div class="card">
-  <div class="card-body filters">
+  <div class="card-body">
     <select id="typeFilter">
       <option value="All">All Types</option>
       <option>Investment</option>
@@ -140,6 +134,8 @@ small { color: #888; }
       <option value="Pay">Pay</option>
       <option value="None">No Cash Flow</option>
     </select>
+
+    <button onclick="forceShow()">Show Entries</button>
   </div>
 </div>
 
@@ -147,8 +143,9 @@ small { color: #888; }
 <div class="card">
   <div class="card-body">
     <small>
-      Received: ₹<span id="tRec">0</span> |
-      Paid: ₹<span id="tPay">0</span> |
+      Entries: <b><span id="count">0</span></b> |
+      Rec: ₹<span id="tRec">0</span> |
+      Pay: ₹<span id="tPay">0</span> |
       <b>Net: ₹<span id="tNet">0</span></b>
     </small>
   </div>
@@ -164,18 +161,6 @@ small { color: #888; }
   </div>
 </div>
 
-<!-- EXPORT -->
-<div class="card">
-  <div class="card-header" onclick="toggle('exportBody','exportArrow')">
-    Export / Import <span id="exportArrow">▼</span>
-  </div>
-  <div class="card-body" id="exportBody">
-    <button onclick="exportText()">Export TEXT</button>
-    <textarea id="textBox"></textarea>
-    <button onclick="importText()">Import TEXT</button>
-  </div>
-</div>
-
 </div>
 
 <script>
@@ -183,8 +168,13 @@ small { color: #888; }
 function toggle(bodyId, arrowId) {
   const body = document.getElementById(bodyId);
   const arrow = document.getElementById(arrowId);
-  const hidden = body.classList.toggle("hidden");
-  arrow.textContent = hidden ? "▶" : "▼";
+  body.classList.toggle("hidden");
+  arrow.textContent = body.classList.contains("hidden") ? "▶" : "▼";
+}
+
+function forceShow() {
+  document.getElementById("listBody").classList.remove("hidden");
+  document.getElementById("listArrow").textContent = "▼";
 }
 
 /* ---------- STATE ---------- */
@@ -205,15 +195,15 @@ const typeFilter = document.getElementById("typeFilter");
 const flowFilter = document.getElementById("flowFilter");
 
 const list = document.getElementById("list");
+const countEl = document.getElementById("count");
 const tRec = document.getElementById("tRec");
 const tPay = document.getElementById("tPay");
 const tNet = document.getElementById("tNet");
-const textBox = document.getElementById("textBox");
 
 /* ---------- EVENTS ---------- */
-saveBtn.addEventListener("click", saveEntry);
-typeFilter.addEventListener("change", render);
-flowFilter.addEventListener("change", render);
+saveBtn.onclick = saveEntry;
+typeFilter.onchange = render;
+flowFilter.onchange = render;
 
 /* ---------- SAVE ---------- */
 function saveEntry() {
@@ -240,58 +230,10 @@ function saveEntry() {
     return;
   }
 
-  if (editIndex !== null) {
-    data[editIndex] = entry;
-    editIndex = null;
-    saveBtn.textContent = "Add Entry";
-  } else {
-    data.push(entry);
-  }
-
-  localStorage.setItem("financeData", JSON.stringify(data));
-  clearForm();
-  render();
-}
-
-function clearForm() {
-  typeEl.value = "";
-  nameEl.value = "";
-  amtEl.value = "";
-  flowAmtEl.value = "";
-  dateEl.value = "";
-}
-
-/* ---------- TEXT EXPORT / IMPORT ---------- */
-function exportText() {
-  textBox.value = data.map(e =>
-    `${e.type}|${e.name}|${e.amt}|${e.flow}|${e.flowAmt}|${e.monthly}|${e.date}`
-  ).join("\n");
-}
-
-function importText() {
-  const lines = textBox.value.split("\n");
-  const imported = [];
-
-  lines.forEach(l => {
-    const p = l.split("|");
-    if (p.length !== 7) return;
-    imported.push({
-      type: p[0],
-      name: p[1],
-      amt: Number(p[2]) || 0,
-      flow: p[3],
-      flowAmt: Number(p[4]) || 0,
-      monthly: p[5],
-      date: p[6]
-    });
-  });
-
-  if (!imported.length) return alert("No valid data");
-
-  if (!confirm("Replace current data?")) return;
-  data = imported;
+  data.push(entry);
   localStorage.setItem("financeData", JSON.stringify(data));
   render();
+  forceShow();
 }
 
 /* ---------- RENDER ---------- */
@@ -304,7 +246,9 @@ function render() {
     (flowFilter.value === "All" || e.flow === flowFilter.value)
   );
 
-  filtered.forEach((e, i) => {
+  countEl.textContent = filtered.length;
+
+  filtered.forEach(e => {
     if (e.flow === "Rec") totalRec += e.flowAmt;
     if (e.flow === "Pay") totalPay += e.flowAmt;
 
@@ -316,11 +260,7 @@ function render() {
     div.innerHTML = `
       <div>
         <b>${e.name}</b><br>
-        <small>${e.type} | Principal ₹${e.amt} | <span class="${cls}">${label}</span> | ${e.monthly} | ${e.date}</small>
-      </div>
-      <div class="actions">
-        <button onclick="editEntry(${i})">✏️</button>
-        <button onclick="deleteEntry(${i})">🗑</button>
+        <small>${e.type} | ₹${e.amt} | <span class="${cls}">${label}</span> | ${e.monthly} | ${e.date}</small>
       </div>
     `;
     list.appendChild(div);
@@ -331,29 +271,9 @@ function render() {
   tNet.textContent = totalRec - totalPay;
 }
 
-function editEntry(i) {
-  const e = data[i];
-  typeEl.value = e.type;
-  nameEl.value = e.name;
-  amtEl.value = e.amt;
-  flowEl.value = e.flow;
-  flowAmtEl.value = e.flowAmt || "";
-  monthlyEl.value = e.monthly;
-  dateEl.value = e.date;
-  editIndex = i;
-  saveBtn.textContent = "Save";
-}
-
-function deleteEntry(i) {
-  if (!confirm("Delete entry?")) return;
-  data.splice(i, 1);
-  localStorage.setItem("financeData", JSON.stringify(data));
-  render();
-}
-
 render();
 </script>
 
-<!-- Version: 2.6.1 -->
+<!-- Version: 2.6.2 -->
 </body>
 </html>
