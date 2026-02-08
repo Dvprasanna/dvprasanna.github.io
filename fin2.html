@@ -24,8 +24,26 @@ header {
   background: #151515;
   border: 1px solid #222;
   border-radius: 6px;
-  padding: 8px;
   margin-bottom: 8px;
+}
+
+.card-header {
+  padding: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 1px solid #222;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.card-body {
+  padding: 8px;
+}
+
+.hidden {
+  display: none;
 }
 
 input, select, textarea, button {
@@ -74,93 +92,132 @@ small { color: #888; }
 
 <div class="container">
 
-<!-- ADD / EDIT -->
+<!-- ENTRY SECTION -->
 <div class="card">
-  <select id="type">
-    <option value="">Select Type</option>
-    <option>Investment</option>
-    <option>Loan</option>
-    <option>Income</option>
-    <option>Other</option>
-  </select>
-
-  <input id="name" placeholder="Name">
-  <input id="amt" type="number" placeholder="Principal / Invested Amount">
-
-  <div class="row">
-    <select id="flow">
-      <option value="None">No Pay / Rec</option>
-      <option value="Rec">Receive</option>
-      <option value="Pay">Pay</option>
-    </select>
-    <input id="flowAmt" type="number" placeholder="Pay / Receive Amount">
+  <div class="card-header" onclick="toggle('entryBody','entryArrow')">
+    Entry
+    <span id="entryArrow">▼</span>
   </div>
+  <div class="card-body" id="entryBody">
 
-  <div class="row">
-    <select id="monthly">
-      <option value="No">Monthly: No</option>
-      <option value="Yes">Monthly: Yes</option>
+    <select id="type">
+      <option value="">Select Type</option>
+      <option>Investment</option>
+      <option>Loan</option>
+      <option>Income</option>
+      <option>Other</option>
     </select>
-    <input id="date" type="date">
-  </div>
 
-  <button id="saveBtn">Add Entry</button>
+    <input id="name" placeholder="Name">
+    <input id="amt" type="number" placeholder="Principal / Invested Amount">
+
+    <div class="row">
+      <select id="flow">
+        <option value="None">No Pay / Rec</option>
+        <option value="Rec">Receive</option>
+        <option value="Pay">Pay</option>
+      </select>
+      <input id="flowAmt" type="number" placeholder="Pay / Receive Amount">
+    </div>
+
+    <div class="row">
+      <select id="monthly">
+        <option value="No">Monthly: No</option>
+        <option value="Yes">Monthly: Yes</option>
+      </select>
+      <input id="date" type="date">
+    </div>
+
+    <button id="saveBtn">Add Entry</button>
+  </div>
 </div>
 
 <!-- FILTERS -->
-<div class="card filters">
-  <select id="typeFilter">
-    <option value="All">All Types</option>
-    <option>Investment</option>
-    <option>Loan</option>
-    <option>Income</option>
-    <option>Other</option>
-  </select>
+<div class="card">
+  <div class="card-body filters">
+    <select id="typeFilter">
+      <option value="All">All Types</option>
+      <option>Investment</option>
+      <option>Loan</option>
+      <option>Income</option>
+      <option>Other</option>
+    </select>
 
-  <select id="flowFilter">
-    <option value="All">All Cash Flow</option>
-    <option value="Rec">Receive</option>
-    <option value="Pay">Pay</option>
-    <option value="None">No Cash Flow</option>
-  </select>
+    <select id="flowFilter">
+      <option value="All">All Cash Flow</option>
+      <option value="Rec">Receive</option>
+      <option value="Pay">Pay</option>
+      <option value="None">No Cash Flow</option>
+    </select>
+  </div>
 </div>
 
 <!-- TOTALS -->
 <div class="card">
-  <small>
-    Received: ₹<span id="tRec">0</span> |
-    Paid: ₹<span id="tPay">0</span> |
-    <b>Net: ₹<span id="tNet">0</span></b>
-  </small>
+  <div class="card-body">
+    <small>
+      Received: ₹<span id="tRec">0</span> |
+      Paid: ₹<span id="tPay">0</span> |
+      <b>Net: ₹<span id="tNet">0</span></b>
+    </small>
+  </div>
 </div>
 
-<!-- LIST -->
+<!-- LIST SECTION -->
 <div class="card">
-  <div id="list"></div>
+  <div class="card-header" onclick="toggle('listBody','listArrow')">
+    Entries
+    <span id="listArrow">▼</span>
+  </div>
+  <div class="card-body" id="listBody">
+    <div id="list"></div>
+  </div>
 </div>
 
-<!-- EXPORT / IMPORT -->
+<!-- EXPORT / IMPORT SECTION -->
 <div class="card">
-  <button onclick="exportText()">Export TEXT</button>
-  <textarea id="textBox" placeholder="Paste exported text here to import"></textarea>
-  <button onclick="importText()">Import TEXT</button>
+  <div class="card-header" onclick="toggle('exportBody','exportArrow')">
+    Export / Import
+    <span id="exportArrow">▼</span>
+  </div>
+  <div class="card-body" id="exportBody">
+    <button onclick="exportText()">Export TEXT</button>
+    <textarea id="textBox" placeholder="Paste text here to import"></textarea>
+    <button onclick="importText()">Import TEXT</button>
+  </div>
 </div>
 
 </div>
 
 <script>
+/* ---------- COLLAPSE ---------- */
+function toggle(bodyId, arrowId) {
+  const body = document.getElementById(bodyId);
+  const arrow = document.getElementById(arrowId);
+  const hidden = body.classList.toggle("hidden");
+  arrow.textContent = hidden ? "▶" : "▼";
+  localStorage.setItem(bodyId + "_hidden", hidden);
+}
+
+["entryBody","listBody","exportBody"].forEach(id => {
+  if (localStorage.getItem(id + "_hidden") === "true") {
+    document.getElementById(id).classList.add("hidden");
+    document.getElementById(id.replace("Body","Arrow")).textContent = "▶";
+  }
+});
+
+/* ---------- DATA ---------- */
 let data = JSON.parse(localStorage.getItem("financeData") || "[]");
 let editIndex = null;
 
-/* ELEMENTS */
-const typeEl = document.getElementById("type");
-const nameEl = document.getElementById("name");
-const amtEl = document.getElementById("amt");
-const flowEl = document.getElementById("flow");
-const flowAmtEl = document.getElementById("flowAmt");
-const monthlyEl = document.getElementById("monthly");
-const dateEl = document.getElementById("date");
-const saveBtn = document.getElementById("saveBtn");
+const typeEl = type;
+const nameEl = name;
+const amtEl = amt;
+const flowEl = flow;
+const flowAmtEl = flowAmt;
+const monthlyEl = monthly;
+const dateEl = date;
+const saveBtn = saveBtn;
 
 const typeFilter = document.getElementById("typeFilter");
 const flowFilter = document.getElementById("flowFilter");
@@ -171,12 +228,11 @@ const tPay = document.getElementById("tPay");
 const tNet = document.getElementById("tNet");
 const textBox = document.getElementById("textBox");
 
-/* EVENTS */
 saveBtn.onclick = saveEntry;
 typeFilter.onchange = render;
 flowFilter.onchange = render;
 
-/* SAVE */
+/* ---------- SAVE ---------- */
 function saveEntry() {
   const flow = flowEl.value;
   const flowAmt = Number(flowAmtEl.value);
@@ -204,7 +260,7 @@ function saveEntry() {
   if (editIndex !== null) {
     data[editIndex] = entry;
     editIndex = null;
-    saveBtn.innerText = "Add Entry";
+    saveBtn.textContent = "Add Entry";
   } else {
     data.push(entry);
   }
@@ -222,81 +278,62 @@ function clearForm() {
   dateEl.value = "";
 }
 
-/* TEXT EXPORT */
+/* ---------- TEXT EXPORT / IMPORT ---------- */
 function exportText() {
-  const lines = data.map(e =>
+  textBox.value = data.map(e =>
     `${e.type}|${e.name}|${e.amt}|${e.flow}|${e.flowAmt}|${e.monthly}|${e.date}`
-  );
-  textBox.value = lines.join("\n");
+  ).join("\n");
 }
 
-/* TEXT IMPORT */
 function importText() {
   const lines = textBox.value.split("\n");
   const imported = [];
 
-  lines.forEach(line => {
-    const parts = line.split("|");
-    if (parts.length !== 7) return;
-
-    const [type,name,amt,flow,flowAmt,monthly,date] = parts;
-    if (!type || !name || !date) return;
-
+  lines.forEach(l => {
+    const p = l.split("|");
+    if (p.length !== 7) return;
     imported.push({
-      type,
-      name,
-      amt: Number(amt) || 0,
-      flow,
-      flowAmt: Number(flowAmt) || 0,
-      monthly,
-      date
+      type: p[0],
+      name: p[1],
+      amt: Number(p[2]) || 0,
+      flow: p[3],
+      flowAmt: Number(p[4]) || 0,
+      monthly: p[5],
+      date: p[6]
     });
   });
 
-  if (imported.length === 0) {
-    alert("No valid entries found");
-    return;
-  }
+  if (!imported.length) return alert("No valid data");
 
-  if (!confirm(`Import ${imported.length} entries? This will replace current data.`)) return;
-
+  if (!confirm("Replace current data?")) return;
   data = imported;
   localStorage.setItem("financeData", JSON.stringify(data));
   render();
 }
 
-/* RENDER */
+/* ---------- RENDER ---------- */
 function render() {
   list.innerHTML = "";
   let totalRec = 0, totalPay = 0;
 
-  const filtered = data.filter(e => {
-    if (typeFilter.value !== "All" && e.type !== typeFilter.value) return false;
-    if (flowFilter.value !== "All" && e.flow !== flowFilter.value) return false;
-    return true;
-  });
+  const filtered = data.filter(e =>
+    (typeFilter.value === "All" || e.type === typeFilter.value) &&
+    (flowFilter.value === "All" || e.flow === flowFilter.value)
+  );
 
   filtered.forEach((e, i) => {
     if (e.flow === "Rec") totalRec += e.flowAmt;
     if (e.flow === "Pay") totalPay += e.flowAmt;
 
     const cls = e.flow === "Rec" ? "rec" : e.flow === "Pay" ? "pay" : "none";
-    const label =
-      e.flow === "Rec" ? `Rec ₹${e.flowAmt}` :
-      e.flow === "Pay" ? `Pay ₹${e.flowAmt}` :
-      "No cash flow";
+    const label = e.flow === "None" ? "No cash flow" : `${e.flow} ₹${e.flowAmt}`;
 
     const div = document.createElement("div");
     div.className = "entry";
     div.innerHTML = `
       <div>
         <b>${e.name}</b><br>
-        <small>
-          ${e.type} |
-          Principal ₹${e.amt} |
-          <span class="${cls}">${label}</span> |
-          ${e.monthly} | ${e.date}
-        </small>
+        <small>${e.type} | Principal ₹${e.amt} | <span class="${cls}">${label}</span> | ${e.monthly} | ${e.date}</small>
       </div>
       <div class="actions">
         <button onclick="editEntry(${data.indexOf(e)})">✏️</button>
@@ -321,7 +358,7 @@ function editEntry(i) {
   monthlyEl.value = e.monthly;
   dateEl.value = e.date;
   editIndex = i;
-  saveBtn.innerText = "Save";
+  saveBtn.textContent = "Save";
 }
 
 function deleteEntry(i) {
@@ -334,6 +371,6 @@ function deleteEntry(i) {
 render();
 </script>
 
-<!-- Version: 2.5 -->
+<!-- Version: 2.6 -->
 </body>
 </html>
