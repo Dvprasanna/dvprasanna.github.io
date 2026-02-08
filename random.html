@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Random Shape Generator</title>
+<style>
+  body {
+    margin: 0;
+    font-family: system-ui;
+    background: #111;
+    color: #fff;
+  }
+  #toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    background: #1a1a1a;
+  }
+  button, input {
+    padding: 6px 10px;
+    font-size: 14px;
+  }
+  canvas {
+    display: block;
+    background: #fff;
+    touch-action: manipulation;
+  }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  Dots:
+  <input type="number" id="dotCount" value="10" min="3" max="50">
+  <button id="exportBtn">Export</button>
+  <button id="clearBtn">Clear</button>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const dotInput = document.getElementById("dotCount");
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight - 50;
+}
+resize();
+window.addEventListener("resize", resize);
+
+let points = [];
+
+canvas.addEventListener("pointerdown", generateShape);
+
+function generateShape(e) {
+  const n = parseInt(dotInput.value, 10);
+  points = [];
+
+  for (let i = 0; i < n; i++) {
+    points.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height
+    });
+  }
+
+  draw();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // draw dots
+  ctx.fillStyle = "#000";
+  for (const p of points) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // draw smooth curve
+  if (points.length < 3) return;
+
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  ctx.moveTo(points[0].x, points[0].y);
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] || points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+  }
+
+  ctx.stroke();
+}
+
+document.getElementById("clearBtn").onclick = () => {
+  points = [];
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+};
+
+document.getElementById("exportBtn").onclick = () => {
+  const link = document.createElement("a");
+  link.download = "random-shape.png";
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+};
+</script>
+
+</body>
+</html>
