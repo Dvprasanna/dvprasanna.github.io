@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>P2P Chess - No Server</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.13.4/chess.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+
+<style>
+body { text-align:center; font-family:Arial; }
+#board { width:350px; margin:20px auto; }
+textarea { width:90%; height:80px; }
+button { padding:8px; margin:5px; }
+</style>
+</head>
+<body>
+
+<h2>P2P Online Chess (No Server)</h2>
+
+<button onclick="createOffer()">Create Game (White)</button>
+<button onclick="acceptOffer()">Join Game (Black)</button>
+
+<h3>Signal Data</h3>
+<textarea id="signalData"></textarea>
+<br>
+<button onclick="copyData()">Copy</button>
+<button onclick="pasteData()">Use Pasted Data</button>
+
+<div id="board"></div>
+
+<script>
+
+let pc = new RTCPeerConnection({
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+});
+
+let channel;
+let game = new Chess();
+let board;
+let playerColor = "white";
+
+pc.ondatachannel = (event) => {
+  channel = event.channel;
+  setupChannel();
+};
+
+function setupChannel(){
+  channel.onmessage = (event) => {
+    game.load(event.data);
+    board.position(game.fen());
+  };
+}
+
+function createOffer(){
+  playerColor = "white";
+  boardInit();
+  channel = pc.createDataChannel("chess");
+  setupChannel();
+
+  pc.createOffer().then(offer => {
+    return pc.setLocalDescription(offer);
+  }).then(() => {
+    document.getElementById("signalData").value =
+      JSON.stringify(pc.localDescription);
+  });
+
+  pc.onicecandidate = (event) => {
+    if (!event.candidate) {
+      document.getElementById("signalData").value =
+        JSON.stringify(pc.localDescription);
+    }
+  };
+}
+
+function acceptOffer(){
+  playerColor = "black";
+  boardInit();
+
+  let offer = JSON.parse(document.getElementById("signalData").value);
+  pc.setRemoteDescription(new RTCSessionDescription(offer)).then(() => {
+    return pc.createAnswer();
+  }).then(answer => {
+    return pc.setLocalDescription(answer);
+  }).then(() => {
+    document.getElementById("signalData").value =
+      JSON.stringify(pc.localDescription);
+  });
+
+  pc.onicecandidate = (event) => {
+    if (!event.candidate) {
+      document.getElementById("signalData").value =
+        JSON.stringify(pc.localDescription);
+    }
+  };
+}
+
+function pasteData(){
+  let data = JSON.parse(document.getElementById("signalData").value);
+  pc.setRemoteDescription(new RTCSessionDescription(data));
+}
+
+function copyData(){
+  navigator.clipboard.writeText(
+    document.getElementById("signalData").value
+  );
+}
+
+function boardInit(){
+  board = Chessboard('board', {
+    draggable: true,
+    position: 'start',
+    orientation: playerColor,
+    onDrop: onDrop
+  });
+}
+
+function onDrop(source, target){
+  if(game.turn() !== playerColor[0]) return "snapback";
+
+  let move = game.move({
+    from: source,
+    to: target,
+    promotion: 'q'
+  });
+
+  if(move === null) return "snapback";
+
+  if(channel && channel.readyState === "open"){
+    channel.send(game.fen());
+  }
+}
+
+</script>
+
+</body>
+</html>
