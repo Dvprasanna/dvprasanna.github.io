@@ -91,12 +91,34 @@ const flirtyReplies = [
   "I wasn’t expecting that… but I like it."
 ];
 
+const flirtyQuestions = [
+  "Did I lose your attention already? 😏",
+  "Why so quiet… thinking about me?",
+  "Are you smiling at your screen right now?",
+  "Should I flirt harder or are you shy?",
+  "Miss me already?",
+  "You typing… or just staring at my messages? 😉"
+];
+
+let inactivityTimer;
+
 function addMessage(text, className) {
   const msg = document.createElement("div");
   msg.className = "message " + className;
   msg.innerText = text;
   document.getElementById("chatBox").appendChild(msg);
-  msg.scrollIntoView();
+  msg.scrollIntoView({ behavior: "smooth" });
+}
+
+function randomFrom(array) {
+  return array[Math.floor(Math.random() * array.length)];
+}
+
+function resetInactivityTimer() {
+  clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(() => {
+    addMessage(randomFrom(flirtyQuestions), "bot");
+  }, 5000);
 }
 
 function sendMessage() {
@@ -108,12 +130,16 @@ function sendMessage() {
   input.value = "";
 
   setTimeout(() => {
-    const randomReply = flirtyReplies[
-      Math.floor(Math.random() * flirtyReplies.length)
-    ];
-    addMessage(randomReply, "bot");
+    addMessage(randomFrom(flirtyReplies), "bot");
   }, 800);
+
+  resetInactivityTimer();
 }
+
+document.getElementById("userInput").addEventListener("input", resetInactivityTimer);
+
+// Start timer when page loads
+resetInactivityTimer();
 </script>
 
 </body>
