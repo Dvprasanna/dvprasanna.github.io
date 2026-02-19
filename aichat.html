@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Flirty Chat</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #111;
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.chat-container {
+  width: 350px;
+  background: #1e1e1e;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-box {
+  padding: 15px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.message {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: 15px;
+  max-width: 75%;
+}
+
+.user {
+  background: #ff4d6d;
+  align-self: flex-end;
+}
+
+.bot {
+  background: #333;
+  align-self: flex-start;
+}
+
+.input-area {
+  display: flex;
+  border-top: 1px solid #333;
+}
+
+input {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  outline: none;
+  background: #222;
+  color: white;
+}
+
+button {
+  padding: 10px;
+  border: none;
+  background: #ff4d6d;
+  color: white;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div class="chat-container">
+  <div class="chat-box" id="chatBox"></div>
+  <div class="input-area">
+    <input type="text" id="userInput" placeholder="Say something..." />
+    <button onclick="sendMessage()">Send</button>
+  </div>
+</div>
+
+<script>
+const flirtyReplies = [
+  "Oh really? Tell me more 😉",
+  "Careful… I might start liking you 😌",
+  "You always talk like that?",
+  "Hmm… that’s kinda cute.",
+  "Is it hot in here or is it just you?",
+  "Stop… you’re making me blush 😳",
+  "I wasn’t expecting that… but I like it."
+];
+
+function addMessage(text, className) {
+  const msg = document.createElement("div");
+  msg.className = "message " + className;
+  msg.innerText = text;
+  document.getElementById("chatBox").appendChild(msg);
+  msg.scrollIntoView();
+}
+
+function sendMessage() {
+  const input = document.getElementById("userInput");
+  const userText = input.value.trim();
+  if (!userText) return;
+
+  addMessage(userText, "user");
+  input.value = "";
+
+  setTimeout(() => {
+    const randomReply = flirtyReplies[
+      Math.floor(Math.random() * flirtyReplies.length)
+    ];
+    addMessage(randomReply, "bot");
+  }, 800);
+}
+</script>
+
+</body>
+</html>
