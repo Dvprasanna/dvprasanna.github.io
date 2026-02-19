@@ -117,6 +117,8 @@ const flirtyQuestions = [
 ];
 
 let inactivityTimer;
+let longTimer;
+let userMessages = [];
 
 function addMessage(text, type) {
   const msg = document.createElement("div");
@@ -137,10 +139,40 @@ function resetInactivityTimer() {
   }, 5000);
 }
 
+function startLongTimer() {
+  clearTimeout(longTimer);
+  longTimer = setTimeout(() => {
+    contextualReply();
+  }, 180000); // 3 minutes
+}
+
+function contextualReply() {
+  if (userMessages.length === 0) return;
+
+  // Pick some of user's words
+  const combinedText = userMessages.join(" ");
+  const words = combinedText.split(" ").filter(w => w.length > 3);
+  const pickedWord = words[Math.floor(Math.random() * words.length)] || "";
+
+  const builtIn = randomFrom(flirtyReplies);
+
+  let reply;
+
+  if (pickedWord) {
+    reply = `You keep mentioning "${pickedWord}"... is that your way of flirting with me? 😏 ${builtIn}`;
+  } else {
+    reply = `You've been talking a lot... I kinda like your vibe 😌 ${builtIn}`;
+  }
+
+  addMessage(reply, "bot");
+}
+
 function sendMessage() {
   const input = document.getElementById("userInput");
   const text = input.value.trim();
   if (!text) return;
+
+  userMessages.push(text);
 
   addMessage(text, "user");
   input.value = "";
@@ -150,11 +182,13 @@ function sendMessage() {
   }, 600);
 
   resetInactivityTimer();
+  startLongTimer();
 }
 
 document.getElementById("userInput").addEventListener("input", resetInactivityTimer);
 
 resetInactivityTimer();
+startLongTimer();
 </script>
 
 </body>
