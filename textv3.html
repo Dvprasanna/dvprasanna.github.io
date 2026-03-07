@@ -1,30 +1,21 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Table Maker Pro</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Table Maker</title>
 
 <style>
-
-:root{
---accent:#0366d6;
---bg:#fafafa;
-}
+:root{--accent:#0366d6}
 
 body{
-font-family:system-ui,-apple-system,Segoe UI,Roboto;
+font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
 margin:0;
 background:#fff;
-color:#111;
+color:#111
 }
 
-h1{
-font-size:18px;
-margin:15px;
-}
-
-/* toolbar */
+h1{font-size:18px;margin:15px}
 
 .controls{
 display:flex;
@@ -36,7 +27,7 @@ position:sticky;
 top:0;
 background:#fff;
 border-bottom:1px solid #eee;
-z-index:10;
+z-index:10
 }
 
 button,.dropbtn{
@@ -44,23 +35,18 @@ padding:8px 12px;
 border-radius:6px;
 border:1px solid #bbb;
 background:#f7f8fa;
-cursor:pointer;
+cursor:pointer
 }
 
 button.primary{
 background:var(--accent);
 color:#fff;
-border-color:var(--accent);
+border-color:var(--accent)
 }
 
-button:hover{
-background:#eef3ff;
-}
+button:hover{background:#eef3ff}
 
-.menu{
-position:relative;
-display:inline-block;
-}
+.menu{position:relative;display:inline-block}
 
 .dropdown{
 display:none;
@@ -70,7 +56,7 @@ min-width:200px;
 box-shadow:0 6px 18px rgba(0,0,0,.12);
 border-radius:6px;
 border:1px solid #eee;
-padding:6px;
+padding:6px
 }
 
 .dropdown button{
@@ -79,22 +65,20 @@ width:100%;
 text-align:left;
 background:none;
 border:none;
-padding:8px 10px;
+padding:8px 10px
 }
 
 .dropdown button:hover{
 background:#f3f6fb;
-border-radius:6px;
+border-radius:6px
 }
 
 .toolbar-sep{
 width:1px;
 height:28px;
 background:#e6e6e6;
-margin:0 6px;
+margin:0 6px
 }
-
-/* editor */
 
 #editor{
 margin:15px;
@@ -102,34 +86,27 @@ min-height:320px;
 border:1px dashed #ccc;
 border-radius:8px;
 padding:12px;
-background:var(--bg);
-line-height:1.5;
-overflow:auto;
+background:#fafafa;
+overflow:auto
 }
-
-/* tables */
 
 table.generated{
 border-collapse:collapse;
-margin-top:8px;
+margin-top:8px
 }
 
 table.generated td{
 border:1px solid #999;
 padding:6px 8px;
 min-width:40px;
-transition:background .15s;
+transition:background .15s
 }
 
-table.generated td:hover{
-background:#f5f9ff;
-}
+table.generated td:hover{background:#f5f9ff}
 
 table.border-light td{border-width:1px}
 table.border-medium td{border-width:3px}
 table.border-high td{border-width:6px}
-
-/* alignment */
 
 table.align-left{margin-left:0;margin-right:auto}
 table.align-center{margin-left:auto;margin-right:auto}
@@ -137,24 +114,21 @@ table.align-right{margin-left:auto;margin-right:0}
 
 #output{
 width:calc(100% - 30px);
-margin:15px;
 height:140px;
-padding:8px;
-font-family:monospace;
-}
-
-.hint{
 margin:15px;
-font-size:13px;
-color:#666;
+padding:8px;
+font-family:monospace
 }
 
+.hint{margin:15px;font-size:13px;color:#666}
+
+button[disabled]{opacity:.5;cursor:not-allowed}
 </style>
 </head>
 
 <body>
 
-<h1>Table Maker Pro</h1>
+<h1>Table Maker</h1>
 
 <div class="controls">
 
@@ -164,33 +138,44 @@ color:#666;
 
 <div class="menu">
 <button class="dropbtn" id="btn-table-menu">Table ▾</button>
-
 <div class="dropdown" id="dropdown-table">
 
-<div style="font-weight:600;padding:6px">Line width</div>
+<div style="font-weight:600;padding:6px 8px">Line width</div>
 <button data-action="border-light">Light</button>
 <button data-action="border-medium">Medium</button>
 <button data-action="border-high">High</button>
 
 <hr>
 
-<button data-action="merge-cells">Merge Cells (row)</button>
+<button data-action="merge-cells">Merge cells (row)</button>
 
 <hr>
 
-<div style="font-weight:600;padding:6px">Vertical Merge</div>
+<div style="font-weight:600;padding:6px 8px">Vertical Merge</div>
 <button data-action="merge-top">Merge with Top Row</button>
 <button data-action="merge-bottom">Merge with Bottom Row</button>
 
 <hr>
 
-<div style="font-weight:600;padding:6px">Align Table</div>
+<div style="font-weight:600;padding:6px 8px">Align Table</div>
 <button data-action="align-table-left">Align Left</button>
 <button data-action="align-table-center">Align Center</button>
 <button data-action="align-table-right">Align Right</button>
 
 </div>
 </div>
+
+<div class="menu">
+<button class="dropbtn" id="btn-text-menu">Text ▾</button>
+<div class="dropdown" id="dropdown-text">
+<button data-action="center-text">Center Text</button>
+<button data-action="bold-text">Bold</button>
+</div>
+</div>
+
+<div class="toolbar-sep"></div>
+
+<button id="btn-select-all">Select All</button>
 
 <div class="toolbar-sep"></div>
 
@@ -202,110 +187,106 @@ color:#666;
 <button id="btn-export">Export CSV</button>
 <button id="btn-copy">Copy CSV</button>
 <button id="btn-clear">Clear</button>
+<button id="btn-add-hr">Add HR</button>
 
 </div>
 
 <div id="editor" contenteditable="true">
+Paste text lines here
 
-Paste lines here:
-
-one  
-two  
+one
+two
 three
 
-Select lines and press **Make Table**
-
+Select lines → Make Table
 </div>
 
 <textarea id="output"></textarea>
 
 <div class="hint">
-Workflow: select text → Make Table → edit cells → merge/split → export CSV
+Workflow: select lines → Make Table → edit cells → merge/split → export CSV
 </div>
 
 <script>
-
-/* basic helpers */
 
 const editor=document.getElementById("editor")
 const output=document.getElementById("output")
 
 function getSel(){return window.getSelection()}
-function escapeHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function getSelText(){return getSel().toString()}
+
+function escapeHtml(s){
+return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+}
+
 function csvEscape(v){
-if(v.includes(",")||v.includes('"')) return '"'+v.replace(/"/g,'""')+'"'
+if(!v)return""
+if(v.includes(",")||v.includes('"')||v.includes("\n"))
+return '"'+v.replace(/"/g,'""')+'"'
 return v
 }
 
-/* history */
-
 let history=[]
-let historyIndex=-1
+let index=-1
 
 function pushHistory(){
 const snap=editor.innerHTML
-history=history.slice(0,historyIndex+1)
+history=history.slice(0,index+1)
 history.push(snap)
-historyIndex=history.length-1
+index=history.length-1
+updateButtons()
 }
 
 function undo(){
-if(historyIndex<=0)return
-historyIndex--
-editor.innerHTML=history[historyIndex]
+if(index<=0)return
+index--
+editor.innerHTML=history[index]
+updateButtons()
 }
 
 function redo(){
-if(historyIndex>=history.length-1)return
-historyIndex++
-editor.innerHTML=history[historyIndex]
+if(index>=history.length-1)return
+index++
+editor.innerHTML=history[index]
+updateButtons()
+}
+
+function updateButtons(){
+btn_undo.disabled=index<=0
+btn_redo.disabled=index>=history.length-1
 }
 
 pushHistory()
 
-/* make table */
-
 function makeTable(){
-
-const sel=getSel().toString().trim()
-if(!sel)return alert("select text")
+const text=getSelText().trim()
+if(!text)return alert("select lines")
 
 pushHistory()
 
-const lines=sel.split("\n").filter(l=>l.trim())
+const lines=text.split("\n").filter(l=>l.trim())
 
 let html='<table class="generated border-light"><tbody>'
-
 lines.forEach(l=>{
 html+=`<tr><td>${escapeHtml(l)}</td></tr>`
 })
-
 html+="</tbody></table>"
 
 document.execCommand("insertHTML",false,html)
 
 pushHistory()
-
 }
 
-/* make columns */
-
 function makeColumns(){
-
 const sel=getSel()
-
 if(!sel.rangeCount)return
-
 let node=sel.anchorNode
 if(node.nodeType==3)node=node.parentElement
-
 const td=node.closest("td")
-if(!td)return alert("place cursor in cell")
-
+if(!td)return
 pushHistory()
 
 const text=td.innerText
-
 const mid=Math.floor(text.length/2)
 
 td.innerHTML=escapeHtml(text.slice(0,mid))
@@ -316,24 +297,17 @@ td2.innerHTML=escapeHtml(text.slice(mid))
 td.after(td2)
 
 pushHistory()
-
 }
 
-/* split 3 */
-
 function split3(){
-
 const sel=getSel()
 if(!sel.rangeCount)return
-
 let node=sel.anchorNode
 if(node.nodeType==3)node=node.parentElement
-
 const td=node.closest("td")
 if(!td)return
 
 const text=td.innerText
-
 const size=Math.floor(text.length/3)
 
 pushHistory()
@@ -350,110 +324,80 @@ td.after(td2)
 td2.after(td3)
 
 pushHistory()
-
 }
 
-/* merge row cells */
-
 function mergeCells(){
-
 const td=getSel().anchorNode.closest("td")
 if(!td)return
-
 const next=td.nextElementSibling
 if(!next)return
-
 pushHistory()
 
 td.colSpan=2
-td.innerHTML+= " "+next.innerHTML
-
+td.innerHTML+=" "+next.innerHTML
 next.remove()
 
 pushHistory()
-
 }
 
-/* merge top */
-
 function mergeTop(){
-
 const td=getSel().anchorNode.closest("td")
 if(!td)return
-
 const row=td.parentElement
 const prev=row.previousElementSibling
-if(!prev)return alert("no row above")
+if(!prev)return alert("No row above")
 
-const col=Array.from(row.children).indexOf(td)
+const col=[...row.children].indexOf(td)
 const topCell=prev.children[col]
 
 pushHistory()
 
 topCell.rowSpan=(topCell.rowSpan||1)+1
 topCell.innerHTML+=" "+td.innerHTML
-
 td.remove()
 
 pushHistory()
-
 }
 
-/* merge bottom */
-
 function mergeBottom(){
-
 const td=getSel().anchorNode.closest("td")
 if(!td)return
-
 const row=td.parentElement
 const next=row.nextElementSibling
-if(!next)return alert("no row below")
+if(!next)return alert("No row below")
 
-const col=Array.from(row.children).indexOf(td)
+const col=[...row.children].indexOf(td)
 const botCell=next.children[col]
 
 pushHistory()
 
 td.rowSpan=(td.rowSpan||1)+1
 td.innerHTML+=" "+botCell.innerHTML
-
 botCell.remove()
 
 pushHistory()
-
 }
 
-/* border width */
-
 function setBorder(type){
-
 document.querySelectorAll("table.generated").forEach(t=>{
 t.classList.remove("border-light","border-medium","border-high")
 t.classList.add("border-"+type)
 })
-
 }
 
-/* align */
-
 function alignTable(type){
-
 document.querySelectorAll("table.generated").forEach(t=>{
 t.classList.remove("align-left","align-center","align-right")
 t.classList.add("align-"+type)
 })
-
 }
 
-/* export csv */
+function centerText(){document.execCommand("justifyCenter")}
+function boldText(){document.execCommand("bold")}
 
 function exportCSV(){
-
 const tables=editor.querySelectorAll("table")
-
 let out=[]
-
 tables.forEach(t=>{
 t.querySelectorAll("tr").forEach(tr=>{
 let row=[]
@@ -463,52 +407,40 @@ row.push(csvEscape(td.innerText))
 out.push(row.join(","))
 })
 })
-
 output.value=out.join("\n")
-
 }
-
-/* copy */
 
 function copyCSV(){
-
 navigator.clipboard.writeText(output.value)
 alert("copied")
-
 }
-
-/* clear */
 
 function clearAll(){
-
+pushHistory()
 editor.innerHTML=""
 output.value=""
-
+pushHistory()
 }
 
-/* menus */
+function insertHr(){
+document.execCommand("insertHTML",false,"<hr>")
+}
 
-function toggle(id){
-
+function toggleMenu(id){
 const el=document.getElementById(id)
-
 document.querySelectorAll(".dropdown").forEach(d=>d.style.display="none")
-
 el.style.display="block"
-
 }
 
-document.getElementById("btn-table-menu").onclick=()=>toggle("dropdown-table")
+btn_table_menu.onclick=()=>toggleMenu("dropdown-table")
+btn_text_menu.onclick=()=>toggleMenu("dropdown-text")
 
 document.addEventListener("click",e=>{
 if(!e.target.closest(".menu"))
 document.querySelectorAll(".dropdown").forEach(d=>d.style.display="none")
 })
 
-/* dropdown actions */
-
-document.getElementById("dropdown-table").onclick=e=>{
-
+dropdown_table.onclick=e=>{
 const a=e.target.dataset.action
 
 if(a==="border-light")setBorder("light")
@@ -522,10 +454,13 @@ if(a==="merge-bottom")mergeBottom()
 if(a==="align-table-left")alignTable("left")
 if(a==="align-table-center")alignTable("center")
 if(a==="align-table-right")alignTable("right")
-
 }
 
-/* buttons */
+dropdown_text.onclick=e=>{
+const a=e.target.dataset.action
+if(a==="center-text")centerText()
+if(a==="bold-text")boldText()
+}
 
 btn_make_table.onclick=makeTable
 btn_make_columns.onclick=makeColumns
@@ -533,8 +468,17 @@ btn_split_3.onclick=split3
 btn_export.onclick=exportCSV
 btn_copy.onclick=copyCSV
 btn_clear.onclick=clearAll
+btn_add_hr.onclick=insertHr
 btn_undo.onclick=undo
 btn_redo.onclick=redo
+
+btn_select_all.onclick=()=>{
+const r=document.createRange()
+r.selectNodeContents(editor)
+const s=getSel()
+s.removeAllRanges()
+s.addRange(r)
+}
 
 </script>
 
