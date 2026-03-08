@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HTML Viewer</title>
+
+<style>
+body{
+margin:0;
+font-family:Arial;
+}
+
+#menu{
+background:#222;
+color:white;
+padding:10px;
+display:flex;
+gap:10px;
+align-items:center;
+}
+
+button{
+padding:6px 10px;
+}
+
+#tabs{
+display:flex;
+}
+
+.tab{
+flex:1;
+padding:10px;
+text-align:center;
+background:#eee;
+cursor:pointer;
+}
+
+.active{
+background:#ccc;
+}
+
+#editor{
+width:100%;
+height:calc(100vh - 90px);
+border:none;
+padding:10px;
+font-family:monospace;
+}
+
+#viewer{
+width:100%;
+height:calc(100vh - 90px);
+border:none;
+display:none;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="menu">
+<button onclick="zoomIn()">Zoom +</button>
+<button onclick="zoomOut()">Zoom -</button>
+<button onclick="exportPDF()">Export PDF</button>
+</div>
+
+<div id="tabs">
+<div class="tab active" onclick="showHTML()">HTML</div>
+<div class="tab" onclick="showOutput()">Output</div>
+</div>
+
+<textarea id="editor"><h1>Hello</h1>
+<p>Paste your HTML here</p></textarea>
+
+<iframe id="viewer"></iframe>
+
+<script>
+
+let zoom=1;
+
+function showHTML(){
+editor.style.display="block";
+viewer.style.display="none";
+}
+
+function showOutput(){
+
+let code=document.getElementById("editor").value;
+
+viewer.srcdoc=code;
+
+editor.style.display="none";
+viewer.style.display="block";
+
+}
+
+function zoomIn(){
+zoom+=0.1;
+viewer.style.transform="scale("+zoom+")";
+viewer.style.transformOrigin="0 0";
+}
+
+function zoomOut(){
+zoom-=0.1;
+viewer.style.transform="scale("+zoom+")";
+viewer.style.transformOrigin="0 0";
+}
+
+function exportPDF(){
+window.print();
+}
+
+</script>
+
+</body>
+</html>
