@@ -5,6 +5,7 @@
 <title>HTML Viewer</title>
 
 <style>
+
 body{
 margin:0;
 font-family:Arial;
@@ -13,10 +14,9 @@ font-family:Arial;
 #menu{
 background:#222;
 color:white;
-padding:10px;
+padding:8px;
 display:flex;
 gap:10px;
-align-items:center;
 }
 
 button{
@@ -25,13 +25,13 @@ padding:6px 10px;
 
 #tabs{
 display:flex;
+background:#eee;
 }
 
 .tab{
 flex:1;
-padding:10px;
 text-align:center;
-background:#eee;
+padding:10px;
 cursor:pointer;
 }
 
@@ -41,7 +41,7 @@ background:#ccc;
 
 #editor{
 width:100%;
-height:calc(100vh - 90px);
+height:calc(100vh - 80px);
 border:none;
 padding:10px;
 font-family:monospace;
@@ -49,7 +49,7 @@ font-family:monospace;
 
 #viewer{
 width:100%;
-height:calc(100vh - 90px);
+height:calc(100vh - 80px);
 border:none;
 display:none;
 }
@@ -66,8 +66,8 @@ display:none;
 </div>
 
 <div id="tabs">
-<div class="tab active" onclick="showHTML()">HTML</div>
-<div class="tab" onclick="showOutput()">Output</div>
+<div id="t1" class="tab active" onclick="showHTML()">HTML</div>
+<div id="t2" class="tab" onclick="showOutput()">Output</div>
 </div>
 
 <textarea id="editor"><h1>Hello</h1>
@@ -80,35 +80,48 @@ display:none;
 let zoom=1;
 
 function showHTML(){
+
 editor.style.display="block";
 viewer.style.display="none";
+
+t1.classList.add("active");
+t2.classList.remove("active");
+
 }
 
 function showOutput(){
 
 let code=document.getElementById("editor").value;
-
 viewer.srcdoc=code;
 
 editor.style.display="none";
 viewer.style.display="block";
 
+t2.classList.add("active");
+t1.classList.remove("active");
+
 }
 
 function zoomIn(){
+
 zoom+=0.1;
 viewer.style.transform="scale("+zoom+")";
 viewer.style.transformOrigin="0 0";
+
 }
 
 function zoomOut(){
+
 zoom-=0.1;
 viewer.style.transform="scale("+zoom+")";
 viewer.style.transformOrigin="0 0";
+
 }
 
 function exportPDF(){
+
 window.print();
+
 }
 
 </script>
