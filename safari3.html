@@ -45,6 +45,7 @@ height:calc(100vh - 80px);
 border:none;
 padding:10px;
 font-family:monospace;
+font-size:16px;
 }
 
 #viewer{
@@ -70,14 +71,40 @@ display:none;
 <div id="t2" class="tab" onclick="showOutput()">Output</div>
 </div>
 
-<textarea id="editor"><h1>Hello</h1>
-<p>Paste your HTML here</p></textarea>
+<textarea id="editor"></textarea>
 
 <iframe id="viewer"></iframe>
 
 <script>
 
-let zoom=1;
+let zoom = 1;
+
+let editor = document.getElementById("editor");
+let viewer = document.getElementById("viewer");
+
+
+// LOAD SAVED CODE
+window.onload = function(){
+
+let saved = localStorage.getItem("html_viewer_code");
+
+if(saved){
+editor.value = saved;
+}else{
+editor.value = "<h1>Hello</h1>\n<p>Paste your HTML here</p>";
+}
+
+}
+
+
+// AUTO SAVE
+editor.addEventListener("input",function(){
+
+localStorage.setItem("html_viewer_code",editor.value);
+
+});
+
+
 
 function showHTML(){
 
@@ -89,10 +116,21 @@ t2.classList.remove("active");
 
 }
 
+
+
 function showOutput(){
 
-let code=document.getElementById("editor").value;
-viewer.srcdoc=code;
+let code = editor.value;
+
+viewer.srcdoc = code;
+
+viewer.onload = function(){
+
+try{
+viewer.contentWindow.document.body.style.zoom = zoom;
+}catch(e){}
+
+}
 
 editor.style.display="none";
 viewer.style.display="block";
@@ -102,21 +140,31 @@ t1.classList.remove("active");
 
 }
 
+
+
 function zoomIn(){
 
-zoom+=0.1;
-viewer.style.transform="scale("+zoom+")";
-viewer.style.transformOrigin="0 0";
+zoom += 0.1;
+
+try{
+viewer.contentWindow.document.body.style.zoom = zoom;
+}catch(e){}
 
 }
+
+
 
 function zoomOut(){
 
-zoom-=0.1;
-viewer.style.transform="scale("+zoom+")";
-viewer.style.transformOrigin="0 0";
+zoom -= 0.1;
+
+try{
+viewer.contentWindow.document.body.style.zoom = zoom;
+}catch(e){}
 
 }
+
+
 
 function exportPDF(){
 
