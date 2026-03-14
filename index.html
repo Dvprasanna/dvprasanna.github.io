@@ -112,7 +112,8 @@ The goal is to help readers understand useful concepts that improve everyday wor
 <div class="grid" id="apps"></div>
 </div>
 <script>
-
+let date = new Date(app.pubDate)
+let formattedDate = date.toLocaleDateString()
 function detectPrice(text){
 
 text=text.toLowerCase()
@@ -159,7 +160,7 @@ let card=document.createElement("div")
 
 card.className="card"
 
-card.innerHTML=`
+card.innerHTML = `
 
 <h3><a href="${app.link}" target="_blank">${app.title}</a></h3>
 
@@ -171,8 +172,9 @@ card.innerHTML=`
 
 <div class="desc"><b>Category:</b> ${category}</div>
 
-`
+<div class="desc"><b>Posted:</b> ${formattedDate}</div>
 
+`
 container.appendChild(card)
 
 })
