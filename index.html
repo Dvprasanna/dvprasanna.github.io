@@ -39,6 +39,24 @@ The goal is to help readers understand useful concepts that improve everyday wor
 <footer>
 <p>© 2026 Dopado Blog</p>
 </footer>
+<h1>New AI Apps</h1>
 
+<div id="apps"></div>
+
+<script>
+
+fetch("https://api.rss2json.com/v1/api.json?rss_url=https://www.producthunt.com/feed")
+.then(res=>res.json())
+.then(data=>{
+
+let container=document.getElementById("apps")
+
+data.items.slice(0,10).forEach(app=>{
+container.innerHTML += `<p><a href="${app.link}" target="_blank">${app.title}</a></p>`
+})
+
+})
+
+</script>
 </body>
 </html>
