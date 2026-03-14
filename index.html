@@ -3,6 +3,69 @@
 <head>
 <meta charset="UTF-8">
 <title>Dopado Blog</title>
+<style>
+
+body{
+font-family:Arial;
+margin:0;
+background:#f1f5f9;
+}
+
+.container{
+max-width:1000px;
+margin:auto;
+padding:20px;
+}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+gap:16px;
+margin-top:20px;
+}
+
+.card{
+background:white;
+padding:15px;
+border-radius:10px;
+box-shadow:0 2px 8px rgba(0,0,0,0.1);
+}
+
+.card h3{
+margin:0;
+font-size:18px;
+}
+
+.badge{
+display:inline-block;
+padding:3px 8px;
+border-radius:6px;
+font-size:12px;
+margin-top:6px;
+}
+
+.free{
+background:#dcfce7;
+color:#166534;
+}
+
+.paid{
+background:#fee2e2;
+color:#991b1b;
+}
+
+.desc{
+font-size:13px;
+margin-top:8px;
+color:#444;
+}
+
+.rating{
+margin-top:6px;
+color:#f59e0b;
+}
+
+</style>
 
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1946750610165849"
 crossorigin="anonymous"></script>
@@ -58,5 +121,79 @@ container.innerHTML += `<p><a href="${app.link}" target="_blank">${app.title}</a
 })
 
 </script>
+<div class="container">
+<h1>New AI Apps</h1>
+<div class="grid" id="apps"></div>
+</div>
+<script>
+
+function detectPrice(text){
+
+text=text.toLowerCase()
+
+if(text.includes("free")) return "Free"
+if(text.includes("paid") || text.includes("subscription")) return "Paid"
+
+return "Unknown"
+
+}
+
+function detectCategory(text){
+
+text=text.toLowerCase()
+
+if(text.includes("video")) return "Video AI"
+if(text.includes("image")) return "Image AI"
+if(text.includes("code")) return "Coding AI"
+if(text.includes("chat")) return "Chatbot"
+
+return "AI Tool"
+
+}
+
+fetch("https://api.rss2json.com/v1/api.json?rss_url=https://www.producthunt.com/feed")
+
+.then(res=>res.json())
+
+.then(data=>{
+
+let container=document.getElementById("apps")
+
+data.items.slice(0,12).forEach(app=>{
+
+let desc=app.description.replace(/<[^>]*>?/gm,'')
+
+let price=detectPrice(desc)
+
+let category=detectCategory(desc)
+
+let badgeClass = price=="Free" ? "badge free" : "badge paid"
+
+let card=document.createElement("div")
+
+card.className="card"
+
+card.innerHTML=`
+
+<h3><a href="${app.link}" target="_blank">${app.title}</a></h3>
+
+<span class="${badgeClass}">${price}</span>
+
+<div class="rating">⭐⭐⭐⭐☆</div>
+
+<div class="desc">${desc.substring(0,90)}...</div>
+
+<div class="desc"><b>Category:</b> ${category}</div>
+
+`
+
+container.appendChild(card)
+
+})
+
+})
+
+</script>
+
 </body>
 </html>
