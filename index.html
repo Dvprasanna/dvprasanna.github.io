@@ -112,8 +112,7 @@ The goal is to help readers understand useful concepts that improve everyday wor
 <div class="grid" id="apps"></div>
 </div>
 <script>
-let date = new Date(app.pubDate)
-let formattedDate = date.toLocaleDateString()
+
 function detectPrice(text){
 
 text=text.toLowerCase()
@@ -132,31 +131,51 @@ text=text.toLowerCase()
 if(text.includes("video")) return "Video AI"
 if(text.includes("image")) return "Image AI"
 if(text.includes("code")) return "Coding AI"
-if(text.includes("chat")) return "Chatbot"
+if(text.includes("chat")) return "Chatbot AI"
+if(text.includes("design")) return "Design AI"
 
 return "AI Tool"
 
 }
 
+function timeAgo(date){
+
+let seconds = Math.floor((new Date() - date) / 1000)
+
+let interval = seconds / 86400
+if(interval > 1) return Math.floor(interval) + " days ago"
+
+interval = seconds / 3600
+if(interval > 1) return Math.floor(interval) + " hours ago"
+
+interval = seconds / 60
+if(interval > 1) return Math.floor(interval) + " minutes ago"
+
+return "just now"
+
+}
+
 fetch("https://api.rss2json.com/v1/api.json?rss_url=https://www.producthunt.com/feed")
 
-.then(res=>res.json())
+.then(res => res.json())
 
-.then(data=>{
+.then(data => {
 
-let container=document.getElementById("apps")
+let container = document.getElementById("apps")
 
-data.items.slice(0,12).forEach(app=>{
+data.items.slice(0,12).forEach(app => {
 
-let desc=app.description.replace(/<[^>]*>?/gm,'')
+let desc = app.description.replace(/<[^>]*>?/gm,'')
 
-let price=detectPrice(desc)
+let price = detectPrice(desc)
 
-let category=detectCategory(desc)
+let category = detectCategory(desc)
 
 let badgeClass = price=="Free" ? "badge free" : "badge paid"
 
-let card=document.createElement("div")
+let date = timeAgo(new Date(app.pubDate))
+
+let card = document.createElement("div")
 
 card.className="card"
 
@@ -172,9 +191,10 @@ card.innerHTML = `
 
 <div class="desc"><b>Category:</b> ${category}</div>
 
-<div class="desc"><b>Posted:</b> ${formattedDate}</div>
+<div class="desc"><b>Posted:</b> ${date}</div>
 
 `
+
 container.appendChild(card)
 
 })
