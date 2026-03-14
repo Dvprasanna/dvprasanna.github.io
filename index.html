@@ -106,21 +106,7 @@ The goal is to help readers understand useful concepts that improve everyday wor
 
 <div id="apps"></div>
 
-<script>
 
-fetch("https://api.rss2json.com/v1/api.json?rss_url=https://www.producthunt.com/feed")
-.then(res=>res.json())
-.then(data=>{
-
-let container=document.getElementById("apps")
-
-data.items.slice(0,10).forEach(app=>{
-container.innerHTML += `<p><a href="${app.link}" target="_blank">${app.title}</a></p>`
-})
-
-})
-
-</script>
 <div class="container">
 <h1>New AI Apps</h1>
 <div class="grid" id="apps"></div>
