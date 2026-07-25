@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PHP API Test</title>
+</head>
+<body>
+
+<input id="txt" placeholder="Type here">
+<button onclick="send()">Send</button>
+
+<p id="result"></p>
+
+<script>
+async function send() {
+
+    const text = document.getElementById("txt").value;
+
+    const response = await fetch("https://mydpweb.42web.io/reply.php", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            text: text
+        })
+    });
+
+    const data = await response.json();
+
+    document.getElementById("result").innerText = data.reply;
+}
+</script>
+
+</body>
+</html>
